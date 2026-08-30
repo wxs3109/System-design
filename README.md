@@ -201,6 +201,8 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 ### Phase 1：系统行为与故障实验
 
+详细执行方案：[Phase 1 Implementation Plan](docs/roadmap/phase-1.md)。
+
 - 增加负载均衡、缓存、消息流、对象存储、分片与副本。
 - 增加超时、重试、熔断、背压和流量控制策略。
 - 增加节点故障、链路故障、热点和区域故障。
