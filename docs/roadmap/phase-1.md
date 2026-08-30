@@ -1,6 +1,6 @@
 # Phase 1 Implementation Plan
 
-> Status: in progress — P1.0 through P1.4 complete
+> Status: in progress — P1.0 through P1.5 complete
 >
 > Objective: evolve the Phase 0 workbench from “a topology can run” into a reusable system-behavior and failure laboratory.
 
@@ -425,11 +425,13 @@ Exit criteria:
 
 Deliverables:
 
-- [ ] request and dependency waterfall;
-- [ ] trace-to-canvas navigation;
-- [ ] evidence-based bottleneck rules;
-- [ ] immutable run snapshots;
-- [ ] baseline and candidate comparison using one experiment.
+- [x] request and dependency waterfall;
+- [x] trace-to-canvas navigation;
+- [x] evidence-based bottleneck rules;
+- [x] immutable run snapshots;
+- [x] baseline and candidate comparison using one experiment.
+
+Status: complete. Verified by trace filtering and waterfall projection tests, ECharts queue/service/retry/fault rendering, deterministic evidence-rule tests, trace-to-canvas browser navigation, immutable run snapshot and revision guards, and browser acceptance for comparable topology revisions plus rejected seed changes.
 
 Exit criteria:
 

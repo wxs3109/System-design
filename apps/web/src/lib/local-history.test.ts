@@ -12,7 +12,7 @@ const createRepository = () => {
 }
 
 const resultFor = (runId: string, projectId: string): SimulationResult => ({
-  runId, scenarioId: projectId, seed: 'seed', simulatedDurationMs: 1_000, wallClockDurationMs: 1,
+  runId, scenarioId: projectId, seed: 'system-design', simulatedDurationMs: 1_000, wallClockDurationMs: 1,
   summary: { generatedRequests: 1, completedRequests: 1, failedRequests: 0, throughputPerSecond: 1, errorRate: 0, latencyP50Ms: 1, latencyP95Ms: 1, latencyP99Ms: 1 },
   nodes: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
 })
@@ -76,8 +76,28 @@ describe('local project and run history', () => {
 
     const runs = await repository.listSimulationRuns(project.id)
     expect(runs[0]).toMatchObject({ runId: 'run-1', projectRevisionId: revision.revisionId, experimentId: 'default-experiment' })
+    expect(runs[0]?.projectSnapshot).toEqual(project)
     expect(runs[0]?.result.summary.completedRequests).toBe(1)
     await expect(repository.saveSimulationRun(project, result, revision.revisionId)).rejects.toMatchObject({ name: 'ConstraintError' })
+    project.name = 'Changed after run'
+    expect((await repository.listSimulationRuns(project.id))[0]?.projectSnapshot?.name).toBe('Untitled system')
+  })
+
+  it('rejects mismatched revisions and results instead of recording an ambiguous run', async () => {
+    const repository = createRepository()
+    const project = createEmptyProject('matched-project')
+    const revision = await repository.saveProjectRevision(project)
+    const changed = structuredClone(project)
+    changed.name = 'Different topology revision'
+
+    await expect(repository.saveSimulationRun(changed, resultFor('wrong-revision', changed.id), revision.revisionId))
+      .rejects.toThrow('exact project revision')
+    await expect(repository.saveSimulationRun(project, resultFor('wrong-project', 'another-project'), revision.revisionId))
+      .rejects.toThrow('does not match')
+    const wrongSeed = resultFor('wrong-seed', project.id)
+    wrongSeed.seed = 'another-seed'
+    await expect(repository.saveSimulationRun(project, wrongSeed, revision.revisionId)).rejects.toThrow('does not match')
+    expect(await repository.listSimulationRuns(project.id)).toEqual([])
   })
 
   it('rejects invalid project snapshots before writing anything', async () => {

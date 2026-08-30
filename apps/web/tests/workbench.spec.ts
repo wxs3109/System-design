@@ -38,6 +38,43 @@ test('runs the direct and async examples through the worker', async ({ page }) =
   await expect(page.getByRole('table').getByText('Queue', { exact: true })).toBeVisible()
 })
 
+test('filters request traces, renders a dependency waterfall and navigates a span to the canvas', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Direct service/ }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+
+  const explorer = page.getByRole('region', { name: 'Trace explorer' })
+  await expect(explorer).toBeVisible({ timeout: 15_000 })
+  await expect(explorer.getByRole('img', { name: /Dependency waterfall with/ })).toBeVisible()
+  await expect(explorer.locator('.trace-list [role=option]').first()).toContainText('Request')
+
+  await explorer.getByLabel('Trace component').selectOption('service-direct')
+  await expect(explorer.getByText(/of .* requests/)).toBeVisible()
+  await explorer.getByRole('button', { name: /Show .* on canvas/ }).click()
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(1)
+
+  await explorer.getByLabel('Trace status').selectOption('error')
+  await expect(explorer.getByText(/of .* requests/)).toContainText(/\d+ of/)
+  await expect(explorer.locator('.trace-list [role=option]').first()).toContainText(/intrinsic error|Request/)
+})
+
+test('shows evidence-backed bottleneck claims and links their request evidence to the trace explorer', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Data platform/ }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+
+  const explanations = page.getByRole('region', { name: 'Evidence-based explanations' })
+  await expect(explanations).toBeVisible({ timeout: 15_000 })
+  await expect(explanations.getByText(/misses drove load|routed disproportionate traffic/).first()).toBeVisible()
+  const traceLink = explanations.getByRole('button', { name: /^trace-/ }).first()
+  await expect(traceLink).toBeVisible()
+  const traceId = await traceLink.innerText()
+  await traceLink.click()
+  await expect(page.getByRole('region', { name: 'Trace explorer' }).getByText(traceId, { exact: true })).toBeVisible()
+})
+
 test('runs the reusable data-platform topology and exposes domain metrics', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Load example' }).click()

@@ -21,6 +21,8 @@ export interface SimulationRunRecord {
   projectRevisionId: string
   experimentId: string
   createdAt: number
+  /** Exact design and experiment used by this run. Legacy v1 records may not have one. */
+  projectSnapshot?: ProjectFileV2
   result: SimulationResult
 }
 
@@ -115,17 +117,21 @@ export class LocalHistoryRepository {
 
   async saveSimulationRun(projectInput: ProjectFileV2 | unknown, result: SimulationResult, projectRevisionId?: string): Promise<SimulationRunRecord> {
     const project = projectFileV2Schema.parse(immutableCopy(projectInput))
+    const experiment = getActiveExperiment(project)
     const revision = projectRevisionId
       ? await this.database.projectRevisions.get(projectRevisionId)
       : await this.saveProjectRevision(project, 'autosave')
     if (!revision || revision.projectId !== project.id) throw new Error('The simulation run must reference a revision of the same project.')
+    if (revision.fingerprint !== fingerprintProject(project)) throw new Error('The simulation run must reference the exact project revision that was simulated.')
+    if (result.scenarioId !== project.id || result.seed !== experiment.seed) throw new Error('The simulation result does not match the project and experiment snapshot.')
 
     const record: SimulationRunRecord = {
       runId: result.runId,
       projectId: project.id,
       projectRevisionId: revision.revisionId,
-      experimentId: getActiveExperiment(project).id,
+      experimentId: experiment.id,
       createdAt: Date.now(),
+      projectSnapshot: immutableCopy(project),
       result: immutableCopy(result),
     }
 

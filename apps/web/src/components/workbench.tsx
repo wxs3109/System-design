@@ -8,9 +8,12 @@ import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
 import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, History, Layers3, MousePointer2, Play, Plus, Redo2, RotateCcw, Save, Square, Trash2, Undo2, Upload } from 'lucide-react'
 import { ComponentNode, componentIcons } from './component-node'
+import { BottleneckExplanations } from './bottleneck-explanations'
 import { FaultLaboratory } from './fault-laboratory'
 import { affectedTopology } from './fault-topology'
 import { MetricChart } from './metric-chart'
+import { RunComparisonPanel } from './run-comparison-panel'
+import { TraceExplorer } from './trace-explorer'
 import { createAsyncExample, createDataPlatformExample, createDirectExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
@@ -176,7 +179,8 @@ function FaultTraceEvidence({ result }: { result: SimulationResult }) {
   )
 }
 
-function ResultsPanel({ result, progress, running }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean }) {
+function ResultsPanel({ result, progress, running, nodes, onShowTraceNode }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean; nodes: Array<{ id: string; name: string }>; onShowTraceNode: (nodeId: string) => void }) {
+  const [traceRequest, setTraceRequest] = useState<{ traceId: string; sequence: number } | null>(null)
   if (!result && running) {
     const simulatedTimeMs = progress?.simulatedTimeMs ?? 0
     const simulatedDurationMs = progress?.simulatedDurationMs ?? 1
@@ -195,6 +199,8 @@ function ResultsPanel({ result, progress, running }: { result: SimulationResult 
       <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run · shaded fault windows</span></div><MetricChart points={result.timeSeries} events={result.events} simulatedDurationMs={result.simulatedDurationMs} /></div>
       <div className="node-table-wrap"><table className="node-table"><thead><tr><th>Component</th><th>Util.</th><th>Avg queue</th><th>Max queue</th><th>Domain metrics</th></tr></thead><tbody>{result.nodes.map((node) => <tr key={node.nodeId}><td><strong>{node.nodeName}</strong><span>{node.nodeType}</span></td><td>{(node.utilization * 100).toFixed(1)}%</td><td>{node.averageQueueLength.toFixed(1)}</td><td>{node.maxQueueLength}</td><td><span className="domain-metrics">{formatDomainMetrics(node.details)}</span></td></tr>)}</tbody></table></div>
       <FaultTraceEvidence result={result} />
+      <BottleneckExplanations result={result} onShowNode={onShowTraceNode} onShowTrace={(traceId) => setTraceRequest((current) => ({ traceId, sequence: (current?.sequence ?? 0) + 1 }))} />
+      <TraceExplorer key={`${result.runId}:${traceRequest?.sequence ?? 0}`} result={result} nodes={nodes} onShowOnCanvas={onShowTraceNode} {...(traceRequest ? { requestedTraceId: traceRequest.traceId } : {})} />
       {result.warnings.length ? <div className="warnings"><CircleAlert size={15} /> {result.warnings.join(' ')}</div> : null}
     </>
   )
@@ -240,6 +246,7 @@ function WorkbenchInner() {
   const [runs, setRuns] = useState<SimulationRunRecord[]>([])
   const [historyReady, setHistoryReady] = useState(false)
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
+  const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
   const topologyNodes = project.topology.nodes
   const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(affected.nodes.has(node.id) ? { className: 'is-fault-target' } : {}) })), [affected.nodes, topologyNodes, selectedNodeId])
   const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(affected.edges.has(edge.id) ? { className: 'is-fault-target' } : {}) })), [affected.edges, project, selectedEdgeId])
@@ -290,18 +297,27 @@ function WorkbenchInner() {
     addComponent(type, reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY }))
   }, [addComponent, reactFlow])
 
+  const showTraceNode = useCallback((nodeId: string) => {
+    const node = project.topology.nodes.find((candidate) => candidate.id === nodeId)
+    if (!node) return
+    selectNode(nodeId)
+    reactFlow.setCenter(node.position.x + 99, node.position.y + 38, { zoom: 1.25, duration: 350 })
+  }, [project.topology.nodes, reactFlow, selectNode])
+
   const run = async () => {
     setRunning(true); setError(null); setResult(null); setProgress(null)
     try {
-      const validation = validateScenarioForSimulation(project)
+      const projectSnapshot = componentRegistry.validateProject(structuredClone(project))
+      const validation = validateScenarioForSimulation(projectSnapshot)
       if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
       clientRef.current ??= new SimulationWorkerClient()
-      const completed = await clientRef.current.run(project, { onProgress: setProgress })
+      const completed = await clientRef.current.run(projectSnapshot, { onProgress: setProgress })
+      setResultsView('run')
       setResult(completed)
       const repository = getLocalHistoryRepository()
-      const revision = await repository.saveProjectRevision(project)
-      await repository.saveSimulationRun(project, completed, revision.revisionId)
-      await refreshHistory(project.id)
+      const revision = await repository.saveProjectRevision(projectSnapshot)
+      await repository.saveSimulationRun(projectSnapshot, completed, revision.revisionId)
+      await refreshHistory(projectSnapshot.id)
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : 'Simulation failed.')
     } finally { setRunning(false) }
@@ -336,9 +352,9 @@ function WorkbenchInner() {
 
   const restoreRun = async (savedRun: SimulationRunRecord) => {
     try {
-      const revision = await getLocalHistoryRepository().loadProjectRevision(savedRun.projectRevisionId)
-      if (!revision) throw new Error('The project revision for this run no longer exists.')
-      restoreProject(componentRegistry.validateProject(revision.project))
+      const snapshot = savedRun.projectSnapshot ?? (await getLocalHistoryRepository().loadProjectRevision(savedRun.projectRevisionId))?.project
+      if (!snapshot) throw new Error('The project snapshot for this run no longer exists.')
+      restoreProject(componentRegistry.validateProject(snapshot))
       setResult(structuredClone(savedRun.result))
       setHistoryOpen(false)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore simulation run.') }
@@ -398,7 +414,7 @@ function WorkbenchInner() {
         <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
       </aside>
 
-      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div></div><ResultsPanel result={result} progress={progress} running={running} /></section>
+      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div><div className="results-views" role="tablist" aria-label="Simulation result views"><button role="tab" aria-selected={resultsView === 'run'} onClick={() => setResultsView('run')}>Run details</button><button role="tab" aria-selected={resultsView === 'compare'} onClick={() => setResultsView('compare')}>Compare runs <small>{runs.length}</small></button></div></div>{resultsView === 'run' ? <ResultsPanel result={result} progress={progress} running={running} nodes={project.topology.nodes} onShowTraceNode={showTraceNode} /> : <RunComparisonPanel key={`${project.id}:${result?.runId ?? ''}`} runs={runs} {...(result ? { activeRunId: result.runId } : {})} />}</section>
     </main>
   )
 }
