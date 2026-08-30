@@ -123,6 +123,7 @@ export const createDefinitionResource = (project: ProjectFile, kind: DefinitionK
   const services = project.topology.nodes.filter((node) => node.type === 'service')
   const databases = project.topology.nodes.filter((node) => node.type === 'database')
   const traffic = project.topology.nodes.filter((node) => node.type === 'traffic')
+  const schedulers = project.topology.nodes.filter((node) => node.type === 'scheduler')
   if (kind === 'jsonSchemas') {
     const id = uniqueId('schema.NewObject', allResourceIds(project, kind))
     return { id, version: 1, name: 'New object', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', properties: {} } }
@@ -163,8 +164,8 @@ export const createDefinitionResource = (project: ProjectFile, kind: DefinitionK
   if (kind === 'interactions') {
     const api = requireFirst(project.definitions.apis, 'Add an API before defining an interaction.')
     const operation = requireFirst(api.operations, 'The selected API must contain an operation.')
-    const source = traffic[0] ?? services[0]
-    if (!source) throw new Error('Add a Traffic Generator or Service component before defining an interaction.')
+    const source = traffic[0] ?? schedulers[0] ?? services[0]
+    if (!source) throw new Error('Add a Traffic Generator, Scheduler, or Service component before defining an interaction.')
     const id = uniqueId('interaction', allResourceIds(project, kind))
     const operationReference = { apiId: api.id, apiVersion: api.version, operationId: operation.id }
     return { id, version: 1, name: 'New interaction', entryOperation: operationReference, actions: [{ id: 'call-api', kind: 'api-call', dependsOn: [], sourceNodeId: source.id, targetNodeId: api.ownerNodeId, operation: operationReference }] }
@@ -172,7 +173,7 @@ export const createDefinitionResource = (project: ProjectFile, kind: DefinitionK
   const api = requireFirst(project.definitions.apis, 'Add an API before defining an operation workload.')
   const operation = requireFirst(api.operations, 'The selected API must contain an operation.')
   const interaction = requireFirst(project.definitions.interactions.filter((candidate) => candidate.entryOperation.apiId === api.id && candidate.entryOperation.apiVersion === api.version && candidate.entryOperation.operationId === operation.id), 'Add an interaction for an API operation before defining its workload.')
-  const source = requireFirst(traffic, 'Add a Traffic Generator before defining an operation workload.')
+  const source = requireFirst([...traffic, ...schedulers], 'Add a Traffic Generator or Scheduler before defining an operation workload.')
   const activeExperiment = requireFirst(project.experiments.filter((experiment) => experiment.id === project.activeExperimentId), 'The active experiment does not exist.')
   const id = uniqueId('operation-workload', activeExperiment.operationWorkloads.map((workload) => workload.id))
   return {

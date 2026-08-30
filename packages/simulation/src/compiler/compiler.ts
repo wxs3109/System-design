@@ -77,7 +77,7 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
     const synchronousModes = new Set(sourceEdges.filter((edge) => edge.routingMode !== 'async-publish').map((edge) => edge.routingMode))
     if (synchronousModes.size > 1) throw new Error(`Node ${source} mixes synchronous routing modes. Split the behavior into explicit components.`)
   }
-  const operations = project?.schemaVersion === 3 ? compileOperationPlans(project, edges, outgoing) : { phases: [], plans: new Map(), warnings: [] }
+  const operations = project?.schemaVersion === 3 ? compileOperationPlans(project, edges, outgoing) : { phases: [], schedulerWorkloads: new Map(), plans: new Map(), warnings: [] }
   return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies, operations }
 }
 

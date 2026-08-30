@@ -56,7 +56,18 @@ export interface CompiledOperationPhase {
   plans: Array<{ weight: number; plan: CompiledOperationPlan }>
 }
 
-export interface CompiledOperations { phases: CompiledOperationPhase[]; plans: Map<string, CompiledOperationPlan>; warnings: string[] }
+export interface CompiledSchedulerWorkload {
+  workloadId: string
+  sourceNodeId: string
+  plans: Array<{ weight: number; plan: CompiledOperationPlan }>
+}
+
+export interface CompiledOperations {
+  phases: CompiledOperationPhase[]
+  schedulerWorkloads: Map<string, CompiledSchedulerWorkload>
+  plans: Map<string, CompiledOperationPlan>
+  warnings: string[]
+}
 
 const referenceKey = (id: string, version: number) => `${id}@${version}`
 const operationKey = (reference: ApiOperationReference) => `${reference.apiId}@${reference.apiVersion}:${reference.operationId}`
@@ -132,7 +143,7 @@ const responseBytes = (operation: ApiOperation) => operation.responses.find((res
 /** Compiles business contracts into generic, topology-bound executable plans. */
 export const compileOperationPlans = (project: ProjectFile, edges: readonly CompiledConnection[], outgoing: ReadonlyMap<string, CompiledConnection[]>): CompiledOperations => {
   const experiment = project.experiments.find((candidate) => candidate.id === project.activeExperimentId)!
-  if (experiment.operationWorkloads.length === 0) return { phases: [], plans: new Map(), warnings: [] }
+  if (experiment.operationWorkloads.length === 0) return { phases: [], schedulerWorkloads: new Map(), plans: new Map(), warnings: [] }
   const operations = new Map(project.definitions.apis.flatMap((api) => api.operations.map((operation) => [operationKey({ apiId: api.id, apiVersion: api.version, operationId: operation.id }), { api, operation }] as const)))
   const interactions = new Map(project.definitions.interactions.map((interaction) => [interactionKey(interaction.id, interaction.version), interaction]))
   const models = new Map(project.definitions.dataModels.map((model) => [referenceKey(model.id, model.version), model]))
@@ -229,11 +240,22 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
     return plan
   }
 
-  const phases = experiment.operationWorkloads.flatMap((workload) => workload.phases.map((phase) => ({
-    ...phase, workloadId: workload.id, sourceNodeId: workload.sourceNodeId, plans: workload.operationMix.map((mix) => ({ weight: mix.weight, plan: compileMix(workload.id, workload.sourceNodeId, mix) })),
+  const sourceNodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
+  const compiledWorkloads = experiment.operationWorkloads.map((workload) => ({
+    workload, plans: workload.operationMix.map((mix) => ({ weight: mix.weight, plan: compileMix(workload.id, workload.sourceNodeId, mix) })),
+  }))
+  const schedulerWorkloads = new Map<string, CompiledSchedulerWorkload>()
+  for (const { workload, plans: workloadPlans } of compiledWorkloads) {
+    if (sourceNodes.get(workload.sourceNodeId)?.type !== 'scheduler') continue
+    if (schedulerWorkloads.has(workload.sourceNodeId)) throw new Error(`Scheduler ${workload.sourceNodeId} can bind only one operation workload.`)
+    schedulerWorkloads.set(workload.sourceNodeId, { workloadId: workload.id, sourceNodeId: workload.sourceNodeId, plans: workloadPlans })
+    warnings.add(`Operation workload ${workload.id} uses Scheduler timing; its arrival phases are not executed.`)
+  }
+  const phases = compiledWorkloads.flatMap(({ workload, plans: workloadPlans }) => sourceNodes.get(workload.sourceNodeId)?.type === 'scheduler' ? [] : workload.phases.map((phase) => ({
+    ...phase, workloadId: workload.id, sourceNodeId: workload.sourceNodeId, plans: workloadPlans,
   })))
   const operationSources = new Set(experiment.operationWorkloads.map((workload) => workload.sourceNodeId))
   for (const workload of experiment.workloads) if (operationSources.has(workload.sourceNodeId)) warnings.add(`Operation workloads supersede legacy capacity workload ${workload.id} on source ${workload.sourceNodeId}.`)
   void edges
-  return { phases, plans, warnings: [...warnings] }
+  return { phases, schedulerWorkloads, plans, warnings: [...warnings] }
 }

@@ -8,6 +8,7 @@ const positiveIntegerSchema = z.number().int().positive()
 
 export const componentTypeSchema = z.enum([
   'traffic',
+  'scheduler',
   'network',
   'load-balancer',
   'service',
@@ -35,6 +36,22 @@ const commonNodeFields = {
 
 export const trafficConfigSchema = z.object({
   workloadId: idSchema,
+})
+
+export const schedulerConfigSchema = z.object({
+  scheduleMode: z.enum(['periodic', 'batch']).default('periodic'),
+  intervalMs: positiveSchema.max(86_400_000).default(1_000),
+  startAtMs: nonNegativeSchema.max(86_400_000).default(0),
+  batchSize: positiveIntegerSchema.max(1_000_000).default(1),
+  jitterMs: nonNegativeSchema.max(86_400_000).default(0),
+  missedRunPolicy: z.enum(['skip', 'catch-up']).default('skip'),
+  concurrencyLimit: positiveIntegerSchema.max(1_000_000).default(1),
+  maxPendingRuns: z.number().int().min(0).max(10_000_000).default(1_000),
+  requestBytes: positiveIntegerSchema.max(1_000_000_000).default(1_024),
+}).superRefine((config, context) => {
+  if (config.jitterMs > config.intervalMs) {
+    context.addIssue({ code: 'custom', path: ['jitterMs'], message: 'Scheduler jitter cannot exceed its interval.' })
+  }
 })
 
 export const networkConfigSchema = z.object({
@@ -138,6 +155,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('traffic'),
     config: trafficConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('scheduler'),
+    config: schedulerConfigSchema,
   }),
   z.object({
     ...commonNodeFields,
@@ -329,6 +351,7 @@ export const scenarioSchema = z.object({
 
 export type Position = z.infer<typeof positionSchema>
 export type ComponentNode = z.infer<typeof componentNodeSchema>
+export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>
 export type Connection = z.infer<typeof connectionSchema>
 export type Workload = z.infer<typeof workloadSchema>
 export type Fault = z.infer<typeof faultSchema>

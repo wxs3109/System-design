@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOrderSystemContractFixture } from './project-fixtures'
+import { createOrderSystemContractFixture, createScheduledReportContractFixture } from './project-fixtures'
 import { parseProjectFile, projectFileV3Schema, type ProjectFileV3 } from './project'
 
 const validateMutation = (mutate: (fixture: ProjectFileV3) => void) => {
@@ -12,6 +12,13 @@ const validateMutation = (mutate: (fixture: ProjectFileV3) => void) => {
 }
 
 describe('order-system contract fixture', () => {
+  it('accepts an operation workload sourced by a Scheduler', () => {
+    const fixture = createScheduledReportContractFixture()
+
+    expect(projectFileV3Schema.safeParse(fixture).success).toBe(true)
+    expect(fixture.experiments[0]?.operationWorkloads[0]?.sourceNodeId).toBe('report-scheduler')
+  })
+
   it('creates deterministic, independently mutable project values', () => {
     const first = createOrderSystemContractFixture()
     const second = createOrderSystemContractFixture()
@@ -161,7 +168,7 @@ describe('order-system contract fixture', () => {
       name: 'workload source component',
       mutate: (fixture: ProjectFileV3) => { fixture.experiments[0]!.operationWorkloads[0]!.sourceNodeId = 'orders-service' },
       path: ['experiments', 0, 'operationWorkloads', 0, 'sourceNodeId'],
-      message: 'Node orders-service must be a traffic component.',
+      message: 'Node orders-service must be a traffic or scheduler component.',
     },
   ])('reports an actionable path for an invalid $name reference', ({ mutate, path, message }) => {
     const issues = validateMutation(mutate)

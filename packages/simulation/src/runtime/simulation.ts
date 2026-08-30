@@ -2,7 +2,7 @@ import { Entity, Queue as SimQueue, Simulation } from 'simscript'
 import seedrandom from 'seedrandom'
 import type { ComponentNode, Fault, FaultTarget, FaultType, ReasonCode, RuntimeEvent, Scenario, Workload } from '@system-design/model'
 import type { CompiledConnection, CompiledScenario } from '../compiler/compiler'
-import type { CompiledOperationAction, CompiledOperationPhase, CompiledOperationPlan } from '../compiler/operation-plan'
+import type { CompiledOperationAction, CompiledOperationPhase, CompiledOperationPlan, CompiledSchedulerWorkload } from '../compiler/operation-plan'
 import { getNodeBehavior } from '../components/behavior'
 import { createComponentStateRuntime, type ComponentDomainEvent } from '../components/data-runtime'
 import { applyCapacityFaults, applyLatencyFaults, composeLossProbability, faultEndsAtMs, faultReason, faultStartsAtMs, resolveActiveFaults } from '../faults/resolver'
@@ -11,7 +11,7 @@ import { RuntimeEventSink } from '../telemetry/event-sink'
 import { BackpressureGate, TokenBucket } from '../policies/delivery'
 import { policiesFor } from '../policies/compiler'
 import { CircuitBreaker, retryDelayMs, type CircuitCompletionResult, type CircuitPermit, type CircuitTransition, type ReliabilityCall } from '../policies/reliability'
-import type { LoadBalancerRuntimeState, ReliabilityCompletionContext, RequestGroup, RequestState, RuntimeNode } from './types'
+import type { LoadBalancerRuntimeState, ReliabilityCompletionContext, RequestGroup, RequestState, RuntimeNode, SchedulerRuntimeState } from './types'
 import { actionAttributes, estimateDataAccessCost, sampleKey, sampleValueBytes } from '../components/operation-cost'
 
 export class SystemDesignSimulation extends Simulation {
@@ -26,6 +26,9 @@ export class SystemDesignSimulation extends Simulation {
   readonly loadBalancers = new Map<string, LoadBalancerRuntimeState>()
   readonly circuitBreakers = new Map<string, CircuitBreaker>()
   readonly rateLimits = new Map<string, TokenBucket>()
+  readonly schedulers = new Map<string, SchedulerRuntimeState>()
+  readonly settledSchedulerRuns = new Set<string>()
+  schedulerDecisions = 0
   generated = 0
   completed = 0
   failed = 0
@@ -55,6 +58,10 @@ export class SystemDesignSimulation extends Simulation {
         ...(state === undefined ? {} : { state }),
       })
       if (node.type === 'load-balancer') this.loadBalancers.set(node.id, { roundRobinIndex: 0, targets: new Map() })
+      if (node.type === 'scheduler') this.schedulers.set(node.id, {
+        releaseTicks: 0, scheduledRuns: 0, releasedRuns: 0, queuedRuns: 0, skippedRuns: 0, completedRuns: 0, failedRuns: 0, catchUpRuns: 0,
+        activeRuns: 0, maxActiveRuns: 0, nextRunId: 0, pending: [],
+      })
       const rateLimit = policiesFor(compiled.policies, 'node', node.id, 'rate-limit')[0]
       if (rateLimit) this.rateLimits.set(node.id, new TokenBucket(rateLimit.config))
       const backpressure = policiesFor(compiled.policies, 'node', node.id, 'backpressure')[0]
@@ -70,6 +77,7 @@ export class SystemDesignSimulation extends Simulation {
     const operationSources = new Set(this.compiled.operations.phases.map((phase) => phase.sourceNodeId))
     for (const workload of this.scenario.workloads) if (!operationSources.has(workload.sourceNodeId)) this.activate(new WorkloadGenerator(workload))
     for (const phase of this.compiled.operations.phases) this.activate(new OperationWorkloadGenerator(phase))
+    for (const node of this.nodes.values()) if (node.type === 'scheduler') this.activate(new SchedulerGenerator(node, this.compiled.operations.schedulerWorkloads.get(node.id)))
     this.activate(new MetricsSampler())
   }
 
@@ -197,6 +205,86 @@ export class SystemDesignSimulation extends Simulation {
     this.captureNodeSnapshots()
   }
 
+  offerSchedulerRun(node: Extract<ComponentNode, { type: 'scheduler' }>, scheduledAtMs: number, dueAtMs: number, operationPlan?: CompiledOperationPlan, workloadId?: string) {
+    const state = this.schedulers.get(node.id)!
+    if (this.generated >= this.scenario.simulation.maxRequests || this.schedulerDecisions >= this.scenario.simulation.maxRequests) {
+      const warning = `Scheduler generation stopped at the maxRequests limit (${this.scenario.simulation.maxRequests}).`
+      if (!this.warnings.includes(warning)) this.warnings.push(warning)
+      return false
+    }
+    this.schedulerDecisions += 1
+    state.scheduledRuns += 1
+    const run = { schedulerRunId: ++state.nextRunId, scheduledAtMs, dueAtMs, ...(operationPlan === undefined ? {} : { operationPlan }), ...(workloadId === undefined ? {} : { workloadId }) }
+    if (state.activeRuns < node.config.concurrencyLimit && this.generated < this.scenario.simulation.maxRequests) {
+      this.releaseSchedulerRun(node, run, false)
+      return true
+    }
+    if (node.config.missedRunPolicy === 'catch-up' && state.pending.length < node.config.maxPendingRuns) {
+      state.pending.push(run)
+      state.queuedRuns += 1
+      this.eventSink.emit({
+        timestampMs: round(this.timeNow), nodeId: node.id, type: 'scheduler-run-queued', status: 'pending',
+        attributes: { schedulerRunId: run.schedulerRunId, scheduledAtMs, dueAtMs, pendingRuns: state.pending.length, activeRuns: state.activeRuns },
+      })
+      return true
+    }
+    state.skippedRuns += 1
+    this.eventSink.emit({
+      timestampMs: round(this.timeNow), nodeId: node.id, type: 'scheduler-run-skipped', status: 'rejected', reason: 'scheduler_missed',
+      attributes: { schedulerRunId: run.schedulerRunId, scheduledAtMs, dueAtMs, activeRuns: state.activeRuns, pendingRuns: state.pending.length, missedRunPolicy: node.config.missedRunPolicy },
+    })
+    return true
+  }
+
+  private releaseSchedulerRun(node: Extract<ComponentNode, { type: 'scheduler' }>, run: import('./types').PendingSchedulerRun, catchUp: boolean) {
+    const state = this.schedulers.get(node.id)!
+    if (this.generated >= this.scenario.simulation.maxRequests) return false
+    this.generated += 1
+    this.requestId += 1
+    state.releasedRuns += 1
+    state.activeRuns += 1
+    state.maxActiveRuns = Math.max(state.maxActiveRuns, state.activeRuns)
+    if (catchUp) state.catchUpRuns += 1
+    const traceId = `trace-${this.requestId}`
+    const bytes = run.operationPlan?.requestBytes ?? node.config.requestBytes
+    const request: RequestState = {
+      id: this.requestId, createdAtMs: this.timeNow, bytes, payloadBytes: bytes, hops: 0, traceId, spanId: `${traceId}:0`,
+      schedulerNodeId: node.id, schedulerRunId: run.schedulerRunId, ...(run.operationPlan === undefined ? {} : { operationPlan: run.operationPlan, operationId: run.operationPlan.operation.operationId, key: sampleKey(run.operationPlan.keyDistribution, this.random, this.requestId) }),
+    }
+    this.eventSink.emit({
+      timestampMs: round(this.timeNow), requestId: String(request.id), traceId, spanId: request.spanId, nodeId: node.id,
+      type: 'scheduler-run-released', status: 'ok', bytes: request.bytes,
+      attributes: { schedulerRunId: run.schedulerRunId, scheduledAtMs: run.scheduledAtMs, dueAtMs: run.dueAtMs, releaseLagMs: round(this.timeNow - run.scheduledAtMs), catchUp, activeRuns: state.activeRuns, ...(run.workloadId === undefined ? {} : { workloadId: run.workloadId }) },
+    })
+    if (run.operationPlan) {
+      this.emitOperationEvent(request, 'operation-started', 'pending')
+      this.activate(new SchedulerOperationExecution(request, run.operationPlan))
+    } else this.activate(new RequestEntity(request, node.id))
+    return true
+  }
+
+  settleSchedulerRun(request: RequestState, success: boolean) {
+    if (!request.schedulerNodeId || request.schedulerRunId === undefined) return
+    const key = `${request.schedulerNodeId}:${request.schedulerRunId}`
+    if (this.settledSchedulerRuns.has(key)) return
+    const node = this.nodes.get(request.schedulerNodeId)
+    const state = this.schedulers.get(request.schedulerNodeId)
+    if (node?.type !== 'scheduler' || !state) return
+    this.settledSchedulerRuns.add(key)
+    state.activeRuns = Math.max(0, state.activeRuns - 1)
+    if (success) state.completedRuns += 1
+    else state.failedRuns += 1
+    this.eventSink.emit({
+      timestampMs: round(this.timeNow), requestId: String(request.id), traceId: request.traceId, spanId: request.spanId, nodeId: node.id,
+      type: 'scheduler-run-settled', status: success ? 'ok' : 'error', bytes: request.bytes,
+      attributes: { schedulerRunId: request.schedulerRunId, activeRuns: state.activeRuns, pendingRuns: state.pending.length, totalLatencyMs: round(this.timeNow - request.createdAtMs) },
+    })
+    while (state.pending.length > 0 && state.activeRuns < node.config.concurrencyLimit && this.generated < this.scenario.simulation.maxRequests) {
+      const pending = state.pending.shift()!
+      this.releaseSchedulerRun(node, pending, true)
+    }
+  }
+
   captureNodeSnapshots() {
     for (const runtime of this.runtimes.values()) {
       const stateSnapshot = runtime.state?.snapshot(this.timeNow)
@@ -209,6 +297,14 @@ export class SystemDesignSimulation extends Simulation {
           queueLength: runtime.waiting.pop, capacity: runtime.resource.capacity ?? 0, unitsInUse: runtime.resource.unitsInUse,
           utilization: round(Math.min(1, runtime.resource.utilization)), averageQueueLength: round(runtime.waiting.averageLength), maxQueueLength: runtime.maxWaiting,
           ...(stateSnapshot?.metrics ?? {}),
+          ...(runtime.node.type !== 'scheduler' ? {} : (() => {
+            const scheduler = this.schedulers.get(runtime.node.id)!
+            return {
+              releaseTicks: scheduler.releaseTicks, scheduledRuns: scheduler.scheduledRuns, releasedRuns: scheduler.releasedRuns, queuedRuns: scheduler.queuedRuns,
+              skippedRuns: scheduler.skippedRuns, completedRuns: scheduler.completedRuns, failedRuns: scheduler.failedRuns, catchUpRuns: scheduler.catchUpRuns,
+              activeRuns: scheduler.activeRuns, maxActiveRuns: scheduler.maxActiveRuns, pendingRuns: scheduler.pending.length,
+            }
+          })()),
         },
       })
     }
@@ -252,6 +348,37 @@ class MetricsSampler extends Entity<SystemDesignSimulation> {
   }
 }
 
+class SchedulerGenerator extends Entity<SystemDesignSimulation> {
+  constructor(private readonly node: Extract<ComponentNode, { type: 'scheduler' }>, private readonly operationWorkload?: CompiledSchedulerWorkload) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const node = this.node
+    const durationMs = simulation.scenario.simulation.durationSeconds * 1_000
+    let scheduledAtMs = node.config.startAtMs
+    let previousDueAtMs = 0
+    while (scheduledAtMs < durationMs && simulation.schedulerDecisions < simulation.scenario.simulation.maxRequests) {
+      const jitter = node.config.jitterMs === 0 ? 0 : (simulation.random() * 2 - 1) * node.config.jitterMs
+      const dueAtMs = Math.max(previousDueAtMs, scheduledAtMs + jitter, 0)
+      if (dueAtMs >= durationMs) break
+      if (dueAtMs > simulation.timeNow) await this.delay(dueAtMs - simulation.timeNow)
+      const state = simulation.schedulers.get(node.id)!
+      state.releaseTicks += 1
+      simulation.eventSink.emit({
+        timestampMs: round(simulation.timeNow), nodeId: node.id, type: 'scheduler-tick', status: 'ok',
+        attributes: { releaseTick: state.releaseTicks, scheduledAtMs, dueAtMs: round(dueAtMs), jitterMs: round(dueAtMs - scheduledAtMs), scheduleMode: node.config.scheduleMode },
+      })
+      const runs = node.config.scheduleMode === 'batch' ? node.config.batchSize : 1
+      for (let index = 0; index < runs; index += 1) {
+        const plan = this.operationWorkload ? weightedPlan(this.operationWorkload, simulation.random) : undefined
+        if (!simulation.offerSchedulerRun(node, scheduledAtMs, dueAtMs, plan, this.operationWorkload?.workloadId)) return
+      }
+      previousDueAtMs = dueAtMs
+      scheduledAtMs += node.config.intervalMs
+    }
+  }
+}
+
 class WorkloadGenerator extends Entity<SystemDesignSimulation> {
   constructor(private readonly workload: Workload) { super() }
 
@@ -276,11 +403,11 @@ class WorkloadGenerator extends Entity<SystemDesignSimulation> {
   }
 }
 
-const weightedPlan = (phase: CompiledOperationPhase, random: () => number) => {
-  const total = phase.plans.reduce((sum, entry) => sum + entry.weight, 0)
+const weightedPlan = (source: Pick<CompiledOperationPhase, 'plans'> | CompiledSchedulerWorkload, random: () => number) => {
+  const total = source.plans.reduce((sum, entry) => sum + entry.weight, 0)
   let choice = random() * total
-  for (const entry of phase.plans) { choice -= entry.weight; if (choice <= 0) return entry.plan }
-  return phase.plans.at(-1)!.plan
+  for (const entry of source.plans) { choice -= entry.weight; if (choice <= 0) return entry.plan }
+  return source.plans.at(-1)!.plan
 }
 
 class OperationWorkloadGenerator extends Entity<SystemDesignSimulation> {
@@ -320,6 +447,8 @@ class OperationWorkloadGenerator extends Entity<SystemDesignSimulation> {
 type ActionOutcome = 'success' | 'failure' | 'cache-hit' | 'cache-miss'
 
 class OperationExecution extends Entity<SystemDesignSimulation> {
+  success = false
+
   constructor(private readonly request: RequestState, private readonly plan: CompiledOperationPlan) { super() }
 
   async script() {
@@ -351,7 +480,18 @@ class OperationExecution extends Entity<SystemDesignSimulation> {
       }
     }
     simulation.completed += 1
+    this.success = true
     simulation.emitOperationEvent(this.request, 'operation-completed', 'ok', { durationMs: round(simulation.timeNow - this.request.createdAtMs) })
+  }
+}
+
+class SchedulerOperationExecution extends Entity<SystemDesignSimulation> {
+  constructor(private readonly request: RequestState, private readonly plan: CompiledOperationPlan) { super() }
+
+  async script() {
+    const execution = new OperationExecution(this.request, this.plan)
+    await this.simulation.activate(execution)
+    this.simulation.settleSchedulerRun(this.request, execution.success)
   }
 }
 
@@ -719,6 +859,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
       }
       const totalLatencyMs = round(simulation.timeNow - this.request.createdAtMs)
       simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: success ? 'request-completed' : 'request-failed', status: success ? 'ok' : 'error', reason, bytes: this.request.bytes, attributes: { terminal: this.countsAsRequest, totalLatencyMs, ...terminalAttributes, ...(this.request.branchPath === undefined ? {} : { branchPath: this.request.branchPath }) } })
+      if (this.countsAsRequest) simulation.settleSchedulerRun(this.request, success)
       return
     }
     this.group.failed ||= !success
@@ -729,6 +870,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     else simulation.completed += 1
     const totalLatencyMs = round(simulation.timeNow - this.group.rootRequest.createdAtMs)
     simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.group.rootRequest.id), traceId: this.group.rootRequest.traceId, spanId: this.group.rootRequest.spanId, nodeId: node.id, type: this.group.failed ? 'request-failed' : 'request-completed', status: this.group.failed ? 'error' : 'ok', reason: this.group.failed ? this.group.failureReason ?? 'intrinsic_error' : 'none', bytes: this.group.rootRequest.bytes, attributes: { terminal: true, totalLatencyMs, routingMode: 'fan-out', ...terminalAttributes } })
+    simulation.settleSchedulerRun(this.group.rootRequest, !this.group.failed)
   }
 
   private failAfterService(node: ComponentNode, reason: ReasonCode) {
@@ -772,7 +914,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
       if (this.request.incomingRoutingMode === 'async-publish' && this.request.incomingEdgeId) {
         simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, edgeId: this.request.incomingEdgeId, type: 'message-consumed', status: 'pending', bytes: this.request.bytes })
       }
-      if (node.type === 'traffic') {
+      if (node.type === 'traffic' || node.type === 'scheduler') {
         simulation.emitRequestEvent(this.request, node, 'request-generated', 'ok')
         simulation.emitRequestEvent(this.request, node, 'request-started', 'pending', { queueDurationMs: 0 })
         simulation.emitRequestEvent(this.request, node, 'request-completed', 'ok', { durationMs: 0, queueDurationMs: 0 })

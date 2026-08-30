@@ -3,7 +3,7 @@ import { projectFileV3Schema, type ProjectFileV3 } from './project'
 
 const connection = (id: string, source: string, target: string, overrides: Record<string, unknown> = {}) => ({
   id, source, target, sourcePort: 'out', targetPort: 'in', weight: 1,
-  sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one', ...overrides,
+  sourceSemantic: 'request' as const, targetSemantic: 'request' as const, routingMode: 'weighted-one' as const, ...overrides,
 })
 
 export const createOrderSystemContractFixture = (): ProjectFileV3 => projectFileV3Schema.parse({
@@ -111,3 +111,31 @@ export const createOrderSystemContractFixture = (): ProjectFileV3 => projectFile
   }],
   activeExperimentId: 'baseline',
 })
+
+export const createScheduledReportContractFixture = (): ProjectFileV3 => {
+  const project = createOrderSystemContractFixture()
+  project.id = 'scheduled-report-contracts'
+  project.name = 'Scheduled report contracts'
+  const scheduler = { ...createNode('scheduler', 'report-scheduler', { x: 0, y: 250 }), name: 'Report scheduler', componentVersion: 1 as const }
+  scheduler.config = { ...scheduler.config, intervalMs: 5_000, scheduleMode: 'periodic', concurrencyLimit: 4, missedRunPolicy: 'catch-up', maxPendingRuns: 20, requestBytes: 256 }
+  project.topology.nodes.push(scheduler)
+  project.topology.edges.push(connection('scheduler-to-orders', 'report-scheduler', 'orders-service'))
+  project.definitions.apis[0]!.operations.push({ id: 'build-order-report', name: 'Build order report', method: 'POST', path: '/reports/orders', responses: [{ statusCode: '202' }], handlerTimeMs: 8 })
+  project.definitions.interactions.push({
+    id: 'build-order-report-flow', version: 1, name: 'Build order report', entryOperation: { apiId: 'orders-api', apiVersion: 1, operationId: 'build-order-report' },
+    actions: [
+      { id: 'schedule-report', kind: 'api-call', dependsOn: [], sourceNodeId: 'report-scheduler', targetNodeId: 'orders-service', operation: { apiId: 'orders-api', apiVersion: 1, operationId: 'build-order-report' } },
+      { id: 'scan-orders', kind: 'data-access', dependsOn: ['schedule-report'], nodeId: 'orders-db', model: { modelId: 'orders-model', modelVersion: 1 }, objectId: 'orders-table', operation: 'index-read', indexId: 'ix-customer', estimatedRows: 100 },
+    ],
+  })
+  const experiment = project.experiments[0]!
+  experiment.workloads = [{ id: 'inactive-client-load', name: 'Inactive client load', sourceNodeId: 'client-traffic', requestsPerSecond: 1, startAtSeconds: 60, durationSeconds: 1, pattern: 'constant', requestBytes: 1_024 }]
+  experiment.operationWorkloads = [{
+    id: 'scheduled-report', name: 'Scheduled order report', sourceNodeId: 'report-scheduler',
+    phases: [{ id: 'scheduler-owned', startAtSeconds: 0, durationSeconds: 60, requestsPerSecond: 1, pattern: 'constant' }],
+    operationMix: [{ operation: { apiId: 'orders-api', apiVersion: 1, operationId: 'build-order-report' }, interaction: { interactionId: 'build-order-report-flow', interactionVersion: 1 }, weight: 1, requestBytes: 256 }],
+  }]
+  experiment.simulation = { durationSeconds: 20, sampleIntervalMs: 1_000, maxRequests: 100, traceLimit: 100, maxHops: 64 }
+  experiment.seed = 'scheduled-report-contracts'
+  return projectFileV3Schema.parse(project)
+}

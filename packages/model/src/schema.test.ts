@@ -57,6 +57,17 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.parse(loadBalancer)).toEqual(loadBalancer)
   })
 
+  it('validates Scheduler timing and missed-run configuration', () => {
+    const scheduler = createNode('scheduler', 'scheduler', { x: 100, y: 50 })
+    if (scheduler.type !== 'scheduler') throw new Error('Expected a Scheduler node.')
+    scheduler.config.batchSize = 10
+    scheduler.config.missedRunPolicy = 'catch-up'
+    scheduler.config.maxPendingRuns = 50
+    expect(scenarioSchema.shape.nodes.element.parse(scheduler)).toEqual(scheduler)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...scheduler, config: { ...scheduler.config, jitterMs: scheduler.config.intervalMs + 1 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...scheduler, config: { ...scheduler.config, concurrencyLimit: 0 } }).success).toBe(false)
+  })
+
   it('validates fault-specific factor bounds', () => {
     const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
     expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)

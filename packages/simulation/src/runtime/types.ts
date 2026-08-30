@@ -38,6 +38,8 @@ export interface RequestState {
   entityId?: string
   queryShape?: string
   eventId?: string
+  schedulerNodeId?: string
+  schedulerRunId?: number
 }
 
 export interface RequestGroup {
@@ -72,4 +74,27 @@ export interface LoadBalancerTargetState {
 export interface LoadBalancerRuntimeState {
   roundRobinIndex: number
   targets: Map<string, LoadBalancerTargetState>
+}
+
+export interface PendingSchedulerRun {
+  schedulerRunId: number
+  scheduledAtMs: number
+  dueAtMs: number
+  operationPlan?: CompiledOperationPlan
+  workloadId?: string
+}
+
+export interface SchedulerRuntimeState {
+  releaseTicks: number
+  scheduledRuns: number
+  releasedRuns: number
+  queuedRuns: number
+  skippedRuns: number
+  completedRuns: number
+  failedRuns: number
+  catchUpRuns: number
+  activeRuns: number
+  maxActiveRuns: number
+  nextRunId: number
+  pending: PendingSchedulerRun[]
 }

@@ -10,6 +10,7 @@ import {
   objectStorageConfigSchema,
   queueConfigSchema,
   retryPolicyConfigSchema,
+  schedulerConfigSchema,
   serviceConfigSchema,
   streamConfigSchema,
   timeoutPolicyConfigSchema,
@@ -29,6 +30,7 @@ const cacheMissOutput = { id: 'miss', label: 'Miss', direction: 'output', semant
 
 export const builtInComponentCategoryManifests = [
   { id: 'traffic', label: 'Traffic', description: 'Request and workload sources.', iconToken: 'globe', color: '#8b5cf6', order: 10 },
+  { id: 'automation', label: 'Automation', description: 'Scheduled and orchestrated work releases.', iconToken: 'calendar-clock', color: '#d97706', order: 15 },
   { id: 'network', label: 'Network', description: 'Transfer boundaries and network conditions.', iconToken: 'activity', color: '#06b6d4', order: 20 },
   { id: 'gateway', label: 'Gateway & Routing', description: 'Request routing and distribution boundaries.', iconToken: 'git-fork', color: '#ec4899', order: 30 },
   { id: 'service', label: 'Service', description: 'Synchronous and background request processing.', iconToken: 'server', color: '#3b82f6', order: 40 },
@@ -46,6 +48,22 @@ export const builtInComponentManifests = [
     configSchema: z.object({}), createDefaultConfig: () => ({}), configFields: [], ports: [requestOutput],
     capabilities: ['workload-source'], emittedMetrics: ['generated-requests'], supportedFaults: [], runtimeBehavior: 'traffic-v1',
     describeConfig: () => 'workload source',
+  },
+  {
+    type: 'scheduler', version: 1, label: 'Scheduler', description: 'Releases periodic batches and applies deterministic jitter, missed-run policy, and concurrency limits.', category: 'automation', iconToken: 'calendar-clock', color: '#d97706',
+    configSchema: schedulerConfigSchema, createDefaultConfig: () => ({ scheduleMode: 'periodic', intervalMs: 1_000, startAtMs: 0, batchSize: 1, jitterMs: 0, missedRunPolicy: 'skip', concurrencyLimit: 1, maxPendingRuns: 1_000, requestBytes: 1_024 }),
+    configFields: [
+      { kind: 'select', key: 'scheduleMode', label: 'Schedule mode', options: [{ value: 'periodic', label: 'Periodic' }, { value: 'batch', label: 'Batch' }] },
+      { kind: 'number', key: 'intervalMs', label: 'Interval (ms)', min: 0.001, step: 100 },
+      { kind: 'number', key: 'startAtMs', label: 'Start at (ms)', min: 0, step: 100 },
+      { kind: 'number', key: 'batchSize', label: 'Runs / interval', min: 1, step: 1 },
+      { kind: 'number', key: 'jitterMs', label: 'Release jitter (ms)', min: 0, step: 10, description: 'Maximum deterministic offset before or after each scheduled release.' },
+      { kind: 'select', key: 'missedRunPolicy', label: 'Missed-run policy', options: [{ value: 'skip', label: 'Skip' }, { value: 'catch-up', label: 'Catch up' }] },
+      { kind: 'number', key: 'concurrencyLimit', label: 'Concurrent runs', min: 1, step: 1 },
+      { kind: 'number', key: 'maxPendingRuns', label: 'Pending-run limit', min: 0, step: 1 },
+      { kind: 'number', key: 'requestBytes', label: 'Run payload (bytes)', min: 1, step: 1_024 },
+    ], ports: [requestOutput], capabilities: ['workload-source', 'scheduling', 'batch-release', 'missed-run-policy'], emittedMetrics: ['scheduled-runs', 'released-runs', 'queued-runs', 'skipped-runs', 'active-runs'], supportedFaults: [], runtimeBehavior: 'scheduler-v1',
+    describeConfig: (config) => `${config.scheduleMode === 'batch' ? config.batchSize : 1} run${config.scheduleMode === 'batch' && config.batchSize !== 1 ? 's' : ''} every ${config.intervalMs} ms · ${config.concurrencyLimit} concurrent · ${config.missedRunPolicy}`,
   },
   {
     type: 'network', version: 1, label: 'Network Link', description: 'Adds transfer time, latency, jitter and packet loss.', category: 'network', iconToken: 'activity', color: '#06b6d4',

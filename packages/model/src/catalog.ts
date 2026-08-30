@@ -4,7 +4,7 @@ export interface ComponentDefinition {
   type: ComponentType
   label: string
   description: string
-  category: 'traffic' | 'network' | 'gateway' | 'service' | 'cache' | 'database' | 'object-storage' | 'messaging'
+  category: 'traffic' | 'automation' | 'network' | 'gateway' | 'service' | 'cache' | 'database' | 'object-storage' | 'messaging'
   color: string
   acceptsInput: boolean
   emitsOutput: boolean
@@ -14,6 +14,10 @@ export const componentCatalog = {
   traffic: {
     type: 'traffic', label: 'Traffic Generator', description: 'Produces a configurable request workload.',
     category: 'traffic', color: '#8b5cf6', acceptsInput: false, emitsOutput: true,
+  },
+  scheduler: {
+    type: 'scheduler', label: 'Scheduler', description: 'Releases periodic and batch work with deterministic jitter and missed-run handling.',
+    category: 'automation', color: '#d97706', acceptsInput: false, emitsOutput: true,
   },
   network: {
     type: 'network', label: 'Network Link', description: 'Adds transfer time, latency, jitter and packet loss.',
@@ -53,6 +57,7 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
   const name = componentCatalog[type].label
   switch (type) {
     case 'traffic': return { id, name, position, type, config: { workloadId } }
+    case 'scheduler': return { id, name, position, type, config: { scheduleMode: 'periodic', intervalMs: 1_000, startAtMs: 0, batchSize: 1, jitterMs: 0, missedRunPolicy: 'skip', concurrencyLimit: 1, maxPendingRuns: 1_000, requestBytes: 1_024 } }
     case 'network': return { id, name, position, type, config: { latencyMs: 20, jitterMs: 2, bandwidthMbps: 100, parallelism: 1_000, packetLossRate: 0, maxQueueSize: 10_000 } }
     case 'load-balancer': return { id, name, position, type, config: { algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 } }
     case 'service': return { id, name, position, type, config: { replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 } }

@@ -8,8 +8,18 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'network', 'load-balancer', 'service', 'queue', 'cache', 'stream', 'object-storage', 'database',
+      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'stream', 'object-storage', 'database',
     ])
+  })
+
+  it('declares Scheduler as an executable periodic source rather than a preset', () => {
+    const scheduler = componentRegistry.createNode('scheduler', 'scheduler', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('scheduler')
+    expect(scheduler.config).toMatchObject({ intervalMs: 1_000, batchSize: 1, missedRunPolicy: 'skip', concurrencyLimit: 1 })
+    expect(manifest.ports).toEqual([expect.objectContaining({ direction: 'output', semantic: 'request' })])
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['scheduling', 'batch-release', 'missed-run-policy']))
+    expect(componentCatalog.listPresets('scheduler')).toEqual([])
+    expect(() => manifest.configSchema.parse({ ...scheduler.config, jitterMs: 1_001 })).toThrow('jitter')
   })
 
   it('declares an editable Load Balancer manifest', () => {
@@ -112,9 +122,10 @@ describe('role preset registry', () => {
 describe('component creation hierarchy', () => {
   it('lists palette categories before executable variants and nested presets', () => {
     expect(componentCatalog.listCategories().map((category) => category.id)).toEqual([
-      'traffic', 'network', 'gateway', 'service', 'cache', 'database', 'object-storage', 'messaging',
+      'traffic', 'automation', 'network', 'gateway', 'service', 'cache', 'database', 'object-storage', 'messaging',
     ])
     expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['database'])
+    expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler'])
     expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream'])
     expect(componentCatalog.listPresets('service', 1).map((preset) => preset.id)).toEqual(['worker'])
     expect(componentCatalog.listPresets('database', 2)).toEqual([])

@@ -10,6 +10,7 @@ export const runtimeEventTypeSchema = z.enum([
   'cache-hit', 'cache-miss', 'cache-written', 'cache-deleted', 'cache-evicted', 'cache-expired', 'message-published', 'message-consumed',
   'message-acknowledged', 'message-dead-lettered', 'stream-record-appended', 'stream-record-consumed',
   'object-read', 'object-written', 'database-read', 'database-written',
+  'scheduler-tick', 'scheduler-run-released', 'scheduler-run-queued', 'scheduler-run-skipped', 'scheduler-run-settled',
   'operation-started', 'operation-completed', 'action-started', 'action-completed', 'action-skipped',
   'fault-activated', 'fault-recovered', 'metric-sampled', 'node-snapshot',
 ])
@@ -19,6 +20,7 @@ export const reasonCodeSchema = z.enum([
   'none', 'timeout', 'queue_full', 'node_down', 'rate_limited', 'circuit_open', 'packet_loss',
   'intrinsic_error', 'hop_limit', 'missing_node', 'simulation_ended',
   'backpressure', 'dead_lettered', 'no_healthy_target',
+  'scheduler_missed',
   'latency_spike', 'region_outage', 'capacity_reduced', 'bandwidth_reduced', 'traffic_spike', 'hot_key',
 ])
 export const eventAttributeValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean()])

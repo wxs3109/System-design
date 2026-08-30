@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { createOrderSystemContractFixture } from '@system-design/model'
+import { createOrderSystemContractFixture, createScheduledReportContractFixture } from '@system-design/model'
 
 async function openComponentCategory(page: Page, name: string) {
   const category = page.locator('.category-toggle').filter({ hasText: name })
@@ -163,6 +163,35 @@ test('runs the reusable data-platform topology and exposes domain metrics', asyn
   await expect(page.locator('.domain-metrics').filter({ hasText: 'hot shard' })).toBeVisible()
   await expect(page.locator('.domain-metrics').filter({ hasText: /^lag / })).toBeVisible()
   await expect(page.locator('.domain-metrics').filter({ hasText: 'bytes/s' })).toBeVisible()
+})
+
+test('loads a scheduled batch pipeline and exposes executable Scheduler metrics', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Scheduled batch/ }).click()
+  await expect(page.getByTestId('rf__node-batch-scheduler')).toContainText('Scheduler')
+  await expect(page.getByTestId('rf__node-batch-scheduler')).toContainText('8 runs every 1000 ms')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('released 80 · skipped 0 · pending 0')).toBeVisible({ timeout: 15_000 })
+  const results = page.getByRole('table')
+  await expect(results.getByText('Nightly release', { exact: true })).toBeVisible()
+  await expect(results.getByText('Reporting database', { exact: true })).toBeVisible()
+})
+
+test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'scheduled-report.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(createScheduledReportContractFixture())),
+  })
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  const explorer = page.getByRole('navigation', { name: 'Project definitions' })
+  await explorer.getByRole('button', { name: /Scheduled order report/ }).click()
+  const editor = page.getByLabel('Definition editor')
+  await expect(editor.getByText('Scheduler-controlled timing')).toBeVisible()
+  await expect(editor.getByText(/Stored arrival phases .* are not executed/)).toBeVisible()
+  await expect(editor.getByText('Arrival phases', { exact: true })).toHaveCount(0)
+  await expect(editor.getByLabel('Requests / second')).toHaveCount(0)
 })
 
 test('migrates a v1 import and exports a capacity-only ProjectFile v3', async ({ page }) => {

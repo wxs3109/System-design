@@ -183,9 +183,9 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 3. **Preset** 只是一种 variant 的可选初始参数模板，可以附加已有策略，但不增加端口、Schema 或运行能力，也不在 Palette 中单独占一栏。
 4. **业务契约**定义组件实际处理的内容，包括 API operation、事件、table/collection、typed field、主键/分区键、index、关系、访问模式和 workload mix。它们是项目级可复用资源，不能只是塞进节点配置后被仿真忽略。
 
-Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
+Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。P2.6a 又增加了独立 Scheduler 行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
 
-P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证三类 API、关系表、cache-aside、事件链和对照实验的完整闭环。下一步按 P2.6 增加 Scheduler、CDN、Search Index 等真正具有独立执行语义的行为。
+P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证完整闭环。P2.6a 的 Scheduler 已具备周期/批次释放、seeded jitter、skip/catch-up 与并发限制，并可驱动匿名拓扑请求或 v3 operation/interaction。下一步是 P2.6b CDN。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -222,13 +222,13 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 到 P2.5 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的 API、JSON Schema、Relational/Document/Key-Value 数据模型、Cache Key、Event、Interaction 和 operation-level Workload 可通过通用 Definitions UI 创建、编辑、校验、撤销、自动保存和导出。OpenAPI 3.1 与 DBML 使用成熟库适配器。Operation-aware 运行时执行拓扑绑定的 action，并用普通订单项目验证了索引与扫描、热点键、缓存配置和读写混合的确定性结果。下一步是 P2.6 可复用行为扩展。
+当前进度：P2.0 到 P2.5 以及 P2.6a Scheduler 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。Scheduler 是 Automation 类别中的独立 source variant：配置自身决定 release timing，并可绑定 operation workload 的 operation mix；绑定后 arrival phases 仅作为兼容合同保留，不参与调度。下一步是 P2.6b CDN。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
 - 顶层 Palette 只显示组件类别；Relational/Document/Key-Value、API Service/Worker 等行为变体在选择所属类别后出现，preset 仅作为可选模板。
 - 用订单系统验收 API → Service → Cache/Database → Event 的完整可执行链路。
-- 纵切通过后再补齐 Scheduler、CDN、Search、Topic、Realtime、Workflow 和 Global Routing。
+- 按独立 settlement 补齐 CDN、Search、Topic、Realtime、Workflow 和 Global Routing；每个行为都必须改变可测结果。
 - 在真实内置组件验证合同后发布 SDK、版本规则和插件沙箱。
 - 支持批量实验、参数扫描、容量边界搜索、分享和可选适配器。
 

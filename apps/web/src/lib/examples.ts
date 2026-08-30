@@ -78,5 +78,27 @@ export const createDataPlatformExample = (): ProjectFile => {
   return project
 }
 
+export const createScheduledBatchExample = (): ProjectFile => {
+  const project = createEmptyProject('scheduled-batch-pipeline')
+  project.name = 'Scheduled batch pipeline'
+  project.topology.nodes = [
+    createRegisteredNode('scheduler', 'batch-scheduler', { x: 60, y: 180 }),
+    createRegisteredNode('queue', 'batch-queue', { x: 330, y: 180 }),
+    createRegisteredNode('service', 'batch-workers', { x: 600, y: 180 }),
+    createRegisteredNode('database', 'batch-database', { x: 870, y: 180 }),
+  ]
+  const scheduler = project.topology.nodes[0]!
+  scheduler.name = 'Nightly release'
+  scheduler.config = { ...scheduler.config, scheduleMode: 'batch', intervalMs: 1_000, batchSize: 8, jitterMs: 100, missedRunPolicy: 'catch-up', concurrencyLimit: 4, maxPendingRuns: 100, requestBytes: 4_096 }
+  project.topology.nodes[1]!.name = 'Batch backlog'
+  project.topology.nodes[2]!.name = 'Batch workers'
+  project.topology.nodes[3]!.name = 'Reporting database'
+  project.topology.edges = [connection('batch-release', 'batch-scheduler', 'batch-queue'), connection('batch-dispatch', 'batch-queue', 'batch-workers'), connection('batch-write', 'batch-workers', 'batch-database')]
+  const experiment = project.experiments[0]!
+  experiment.seed = 'scheduled-batch-pipeline'
+  experiment.simulation = { durationSeconds: 10, sampleIntervalMs: 500, maxRequests: 1_000, traceLimit: 100, maxHops: 20 }
+  return project
+}
+
 /** A normal ProjectFile v3 fixture: the editor and runtime contain no order-specific branches. */
 export const createOrderSystemExample = (): ProjectFile => createOrderSystemContractFixture()

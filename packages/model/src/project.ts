@@ -330,7 +330,8 @@ const validateBusinessReferences = (project: {
     experiment.operationWorkloads.forEach((workload, workloadIndex) => {
       if (operationWorkloadIds.has(workload.id)) addDuplicateIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'id'], 'operation workload', workload.id)
       operationWorkloadIds.add(workload.id)
-      requireNode(workload.sourceNodeId, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'], 'traffic')
+      const source = requireNode(workload.sourceNodeId, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'])
+      if (source && source.type !== 'traffic' && source.type !== 'scheduler') addReferenceIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'], `Node ${source.id} must be a traffic or scheduler component.`)
       workload.operationMix.forEach((mix, mixIndex) => {
         const operation = requireOperation(mix.operation, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'operationMix', mixIndex, 'operation'])
         const interactionKey = referenceKey(mix.interaction.interactionId, mix.interaction.interactionVersion)
