@@ -1,13 +1,17 @@
 import { z } from 'zod'
 import {
   backpressurePolicyConfigSchema,
+  cacheConfigSchema,
   circuitBreakerPolicyConfigSchema,
   databaseConfigSchema,
+  databaseV1ConfigSchema,
   loadBalancerConfigSchema,
   networkConfigSchema,
+  objectStorageConfigSchema,
   queueConfigSchema,
   retryPolicyConfigSchema,
   serviceConfigSchema,
+  streamConfigSchema,
   timeoutPolicyConfigSchema,
   tokenBucketPolicyConfigSchema,
   type ComponentNode,
@@ -20,6 +24,8 @@ const requestInput = { id: 'in', label: 'Request', direction: 'input', semantic:
 const requestOutput = { id: 'out', label: 'Request', direction: 'output', semantic: 'request', multiple: true } as const
 const messageInput = { id: 'consume', label: 'Consume', direction: 'input', semantic: 'consume', multiple: true } as const
 const messageOutput = { id: 'publish', label: 'Publish', direction: 'output', semantic: 'publish', multiple: true } as const
+const cacheHitOutput = { id: 'hit', label: 'Hit', direction: 'output', semantic: 'hit', multiple: true } as const
+const cacheMissOutput = { id: 'miss', label: 'Miss', direction: 'output', semantic: 'miss', multiple: true } as const
 
 export const builtInComponentManifests = [
   {
@@ -84,8 +90,59 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.consumers} consumers · ${config.maxDepth} max`,
   },
   {
+    type: 'cache', version: 1, label: 'Cache', description: 'Stores key-aware entries with bounded capacity, virtual-time TTL and deterministic eviction.', category: 'data', iconToken: 'hard-drive', color: '#14b8a6',
+    configSchema: cacheConfigSchema, createDefaultConfig: () => ({ capacityEntries: 10_000, ttlMs: 60_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 1_000, operationTimeMs: 1, jitterMs: 0.2, errorRate: 0, maxQueueSize: 10_000 }),
+    configFields: [
+      { kind: 'number', key: 'capacityEntries', label: 'Capacity (entries)', min: 1, step: 1 },
+      { kind: 'number', key: 'ttlMs', label: 'TTL (ms)', min: 0.001, step: 100 },
+      { kind: 'select', key: 'evictionPolicy', label: 'Eviction policy', options: [{ value: 'lru', label: 'LRU' }, { value: 'fifo', label: 'FIFO' }] },
+      { kind: 'number', key: 'keySpaceSize', label: 'Key space', min: 1, step: 1 },
+      { kind: 'number', key: 'hotKeyProbability', label: 'Hot-key probability (0–1)', min: 0, max: 1, step: 0.05 },
+      { kind: 'number', key: 'maxConcurrentRequests', label: 'Concurrent requests', min: 1, step: 1 },
+      { kind: 'number', key: 'operationTimeMs', label: 'Operation time (ms)', min: 0.001, step: 0.1 },
+      { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 0.1 },
+      { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
+      { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
+    ], ports: [requestInput, cacheHitOutput, cacheMissOutput], capabilities: ['storage', 'caching', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'cache-hit-rate', 'cache-evictions', 'cache-occupancy'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'cache-v1',
+    describeConfig: (config) => `${config.capacityEntries} entries · ${config.ttlMs} ms TTL · ${String(config.evictionPolicy).toUpperCase()}`,
+  },
+  {
+    type: 'stream', version: 1, label: 'Stream', description: 'Partitions messages and tracks acknowledged delivery independently for each consumer group.', category: 'async', iconToken: 'radio-tower', color: '#f97316',
+    configSchema: streamConfigSchema, createDefaultConfig: () => ({ partitions: 12, producerCapacity: 1_000, consumerGroups: 1, consumersPerGroup: 4, batchSize: 100, acknowledgement: 'explicit', publishTimeMs: 2, consumeTimeMs: 10, jitterMs: 1, maxDepth: 1_000_000, errorRate: 0 }),
+    configFields: [
+      { kind: 'number', key: 'partitions', label: 'Partitions', min: 1, step: 1 },
+      { kind: 'number', key: 'producerCapacity', label: 'Producer capacity', min: 1, step: 1 },
+      { kind: 'number', key: 'consumerGroups', label: 'Consumer groups', min: 1, step: 1 },
+      { kind: 'number', key: 'consumersPerGroup', label: 'Consumers / group', min: 1, step: 1 },
+      { kind: 'number', key: 'batchSize', label: 'Batch size', min: 1, step: 1 },
+      { kind: 'select', key: 'acknowledgement', label: 'Acknowledgement', options: [{ value: 'auto', label: 'Auto' }, { value: 'explicit', label: 'Explicit' }] },
+      { kind: 'number', key: 'publishTimeMs', label: 'Publish time (ms)', min: 0.001, step: 0.1 },
+      { kind: 'number', key: 'consumeTimeMs', label: 'Consume time (ms)', min: 0.001, step: 0.1 },
+      { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 0.1 },
+      { kind: 'number', key: 'maxDepth', label: 'Max producer queue', min: 1, step: 1 },
+      { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
+    ], ports: [messageInput, messageOutput], capabilities: ['buffering', 'streaming', 'partitioning', 'consumer-groups', 'asynchronous-delivery'], emittedMetrics: ['publish-rate', 'consumer-rate', 'consumer-lag', 'partition-imbalance', 'utilization'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'stream-v1',
+    describeConfig: (config) => `${config.partitions} partitions · ${config.consumerGroups} groups · batch ${config.batchSize}`,
+  },
+  {
+    type: 'object-storage', version: 1, label: 'Object Storage', description: 'Models bounded object reads and writes with byte-dependent transfer time.', category: 'data', iconToken: 'archive', color: '#6366f1',
+    configSchema: objectStorageConfigSchema, createDefaultConfig: () => ({ maxConcurrentRequests: 1_000, defaultObjectSizeBytes: 1_048_576, readRatio: 0.8, baseLatencyMs: 20, jitterMs: 3, readThroughputMbps: 1_000, writeThroughputMbps: 500, errorRate: 0.001, maxQueueSize: 100_000 }),
+    configFields: [
+      { kind: 'number', key: 'maxConcurrentRequests', label: 'Concurrent requests', min: 1, step: 1 },
+      { kind: 'number', key: 'defaultObjectSizeBytes', label: 'Object size (bytes)', min: 1, step: 1_024 },
+      { kind: 'number', key: 'readRatio', label: 'Read ratio (0–1)', min: 0, max: 1, step: 0.05 },
+      { kind: 'number', key: 'baseLatencyMs', label: 'Base latency (ms)', min: 0.001, step: 1 },
+      { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
+      { kind: 'number', key: 'readThroughputMbps', label: 'Read throughput (Mbps)', min: 0.001, step: 10 },
+      { kind: 'number', key: 'writeThroughputMbps', label: 'Write throughput (Mbps)', min: 0.001, step: 10 },
+      { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
+      { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
+    ], ports: [requestInput, messageInput, requestOutput], capabilities: ['storage', 'object-storage', 'byte-throughput', 'asynchronous-delivery'], emittedMetrics: ['operations', 'bytes', 'latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'object-storage-v1',
+    describeConfig: (config) => `${config.maxConcurrentRequests} concurrent · ${config.readThroughputMbps}/${config.writeThroughputMbps} Mbps read/write`,
+  },
+  {
     type: 'database', version: 1, label: 'Database', description: 'A bounded connection pool and query resource.', category: 'data', iconToken: 'database', color: '#10b981',
-    configSchema: databaseConfigSchema, createDefaultConfig: () => ({ maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000 }),
+    configSchema: databaseV1ConfigSchema, createDefaultConfig: () => ({ maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000 }),
     configFields: [
       { kind: 'number', key: 'maxConnections', label: 'Max connections', min: 1, step: 1 },
       { kind: 'number', key: 'queryTimeMs', label: 'Query time (ms)', min: 0.1, step: 1 },
@@ -94,6 +151,25 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
     ], ports: [requestInput, requestOutput], capabilities: ['storage'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'database-v1',
     describeConfig: (config) => `${config.maxConnections} connections · ${config.queryTimeMs} ms`,
+  },
+  {
+    type: 'database', version: 2, label: 'Database', description: 'Routes keyed reads and writes across shards, primaries and delayed replicas.', category: 'data', iconToken: 'database', color: '#10b981',
+    configSchema: databaseConfigSchema, createDefaultConfig: () => ({ maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000, shardCount: 1, replicasPerShard: 0, readPreference: 'primary', replicationDelayMs: 100, writeRatio: 0.2, keySpaceSize: 1_000_000, hotKeyProbability: 0 }),
+    configFields: [
+      { kind: 'number', key: 'maxConnections', label: 'Connections / node', min: 1, step: 1 },
+      { kind: 'number', key: 'queryTimeMs', label: 'Query time (ms)', min: 0.1, step: 1 },
+      { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
+      { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
+      { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
+      { kind: 'number', key: 'shardCount', label: 'Shards', min: 1, step: 1 },
+      { kind: 'number', key: 'replicasPerShard', label: 'Replicas / shard', min: 0, step: 1 },
+      { kind: 'select', key: 'readPreference', label: 'Read preference', options: [{ value: 'primary', label: 'Primary' }, { value: 'replica-preferred', label: 'Replica preferred' }, { value: 'replica-only', label: 'Replica only' }] },
+      { kind: 'number', key: 'replicationDelayMs', label: 'Replication delay (ms)', min: 0, step: 10 },
+      { kind: 'number', key: 'writeRatio', label: 'Write ratio (0–1)', min: 0, max: 1, step: 0.05 },
+      { kind: 'number', key: 'keySpaceSize', label: 'Key space', min: 1, step: 1 },
+      { kind: 'number', key: 'hotKeyProbability', label: 'Hot-key probability (0–1)', min: 0, max: 1, step: 0.05 },
+    ], ports: [requestInput, requestOutput], capabilities: ['storage', 'sharding', 'replication', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'requests-per-shard', 'hot-shard-ratio', 'replica-lag'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'database-v2',
+    describeConfig: (config) => `${config.shardCount} shards · ${config.replicasPerShard} replicas / shard · ${config.readPreference}`,
   },
 ] as const satisfies readonly ComponentManifest[]
 
@@ -146,13 +222,16 @@ export const builtInPolicyManifests = [
 
 export const policyRegistry = new PolicyRegistry(builtInPolicyManifests)
 
-export const builtInComponentTypes = builtInComponentManifests.map((manifest) => manifest.type) as ComponentType[]
+export const builtInComponentTypes = componentRegistry.list().map((manifest) => manifest.type) as ComponentType[]
 
 export const createRegisteredNode = (type: ComponentType, id: string, position: Position, workloadId = `${id}-workload`): BuiltInComponentNode => {
   const node = componentRegistry.createNode(type, id, position, workloadId)
   return node as BuiltInComponentNode
 }
 
-export const asLegacyNode = ({ componentVersion: _componentVersion, ...node }: BuiltInComponentNode, workloadId = `${node.id}-workload`): ComponentNode => node.type === 'traffic'
-  ? { ...node, type: 'traffic', config: { workloadId } }
-  : node as ComponentNode
+export const asLegacyNode = ({ componentVersion, ...node }: BuiltInComponentNode, workloadId = `${node.id}-workload`): ComponentNode => {
+  const versioned = componentVersion > 1 ? { ...node, componentVersion } : node
+  return node.type === 'traffic'
+    ? { ...versioned, type: 'traffic', config: { workloadId } }
+    : versioned as ComponentNode
+}

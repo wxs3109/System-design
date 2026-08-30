@@ -3,10 +3,10 @@
 import { useMemo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { componentRegistry, policyRegistry } from '@system-design/components'
-import { Activity, Database, GitFork, Globe2, Layers3, Server, type LucideIcon } from 'lucide-react'
+import { Activity, Archive, Database, GitFork, Globe2, HardDrive, Layers3, RadioTower, Server, type LucideIcon } from 'lucide-react'
 import { useWorkbenchStore, type WorkbenchNode } from '@/lib/store'
 
-export const componentIcons: Record<string, LucideIcon> = { globe: Globe2, activity: Activity, 'git-fork': GitFork, server: Server, layers: Layers3, database: Database }
+export const componentIcons: Record<string, LucideIcon> = { globe: Globe2, activity: Activity, 'git-fork': GitFork, server: Server, layers: Layers3, database: Database, 'hard-drive': HardDrive, 'radio-tower': RadioTower, archive: Archive }
 
 export function ComponentNode({ data, selected }: NodeProps<WorkbenchNode>) {
   const manifest = componentRegistry.get(data.type, data.componentVersion)

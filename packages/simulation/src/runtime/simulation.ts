@@ -3,6 +3,7 @@ import seedrandom from 'seedrandom'
 import type { ComponentNode, Fault, ReasonCode, RuntimeEvent, Scenario, Workload } from '@system-design/model'
 import type { CompiledConnection, CompiledScenario } from '../compiler/compiler'
 import { getNodeBehavior } from '../components/behavior'
+import { createComponentStateRuntime, type ComponentDomainEvent } from '../components/data-runtime'
 import { applyCapacityFault, applyLatencyFault, resolveActiveFault } from '../faults/resolver'
 import { round } from '../telemetry/math'
 import { RuntimeEventSink } from '../telemetry/event-sink'
@@ -45,9 +46,11 @@ export class SystemDesignSimulation extends Simulation {
       if (backpressure) this.deliveryGates.set(`edge:${edge.id}`, new BackpressureGate(backpressure.config))
     }
     for (const node of this.nodes.values()) {
+      const state = createComponentStateRuntime(node)
       this.runtimes.set(node.id, {
         node, resource: new SimQueue(`${node.id}:resource`, getNodeBehavior(node).capacity(node)), waiting: new SimQueue(`${node.id}:waiting`),
         admitted: 0, processed: 0, failed: 0, rejected: 0, maxWaiting: 0,
+        ...(state === undefined ? {} : { state }),
       })
       if (node.type === 'load-balancer') this.loadBalancers.set(node.id, { roundRobinIndex: 0, targets: new Map() })
       const rateLimit = policiesFor(compiled.policies, 'node', node.id, 'rate-limit')[0]
@@ -146,11 +149,16 @@ export class SystemDesignSimulation extends Simulation {
 
   captureNodeSnapshots() {
     for (const runtime of this.runtimes.values()) {
+      const stateSnapshot = runtime.state?.snapshot(this.timeNow)
+      for (const event of stateSnapshot?.events ?? []) {
+        this.eventSink.emit({ timestampMs: round(this.timeNow), nodeId: runtime.node.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: event.attributes }) })
+      }
       this.eventSink.emit({
         timestampMs: round(this.timeNow), nodeId: runtime.node.id, type: 'node-snapshot', status: 'ok',
         attributes: {
           queueLength: runtime.waiting.pop, capacity: runtime.resource.capacity ?? 0, unitsInUse: runtime.resource.unitsInUse,
           utilization: round(Math.min(1, runtime.resource.utilization)), averageQueueLength: round(runtime.waiting.averageLength), maxQueueLength: runtime.maxWaiting,
+          ...(stateSnapshot?.metrics ?? {}),
         },
       })
     }
@@ -265,6 +273,9 @@ class AttemptResult extends Entity<SystemDesignSimulation> {
         ...(call.callerRequest.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: call.callerRequest.incomingRoutingMode }),
         ...(call.callerRequest.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: call.callerRequest.dependencyStartedAtMs }),
         ...(call.callerRequest.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: call.callerRequest.loadBalancerNodeId }),
+        ...(call.callerRequest.resumeNodeId === undefined ? {} : { resumeNodeId: call.callerRequest.resumeNodeId }),
+        ...(call.callerRequest.resumeOutgoingPort === undefined ? {} : { resumeOutgoingPort: call.callerRequest.resumeOutgoingPort }),
+        ...(call.callerRequest.resumeRequestSpanId === undefined ? {} : { resumeRequestSpanId: call.callerRequest.resumeRequestSpanId }),
       }
       if (this.success) {
         simulation.activate(new RequestEntity({ ...withoutCurrentDependency, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId }, this.nodeId, this.completion.group, this.completion.countsAsRequest, undefined, undefined, true))
@@ -327,6 +338,9 @@ class ReliabilityAttemptEntity extends Entity<SystemDesignSimulation> {
 class RequestEntity extends Entity<SystemDesignSimulation> {
   private cancelledByTimeout = false
   private heldResource: SimQueue | null = null
+  private domainStarted = false
+  private domainCompleted = false
+  private activeNodeId?: string
 
   constructor(
     private request: RequestState, private nodeId: string, private readonly group?: RequestGroup, private readonly countsAsRequest = true,
@@ -335,6 +349,8 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
 
   cancelForTimeout() {
     this.cancelledByTimeout = true
+    const runtime = this.simulation.runtimes.get(this.nodeId)
+    if (runtime) this.completeDomain(runtime, false)
     if (this.heldResource?.items.has(this)) {
       this.leaveQueue(this.heldResource)
       this.heldResource = null
@@ -375,6 +391,20 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     this.request = request
   }
 
+  private completeCallerDependency(success: boolean) {
+    const callerNodeId = this.request.resumeNodeId
+    if (!callerNodeId) return
+    const runtime = this.simulation.runtimes.get(callerNodeId)
+    if (runtime?.state?.dependencyComplete) this.emitDomainEvents(runtime.node, runtime.state.dependencyComplete({ ...this.request, spanId: this.request.resumeRequestSpanId ?? this.request.spanId, ...(this.request.resumeOutgoingPort === undefined ? {} : { outgoingPort: this.request.resumeOutgoingPort }) }, success, this.simulation.timeNow))
+    const { resumeNodeId: _resumeNodeId, resumeOutgoingPort: _resumeOutgoingPort, resumeRequestSpanId: _resumeRequestSpanId, ...request } = this.request
+    this.request = request
+  }
+
+  private completeLocalDependency(success: boolean, runtime: RuntimeNode) {
+    if (!runtime.state?.dependencyComplete) return
+    this.emitDomainEvents(runtime.node, runtime.state.dependencyComplete(this.request, success, this.simulation.timeNow))
+  }
+
   private acknowledgeDeliveries(node: ComponentNode) {
     const keys = this.request.deliveryGateKeys
     if (!keys) return
@@ -389,10 +419,36 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     this.request = request
   }
 
+  private emitDomainEvents(node: ComponentNode, events: ComponentDomainEvent[]) {
+    for (const event of events) {
+      this.simulation.eventSink.emit({
+        timestampMs: round(this.simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId,
+        ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id,
+        ...(this.request.incomingEdgeId === undefined ? {} : { edgeId: this.request.incomingEdgeId }),
+        type: event.type, status: event.status, bytes: event.bytes ?? this.request.bytes, ...(event.attributes === undefined ? {} : { attributes: event.attributes }),
+      })
+    }
+  }
+
+  private beginDomain(runtime: RuntimeNode) {
+    if (this.domainStarted || !runtime.state) return
+    const decision = runtime.state.begin(this.request, this.simulation.timeNow, this.simulation.random)
+    if (decision.patch) this.request = { ...this.request, ...decision.patch }
+    this.emitDomainEvents(runtime.node, decision.events ?? [])
+    this.domainStarted = true
+  }
+
+  private completeDomain(runtime: RuntimeNode, success: boolean) {
+    if (!this.domainStarted || this.domainCompleted || !runtime.state) return
+    this.emitDomainEvents(runtime.node, runtime.state.complete(this.request, success, this.simulation.timeNow))
+    this.domainCompleted = true
+  }
+
   private finishBranch(success: boolean, node: ComponentNode, reason: ReasonCode = 'none', terminalAttributes: Record<string, string | number | boolean> = {}) {
     const simulation = this.simulation
     if (this.settleAttempt(success, node, reason)) return
     if (this.cancelledByTimeout) return
+    this.completeCallerDependency(success)
     this.acknowledgeDeliveries(node)
     this.returnDependency(success, node, reason)
     if (!this.group) {
@@ -420,6 +476,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { durationMs, reason, attributes: { terminal: false, ...(this.request.branchPath === undefined ? {} : { branchPath: this.request.branchPath }) } })
     if (this.settleAttempt(false, node, reason)) return
     if (this.cancelledByTimeout) return
+    this.completeCallerDependency(false)
     this.acknowledgeDeliveries(node)
     this.returnDependency(false, node, reason)
     this.clearDependency()
@@ -436,6 +493,15 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         return
       }
       const node = runtime.node
+      if (this.activeNodeId !== node.id) {
+        if (!this.resumeAfterProcessing && !this.request.resumeNodeId) {
+          const { outgoingPort: _outgoingPort, ...request } = this.request
+          this.request = request
+        }
+        this.activeNodeId = node.id
+        this.domainStarted = false
+        this.domainCompleted = false
+      }
       if (this.terminalFailureReason) {
         this.finishBranch(false, node, this.terminalFailureReason)
         return
@@ -454,15 +520,15 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         if (rateLimit) {
           const accepted = rateLimit.admit(simulation.timeNow)
           simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: accepted ? 'rate-limit-accepted' : 'rate-limit-rejected', status: accepted ? 'ok' : 'rejected', reason: accepted ? 'none' : 'rate_limited', attributes: { tokensRemaining: rateLimit.available } })
-          if (!accepted) { runtime.failed += 1; runtime.rejected += 1; simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'rate_limited', attributes: { terminal: false } }); this.finishBranch(false, node, 'rate_limited'); return }
+          if (!accepted) { runtime.failed += 1; runtime.rejected += 1; this.completeDomain(runtime, false); simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'rate_limited', attributes: { terminal: false } }); this.finishBranch(false, node, 'rate_limited'); return }
         }
-        if (simulation.activeFault(node.id, 'node-down')) { runtime.failed += 1; simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { reason: 'node_down', attributes: { terminal: false } }); this.finishBranch(false, node, 'node_down'); return }
+        if (simulation.activeFault(node.id, 'node-down')) { runtime.failed += 1; this.completeDomain(runtime, false); simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { reason: 'node_down', attributes: { terminal: false } }); this.finishBranch(false, node, 'node_down'); return }
         const effectiveCapacity = simulation.effectiveCapacity(node)
         runtime.resource.capacity = effectiveCapacity
         const inUse = runtime.resource.unitsInUse
         const waitingCount = runtime.waiting.pop
         if (inUse >= effectiveCapacity && waitingCount >= getNodeBehavior(node).maximumWaiting(node)) {
-          runtime.failed += 1; runtime.rejected += 1; simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'queue_full', attributes: { terminal: false } }); this.finishBranch(false, node, 'queue_full'); return
+          runtime.failed += 1; runtime.rejected += 1; this.completeDomain(runtime, false); simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'queue_full', attributes: { terminal: false } }); this.finishBranch(false, node, 'queue_full'); return
         }
         if (inUse >= effectiveCapacity) {
           this.enterQueueImmediately(runtime.waiting)
@@ -475,6 +541,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         this.heldResource = runtime.resource
         if (runtime.waiting.items.has(this)) this.leaveQueue(runtime.waiting)
         runtime.admitted += 1
+        this.beginDomain(runtime)
         this.request = { ...this.request, startedAtMs: simulation.timeNow }
         simulation.emitRequestEvent(this.request, node, 'request-started', 'pending', { queueDurationMs: this.request.queuedAtMs === undefined ? 0 : round(simulation.timeNow - this.request.queuedAtMs) })
         await this.delay(simulation.serviceTime(node, this.request), undefined, this.timeout)
@@ -485,9 +552,11 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         if (simulation.activeFault(node.id, 'node-down') || simulation.random() < getNodeBehavior(node).intrinsicErrorRate(node)) {
           const nodeDown = Boolean(simulation.activeFault(node.id, 'node-down'))
           runtime.failed += 1
+          this.completeDomain(runtime, false)
           this.failAfterService(node, nodeDown ? 'node_down' : node.type === 'network' ? 'packet_loss' : 'intrinsic_error')
           return
         }
+        this.completeDomain(runtime, true)
         simulation.emitRequestEvent(this.request, node, 'request-completed', 'ok', { durationMs: round(simulation.timeNow - (this.request.startedAtMs ?? simulation.timeNow)), queueDurationMs: this.request.queuedAtMs === undefined ? 0 : round((this.request.startedAtMs ?? simulation.timeNow) - this.request.queuedAtMs) })
         if (this.settleAttempt(true, node, 'none')) return
         this.acknowledgeDeliveries(node)
@@ -496,8 +565,9 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
       }
       } else this.resumeAfterProcessing = false
 
-      const edges = simulation.outgoing.get(node.id) ?? []
+      const edges = (simulation.outgoing.get(node.id) ?? []).filter((edge) => this.request.outgoingPort === undefined || edge.sourcePort === this.request.outgoingPort)
       if (edges.length === 0) {
+        this.completeLocalDependency(true, runtime)
         this.finishBranch(true, node)
         return
       }
@@ -525,13 +595,14 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
       }
       const synchronousEdges = edges.filter((edge) => edge.routingMode !== 'async-publish')
       if (synchronousEdges.length === 0) {
+        this.completeLocalDependency(true, runtime)
         this.finishBranch(true, node, 'none', this.countsAsRequest ? { asyncAccepted: true } : {})
         return
       }
       const mode = synchronousEdges[0]?.routingMode ?? 'weighted-one'
       if (mode === 'fan-out' && synchronousEdges.length > 1) {
         const group: RequestGroup = { remaining: synchronousEdges.length, failed: false, rootRequest: this.request }
-        const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, ...request } = this.request
+        const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, outgoingPort: _outgoingPort, ...request } = this.request
         for (const [index, branchEdge] of synchronousEdges.entries()) {
           const branchPath = `${this.request.branchPath ?? 'root'}.${index}`
           const branchSpanId = `${this.request.traceId}:${this.request.hops + 1}:${branchPath}`
@@ -540,6 +611,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
             ...request, hops: request.hops + 1, parentSpanId: request.spanId, spanId: branchSpanId, incomingEdgeId: branchEdge.id,
             incomingRoutingMode: mode, dependencyStartedAtMs: simulation.timeNow, branchPath,
             ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}),
+            ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: this.request.outgoingPort, resumeRequestSpanId: this.request.spanId } : {}),
           }
           const timeout = policiesFor(simulation.compiled.policies, 'edge', branchEdge.id, 'timeout')[0]
           const retry = policiesFor(simulation.compiled.policies, 'edge', branchEdge.id, 'retry')[0]
@@ -553,6 +625,9 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
                 ...(request.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: request.incomingRoutingMode }),
                 ...(request.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: request.dependencyStartedAtMs }),
                 ...(request.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: request.loadBalancerNodeId }),
+                ...(request.resumeNodeId === undefined ? {} : { resumeNodeId: request.resumeNodeId }),
+                ...(request.resumeOutgoingPort === undefined ? {} : { resumeOutgoingPort: request.resumeOutgoingPort }),
+                ...(request.resumeRequestSpanId === undefined ? {} : { resumeRequestSpanId: request.resumeRequestSpanId }),
               }, edgeId: branchEdge.id, attempt: 1, maxAttempts: retry?.config.maxAttempts ?? 1,
               ...(retry === undefined ? {} : { retry: retry.config }), ...(timeout === undefined ? {} : { timeout: timeout.config }),
             }
@@ -570,7 +645,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
       }
       simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: edge.id, type: 'dependency-started', status: 'pending', bytes: this.request.bytes })
       const parentSpanId = this.request.spanId
-      const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, ...request } = this.request
+      const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, outgoingPort: selectedOutgoingPort, ...request } = this.request
       const timeout = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'timeout')[0]
       const retry = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'retry')[0]
       const circuit = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'circuit-breaker')[0]
@@ -583,17 +658,20 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
             ...(request.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: request.incomingRoutingMode }),
             ...(request.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: request.dependencyStartedAtMs }),
             ...(request.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: request.loadBalancerNodeId }),
+            ...(request.resumeNodeId === undefined ? {} : { resumeNodeId: request.resumeNodeId }),
+            ...(request.resumeOutgoingPort === undefined ? {} : { resumeOutgoingPort: request.resumeOutgoingPort }),
+            ...(request.resumeRequestSpanId === undefined ? {} : { resumeRequestSpanId: request.resumeRequestSpanId }),
           }, edgeId: edge.id, attempt: 1, maxAttempts: retry?.config.maxAttempts ?? 1,
           ...(retry === undefined ? {} : { retry: retry.config }), ...(timeout === undefined ? {} : { timeout: timeout.config }),
         }
         simulation.activate(new ReliabilityAttemptEntity(
-          { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, reliabilityCall: call, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}) },
+          { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, reliabilityCall: call, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}), ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: selectedOutgoingPort, resumeRequestSpanId: parentSpanId } : {}) },
           edge.target, { countsAsRequest: this.countsAsRequest, ...(this.group === undefined ? {} : { group: this.group }) },
         ))
         return
       }
       this.nodeId = edge.target
-      this.request = { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}) }
+      this.request = { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}), ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: selectedOutgoingPort, resumeRequestSpanId: parentSpanId } : {}) }
     }
   }
 }

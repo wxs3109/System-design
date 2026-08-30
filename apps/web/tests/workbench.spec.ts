@@ -38,6 +38,19 @@ test('runs the direct and async examples through the worker', async ({ page }) =
   await expect(page.getByRole('table').getByText('Queue', { exact: true })).toBeVisible()
 })
 
+test('runs the reusable data-platform topology and exposes domain metrics', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Data platform/ }).click()
+  await expect(page.getByText('7 components')).toBeVisible()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.domain-metrics').filter({ hasText: 'hit' })).toBeVisible()
+  await expect(page.locator('.domain-metrics').filter({ hasText: 'hot shard' })).toBeVisible()
+  await expect(page.locator('.domain-metrics').filter({ hasText: /^lag / })).toBeVisible()
+  await expect(page.locator('.domain-metrics').filter({ hasText: 'bytes/s' })).toBeVisible()
+})
+
 test('migrates a v1 import and exports ProjectFile v2', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacyScenario)) })
@@ -103,4 +116,50 @@ test('attaches and configures manifest-driven reliability policies', async ({ pa
     expect.objectContaining({ type: 'retry', target: { kind: 'edge', id: 'edge-direct-2' }, order: 0 }),
   ]))
   expect(project.topology.policies).toHaveLength(3)
+})
+
+test('builds and configures Phase 1 data components from the shared palette', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByRole('button', { name: /Cache Stores key-aware entries/ }).click()
+  await expect(page.getByText('1 components')).toBeVisible()
+  const cache = page.locator('.react-flow__node').filter({ hasText: 'Cache' })
+  await expect(cache).toBeVisible()
+  await cache.dispatchEvent('click')
+  await page.getByLabel('Capacity (entries)').fill('42')
+  await page.getByLabel('Eviction policy').selectOption('fifo')
+  await expect(cache).toContainText('42 entries')
+
+  await page.getByRole('button', { name: /Stream Partitions messages/ }).click()
+  const streamNode = page.locator('.react-flow__node').filter({ hasText: 'Stream' })
+  await streamNode.dispatchEvent('click')
+  await page.getByLabel('Partitions').fill('8')
+  await expect(streamNode).toContainText('8 partitions')
+
+  await page.getByRole('button', { name: /Object Storage Models bounded/ }).click()
+  const objectStorage = page.locator('.react-flow__node').filter({ hasText: 'Object Storage' })
+  await objectStorage.dispatchEvent('click')
+  await page.getByLabel('Read ratio (0–1)').fill('0.6')
+
+  await page.getByRole('button', { name: /Database Routes keyed reads/ }).click()
+  const database = page.locator('.react-flow__node').filter({ hasText: 'Database' })
+  await database.dispatchEvent('click')
+  await page.getByLabel('Shards').fill('4')
+  await page.getByLabel('Replicas / shard').fill('2')
+  await page.getByLabel('Read preference').selectOption('replica-preferred')
+  await expect(database).toContainText('4 shards')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const download = await downloadPromise
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.topology.nodes).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: 'cache', componentVersion: 1, config: expect.objectContaining({ capacityEntries: 42, evictionPolicy: 'fifo' }) }),
+    expect.objectContaining({ type: 'stream', componentVersion: 1, config: expect.objectContaining({ partitions: 8 }) }),
+    expect.objectContaining({ type: 'object-storage', componentVersion: 1, config: expect.objectContaining({ readRatio: 0.6 }) }),
+    expect.objectContaining({ type: 'database', componentVersion: 2, config: expect.objectContaining({ shardCount: 4, replicasPerShard: 2, readPreference: 'replica-preferred' }) }),
+  ]))
 })

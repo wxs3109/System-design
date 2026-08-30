@@ -227,9 +227,13 @@ export const projectToScenario = (input: ProjectFileV2, experimentId = input.act
     id: project.id,
     name: project.name,
     seed: experiment.seed,
-    nodes: project.topology.nodes.map(({ componentVersion: _componentVersion, ...node }) => node.type === 'traffic'
-      ? { ...node, type: 'traffic', config: { workloadId: experiment.workloads.find((workload) => workload.sourceNodeId === node.id)?.id ?? `${node.id}-workload` } }
-      : node),
+    nodes: project.topology.nodes.map((projectNode) => {
+      const { componentVersion, ...node } = projectNode
+      const versioned = componentVersion > 1 ? { ...node, componentVersion } : node
+      return node.type === 'traffic'
+        ? { ...versioned, type: 'traffic' as const, config: { workloadId: experiment.workloads.find((workload) => workload.sourceNodeId === node.id)?.id ?? `${node.id}-workload` } }
+        : versioned
+    }),
     edges: project.topology.edges.map(({ sourceSemantic: _sourceSemantic, targetSemantic: _targetSemantic, routingMode: _routingMode, ...edge }) => ({ ...edge, sourcePort: 'out' as const, targetPort: 'in' as const })),
     workloads: experiment.workloads,
     faults: experiment.faults,

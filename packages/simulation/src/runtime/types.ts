@@ -2,6 +2,7 @@ import type { Queue as SimQueue } from 'simscript'
 import type { ComponentNode, ReasonCode } from '@system-design/model'
 import type { RoutingMode } from '@system-design/model'
 import type { ReliabilityAttempt, ReliabilityCall } from '../policies/reliability'
+import type { ComponentStateRuntime } from '../components/data-runtime'
 
 export interface RequestState {
   id: number
@@ -21,6 +22,12 @@ export interface RequestState {
   branchPath?: string
   queuedAtMs?: number
   startedAtMs?: number
+  key?: string
+  operation?: 'read' | 'write'
+  outgoingPort?: string
+  resumeNodeId?: string
+  resumeOutgoingPort?: string
+  resumeRequestSpanId?: string
 }
 
 export interface RequestGroup {
@@ -44,6 +51,7 @@ export interface RuntimeNode {
   failed: number
   rejected: number
   maxWaiting: number
+  state?: ComponentStateRuntime
 }
 
 export interface LoadBalancerTargetState {

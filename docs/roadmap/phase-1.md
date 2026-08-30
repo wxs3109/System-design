@@ -1,6 +1,6 @@
 # Phase 1 Implementation Plan
 
-> Status: in progress — P1.0 through P1.2 complete
+> Status: in progress — P1.0 through P1.3 complete
 >
 > Objective: evolve the Phase 0 workbench from “a topology can run” into a reusable system-behavior and failure laboratory.
 
@@ -387,11 +387,13 @@ Exit criteria:
 
 Deliverables:
 
-- [ ] Cache with key distribution, TTL, capacity and eviction behavior;
-- [ ] Stream partitions, consumer groups and lag;
-- [ ] Object Storage reads and writes with byte throughput;
-- [ ] database shards, replicas, read routing and replication delay;
-- [ ] generic configuration and result views for the new components.
+- [x] Cache with key distribution, TTL, capacity and eviction behavior;
+- [x] Stream partitions, consumer groups and lag;
+- [x] Object Storage reads and writes with byte throughput;
+- [x] database shards, replicas, read routing and replication delay;
+- [x] generic configuration and result views for the new components.
+
+Status: complete. Verified by virtual-time state tests, deterministic executable component scenarios, cache fallback and failed-fill tests, stream lag and backpressure tests, object byte-event assertions, database hot-shard and replica-freshness assertions, production build, and browser end-to-end configuration, export and simulation tests.
 
 Exit criteria:
 

@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { Fault, PolicyAttachment, PortSemantic, Position, ProjectComponentNode } from '@system-design/model'
+import type { Fault, PolicyAttachment, PortSemantic, Position, ProjectComponentNode, ProjectFileV2 } from '@system-design/model'
 
 export type PortDirection = 'input' | 'output'
 
@@ -107,6 +107,21 @@ export class ComponentRegistry {
       componentVersion: manifest.version,
       position,
       config: manifest.configSchema.parse(manifest.createDefaultConfig({ nodeId: id, workloadId })),
+    }
+  }
+
+  validateNode(node: ProjectComponentNode): ProjectComponentNode {
+    const manifest = this.get(node.type, node.componentVersion)
+    return { ...node, config: manifest.configSchema.parse(node.config) }
+  }
+
+  validateProject(project: ProjectFileV2): ProjectFileV2 {
+    return {
+      ...project,
+      topology: {
+        ...project.topology,
+        nodes: project.topology.nodes.map((node) => this.validateNode(node)),
+      },
     }
   }
 

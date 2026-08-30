@@ -40,3 +40,39 @@ export const createAsyncExample = (): ProjectFileV2 => {
   experiment.workloads = [{ id: 'workload-async', name: 'Ingest events', sourceNodeId: 'traffic-async', requestsPerSecond: 300, startAtSeconds: 0, durationSeconds: 30, pattern: 'poisson', requestBytes: 2_048 }]
   return project
 }
+
+export const createDataPlatformExample = (): ProjectFileV2 => {
+  const project = createEmptyProject('data-platform')
+  project.name = 'Data platform'
+  project.topology.nodes = [
+    createRegisteredNode('traffic', 'traffic-data', { x: 30, y: 150 }, 'workload-data'),
+    createRegisteredNode('cache', 'cache-data', { x: 280, y: 150 }),
+    createRegisteredNode('service', 'hit-data', { x: 540, y: 40 }),
+    createRegisteredNode('database', 'database-data', { x: 540, y: 240 }),
+    createRegisteredNode('service', 'producer-data', { x: 800, y: 150 }),
+    createRegisteredNode('stream', 'stream-data', { x: 1_060, y: 150 }),
+    createRegisteredNode('object-storage', 'objects-data', { x: 1_320, y: 150 }),
+  ]
+  project.topology.nodes[2]!.name = 'Cached response'
+  const cache = project.topology.nodes[1]!
+  cache.config = { ...cache.config, keySpaceSize: 10, capacityEntries: 10, ttlMs: 60_000, jitterMs: 0 }
+  const database = project.topology.nodes[3]!
+  database.config = { ...database.config, shardCount: 4, replicasPerShard: 2, readPreference: 'replica-preferred', writeRatio: 0.2, hotKeyProbability: 0.6, errorRate: 0, jitterMs: 0 }
+  const stream = project.topology.nodes[5]!
+  stream.config = { ...stream.config, partitions: 4, consumersPerGroup: 1, batchSize: 1, consumeTimeMs: 100, jitterMs: 0 }
+  const objects = project.topology.nodes[6]!
+  objects.config = { ...objects.config, defaultObjectSizeBytes: 8_192, errorRate: 0, jitterMs: 0 }
+  project.topology.edges = [
+    connection('edge-data-entry', 'traffic-data', 'cache-data'),
+    { ...connection('edge-data-hit', 'cache-data', 'hit-data'), sourcePort: 'hit', sourceSemantic: 'hit' },
+    { ...connection('edge-data-miss', 'cache-data', 'database-data'), sourcePort: 'miss', sourceSemantic: 'miss' },
+    connection('edge-data-db', 'database-data', 'producer-data'),
+    { ...connection('edge-data-stream', 'producer-data', 'stream-data'), sourcePort: 'publish', targetPort: 'consume', sourceSemantic: 'publish', targetSemantic: 'consume', routingMode: 'async-publish' },
+    { ...connection('edge-data-objects', 'stream-data', 'objects-data'), sourcePort: 'publish', targetPort: 'consume', sourceSemantic: 'publish', targetSemantic: 'consume', routingMode: 'async-publish' },
+  ]
+  const experiment = project.experiments[0]!
+  experiment.seed = 'data-platform'
+  experiment.simulation.durationSeconds = 10
+  experiment.workloads = [{ id: 'workload-data', name: 'Keyed requests', sourceNodeId: 'traffic-data', requestsPerSecond: 50, startAtSeconds: 0, durationSeconds: 10, pattern: 'poisson', requestBytes: 8_192 }]
+  return project
+}

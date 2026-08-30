@@ -41,6 +41,18 @@ describe('ProjectFile v2', () => {
     expect(project.topology.edges[0]).toMatchObject({ routingMode: 'weighted-one', sourceSemantic: 'request', targetSemantic: 'request' })
   })
 
+  it('preserves explicit component behavior versions in the executable scenario', () => {
+    const project = migrateScenarioV1ToProjectV2(scenarioV1())
+    const database = {
+      id: 'database', name: 'Database', type: 'database', componentVersion: 2, position: { x: 10, y: 20 },
+      config: { maxConnections: 100, queryTimeMs: 12, jitterMs: 0, errorRate: 0, maxQueueSize: 100, shardCount: 4, replicasPerShard: 2, readPreference: 'replica-preferred', replicationDelayMs: 100, writeRatio: 0.2, keySpaceSize: 1_000, hotKeyProbability: 0 },
+    }
+    project.topology.nodes.push(database)
+    const scenario = projectToScenario(project)
+    expect(scenario.nodes.find((node) => node.id === 'database')).toMatchObject({ componentVersion: 2, config: { shardCount: 4 } })
+    expect(parseProjectFile(project).topology.nodes.find((node) => node.id === 'database')).toEqual(database)
+  })
+
   it.each(['weighted-one', 'fan-out', 'async-publish'] as const)('round-trips %s routing', (routingMode) => {
     const project = migrateScenarioV1ToProjectV2(scenarioV1())
     project.topology.edges[0]!.routingMode = routingMode

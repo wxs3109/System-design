@@ -1,6 +1,6 @@
 import type { ComponentNode, ComponentType } from '@system-design/model'
 
-export interface RequestPayload { bytes: number }
+export interface RequestPayload { bytes: number; operation?: 'read' | 'write' }
 export interface NodeBehavior<TNode extends ComponentNode = ComponentNode> {
   type: TNode['type']
   capacity(node: TNode): number
@@ -33,8 +33,25 @@ const behaviors = [
     type: 'queue', capacity: (node) => node.config.consumers, maximumWaiting: (node) => node.config.maxDepth,
     baseServiceTimeMs: (node) => node.config.deliveryTimeMs, jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
   }),
+  defineBehavior<Extract<ComponentNode, { type: 'cache' }>>({
+    type: 'cache', capacity: (node) => node.config.maxConcurrentRequests, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node) => node.config.operationTimeMs, jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
+  }),
+  defineBehavior<Extract<ComponentNode, { type: 'stream' }>>({
+    type: 'stream', capacity: (node) => node.config.producerCapacity, maximumWaiting: (node) => node.config.maxDepth,
+    baseServiceTimeMs: (node) => node.config.publishTimeMs + (node.config.acknowledgement === 'explicit' ? node.config.consumeTimeMs / node.config.consumersPerGroup : 0),
+    jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
+  }),
+  defineBehavior<Extract<ComponentNode, { type: 'object-storage' }>>({
+    type: 'object-storage', capacity: (node) => node.config.maxConcurrentRequests, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node, request) => {
+      const throughput = request.operation === 'write' ? node.config.writeThroughputMbps : node.config.readThroughputMbps
+      return node.config.baseLatencyMs + (node.config.defaultObjectSizeBytes * 8) / (throughput * 1_000)
+    },
+    jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
+  }),
   defineBehavior<Extract<ComponentNode, { type: 'database' }>>({
-    type: 'database', capacity: (node) => node.config.maxConnections, maximumWaiting: (node) => node.config.maxQueueSize,
+    type: 'database', capacity: (node) => node.config.maxConnections * (node.componentVersion === 2 ? node.config.shardCount * (node.config.readPreference === 'primary' ? 1 : 1 + node.config.replicasPerShard) : 1), maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node) => node.config.queryTimeMs, jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
   }),
 ] as const

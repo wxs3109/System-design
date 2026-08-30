@@ -21,6 +21,7 @@ export interface NodeMetrics {
   utilization: number
   averageQueueLength: number
   maxQueueLength: number
+  details: Record<string, string | number | boolean>
 }
 
 export interface TimeSeriesPoint {

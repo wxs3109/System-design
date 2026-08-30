@@ -9,7 +9,7 @@ import { validateScenarioForSimulation } from '@system-design/simulation'
 import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Square, Trash2, Upload } from 'lucide-react'
 import { ComponentNode, componentIcons } from './component-node'
 import { MetricChart } from './metric-chart'
-import { createAsyncExample, createDirectExample } from '@/lib/examples'
+import { createAsyncExample, createDataPlatformExample, createDirectExample } from '@/lib/examples'
 import { projectToEdges, projectToNodes, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 
 const nodeTypes = { component: ComponentNode }
@@ -19,7 +19,7 @@ function Field({ label, value, min = 0, max, step = 1, onChange }: { label: stri
   return (
     <label className="field">
       <span>{label}</span>
-      <input type="number" min={min} {...(max === undefined ? {} : { max })} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <input type="number" min={min} {...(max === undefined ? {} : { max })} step={step} value={value} onChange={(event) => { const next = event.currentTarget.valueAsNumber; if (Number.isFinite(next)) onChange(next) }} />
     </label>
   )
 }
@@ -154,10 +154,25 @@ function ResultsPanel({ result, progress, running }: { result: SimulationResult 
         <div><span>Completed</span><strong>{result.summary.completedRequests.toLocaleString()}</strong></div>
       </div>
       <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run</span></div><MetricChart points={result.timeSeries} /></div>
-      <div className="node-table-wrap"><table className="node-table"><thead><tr><th>Component</th><th>Util.</th><th>Avg queue</th><th>Max queue</th></tr></thead><tbody>{result.nodes.map((node) => <tr key={node.nodeId}><td><strong>{node.nodeName}</strong><span>{node.nodeType}</span></td><td>{(node.utilization * 100).toFixed(1)}%</td><td>{node.averageQueueLength.toFixed(1)}</td><td>{node.maxQueueLength}</td></tr>)}</tbody></table></div>
+      <div className="node-table-wrap"><table className="node-table"><thead><tr><th>Component</th><th>Util.</th><th>Avg queue</th><th>Max queue</th><th>Domain metrics</th></tr></thead><tbody>{result.nodes.map((node) => <tr key={node.nodeId}><td><strong>{node.nodeName}</strong><span>{node.nodeType}</span></td><td>{(node.utilization * 100).toFixed(1)}%</td><td>{node.averageQueueLength.toFixed(1)}</td><td>{node.maxQueueLength}</td><td><span className="domain-metrics">{formatDomainMetrics(node.details)}</span></td></tr>)}</tbody></table></div>
       {result.warnings.length ? <div className="warnings"><CircleAlert size={15} /> {result.warnings.join(' ')}</div> : null}
     </>
   )
+}
+
+const domainMetricLabels: Record<string, string> = {
+  cacheHitRate: 'hit', cacheOccupancy: 'occupancy', consumerLag: 'lag', partitionImbalance: 'partition skew',
+  byteThroughputPerSecond: 'bytes/s', hottestShardShare: 'hot shard', maxReplicaLagMs: 'replica lag',
+}
+
+function formatDomainMetrics(details: SimulationResult['nodes'][number]['details']) {
+  const preferred = Object.entries(details).filter(([key]) => key in domainMetricLabels).slice(0, 3)
+  if (preferred.length === 0) return '—'
+  return preferred.map(([key, value]) => {
+    const formatted = typeof value === 'number' && ['cacheHitRate', 'cacheOccupancy', 'partitionImbalance', 'hottestShardShare'].includes(key)
+      ? `${(value * 100).toFixed(1)}%` : typeof value === 'number' ? value.toLocaleString() : String(value)
+    return `${domainMetricLabels[key]} ${formatted}`
+  }).join(' · ')
 }
 
 function WorkbenchInner() {
@@ -219,7 +234,7 @@ function WorkbenchInner() {
 
   const importProject = async (file: File | undefined) => {
     if (!file) return
-    try { setProject(parseProjectFile(JSON.parse(await file.text()))) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid project file.') }
+    try { setProject(componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())))) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid project file.') }
   }
 
   return (
@@ -253,7 +268,7 @@ function WorkbenchInner() {
           <Controls position="bottom-left" showInteractive={false} />
           <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
           {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
-          <Panel position="top-left"><div className="canvas-toolbar"><button onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button></div> : null}</div></div></Panel>
+          <Panel position="top-left"><div className="canvas-toolbar"><button onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
         </ReactFlow>
         {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
       </section>

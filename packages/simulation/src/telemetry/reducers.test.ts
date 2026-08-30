@@ -42,4 +42,13 @@ describe('event reducers', () => {
     expect(result.nodes.find((node) => node.nodeId === 'service')?.failedRequests).toBe(failures.size)
     expect(failures.size).toBeGreaterThan(0)
   })
+
+  it('derives generic domain details only from node snapshot events', () => {
+    const nodes = [createNode('cache', 'cache', { x: 0, y: 0 })]
+    const events = [{
+      runId: 'run', timestampMs: 1, sequence: 0, attempt: 1, nodeId: 'cache', type: 'node-snapshot' as const, status: 'ok' as const, reason: 'none' as const,
+      attributes: { utilization: 0.5, averageQueueLength: 1, maxQueueLength: 2, cacheHitRate: 0.75, cacheOccupancy: 0.25 },
+    }]
+    expect(reduceNodeMetrics(events, nodes)[0]).toMatchObject({ details: { cacheHitRate: 0.75, cacheOccupancy: 0.25 } })
+  })
 })

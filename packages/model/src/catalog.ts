@@ -31,8 +31,20 @@ export const componentCatalog = {
     type: 'queue', label: 'Queue', description: 'Buffers work and delivers it through consumers.',
     category: 'async', color: '#f59e0b', acceptsInput: true, emitsOutput: true,
   },
+  cache: {
+    type: 'cache', label: 'Cache', description: 'Stores key-aware entries with bounded capacity, TTL and deterministic eviction.',
+    category: 'data', color: '#14b8a6', acceptsInput: true, emitsOutput: true,
+  },
+  stream: {
+    type: 'stream', label: 'Stream', description: 'Partitions published messages and tracks consumer-group delivery lag.',
+    category: 'async', color: '#f97316', acceptsInput: true, emitsOutput: true,
+  },
+  'object-storage': {
+    type: 'object-storage', label: 'Object Storage', description: 'Models concurrent object reads, writes and byte throughput.',
+    category: 'data', color: '#6366f1', acceptsInput: true, emitsOutput: true,
+  },
   database: {
-    type: 'database', label: 'Database', description: 'A bounded connection pool and query resource.',
+    type: 'database', label: 'Database', description: 'Routes keyed reads and writes across shards, primaries and replicas.',
     category: 'data', color: '#10b981', acceptsInput: true, emitsOutput: true,
   },
 } satisfies Record<ComponentType, ComponentDefinition>
@@ -45,7 +57,10 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
     case 'load-balancer': return { id, name, position, type, config: { algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 } }
     case 'service': return { id, name, position, type, config: { replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 } }
     case 'queue': return { id, name, position, type, config: { consumers: 4, deliveryTimeMs: 10, jitterMs: 2, maxDepth: 10_000, errorRate: 0 } }
-    case 'database': return { id, name, position, type, config: { maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000 } }
+    case 'cache': return { id, name, position, type, config: { capacityEntries: 10_000, ttlMs: 60_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 1_000, operationTimeMs: 1, jitterMs: 0.2, errorRate: 0, maxQueueSize: 10_000 } }
+    case 'stream': return { id, name, position, type, config: { partitions: 12, producerCapacity: 1_000, consumerGroups: 1, consumersPerGroup: 4, batchSize: 100, acknowledgement: 'explicit', publishTimeMs: 2, consumeTimeMs: 10, jitterMs: 1, maxDepth: 1_000_000, errorRate: 0 } }
+    case 'object-storage': return { id, name, position, type, config: { maxConcurrentRequests: 1_000, defaultObjectSizeBytes: 1_048_576, readRatio: 0.8, baseLatencyMs: 20, jitterMs: 3, readThroughputMbps: 1_000, writeThroughputMbps: 500, errorRate: 0.001, maxQueueSize: 100_000 } }
+    case 'database': return { id, name, position, type, config: { maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000, shardCount: 1, replicasPerShard: 0, readPreference: 'primary', replicationDelayMs: 100, writeRatio: 0.2, keySpaceSize: 1_000_000, hotKeyProbability: 0 } }
   }
 }
 

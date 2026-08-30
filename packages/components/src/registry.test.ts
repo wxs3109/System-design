@@ -7,7 +7,9 @@ describe('component registry', () => {
     const service = componentRegistry.createNode('service', 'service-1', { x: 10, y: 20 })
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
-    expect(componentRegistry.list()).toHaveLength(6)
+    expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
+      'traffic', 'network', 'load-balancer', 'service', 'queue', 'cache', 'stream', 'object-storage', 'database',
+    ])
   })
 
   it('declares an editable Load Balancer manifest', () => {
@@ -16,6 +18,26 @@ describe('component registry', () => {
     expect(loadBalancer.config).toMatchObject({ algorithm: 'weighted', failureThreshold: 1 })
     expect(manifest.configFields.find((field) => field.key === 'algorithm')).toMatchObject({ kind: 'select' })
     expect(manifest.capabilities).toContain('health-aware-routing')
+  })
+
+  it('registers Phase 1 data components and defaults Database to v2', () => {
+    expect(componentRegistry.createNode('cache', 'cache', { x: 0, y: 0 }).config).toMatchObject({ evictionPolicy: 'lru', ttlMs: 60_000 })
+    expect(componentRegistry.createNode('stream', 'stream', { x: 0, y: 0 }).config).toMatchObject({ partitions: 12, consumerGroups: 1 })
+    expect(componentRegistry.createNode('object-storage', 'objects', { x: 0, y: 0 }).config).toMatchObject({ readRatio: 0.8 })
+    const database = componentRegistry.createNode('database', 'database', { x: 0, y: 0 })
+    expect(database.componentVersion).toBe(2)
+    expect(database.config).toMatchObject({ shardCount: 1, replicasPerShard: 0, readPreference: 'primary' })
+    expect(componentRegistry.get('database', 1).runtimeBehavior).toBe('database-v1')
+  })
+
+  it('rejects unknown component versions and invalid configs before rendering', () => {
+    const project = {
+      schemaVersion: 2 as const, id: 'project', name: 'Project', activeExperimentId: 'experiment',
+      topology: { nodes: [componentRegistry.createNode('cache', 'cache', { x: 0, y: 0 })], edges: [], groups: [], policies: [] },
+      experiments: [{ id: 'experiment', name: 'Experiment', workloads: [], faults: [], simulation: { durationSeconds: 1, sampleIntervalMs: 100, maxRequests: 10, traceLimit: 10, maxHops: 10 }, seed: 'seed' }],
+    }
+    expect(() => componentRegistry.validateProject({ ...project, topology: { ...project.topology, nodes: [{ ...project.topology.nodes[0]!, componentVersion: 999 }] } })).toThrow('Unknown component')
+    expect(() => componentRegistry.validateProject({ ...project, topology: { ...project.topology, nodes: [{ ...project.topology.nodes[0]!, config: { capacityEntries: 0 } }] } })).toThrow()
   })
 
   it('adds a component without changing registry dispatch code', () => {

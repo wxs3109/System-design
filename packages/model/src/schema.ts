@@ -12,6 +12,9 @@ export const componentTypeSchema = z.enum([
   'load-balancer',
   'service',
   'queue',
+  'cache',
+  'stream',
+  'object-storage',
   'database',
 ])
 
@@ -26,6 +29,7 @@ const commonNodeFields = {
   id: idSchema,
   name: z.string().trim().min(1).max(80),
   position: positionSchema,
+  componentVersion: positiveIntegerSchema.optional(),
   disabled: z.boolean().optional(),
 }
 
@@ -68,12 +72,65 @@ export const queueConfigSchema = z.object({
   errorRate: probabilitySchema.default(0),
 })
 
-export const databaseConfigSchema = z.object({
+export const cacheConfigSchema = z.object({
+  capacityEntries: positiveIntegerSchema.max(10_000_000).default(10_000),
+  ttlMs: positiveSchema.max(86_400_000).default(60_000),
+  evictionPolicy: z.enum(['lru', 'fifo']).default('lru'),
+  keySpaceSize: positiveIntegerSchema.max(1_000_000_000).default(100_000),
+  hotKeyProbability: probabilitySchema.default(0),
+  maxConcurrentRequests: positiveIntegerSchema.max(1_000_000).default(1_000),
+  operationTimeMs: positiveSchema.default(1),
+  jitterMs: nonNegativeSchema.default(0.2),
+  errorRate: probabilitySchema.default(0),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(10_000),
+})
+
+export const streamConfigSchema = z.object({
+  partitions: positiveIntegerSchema.max(100_000).default(12),
+  producerCapacity: positiveIntegerSchema.max(1_000_000).default(1_000),
+  consumerGroups: positiveIntegerSchema.max(10_000).default(1),
+  consumersPerGroup: positiveIntegerSchema.max(100_000).default(4),
+  batchSize: positiveIntegerSchema.max(1_000_000).default(100),
+  acknowledgement: z.enum(['auto', 'explicit']).default('explicit'),
+  publishTimeMs: positiveSchema.default(2),
+  consumeTimeMs: positiveSchema.default(10),
+  jitterMs: nonNegativeSchema.default(1),
+  maxDepth: positiveIntegerSchema.max(100_000_000).default(1_000_000),
+  errorRate: probabilitySchema.default(0),
+})
+
+export const objectStorageConfigSchema = z.object({
+  maxConcurrentRequests: positiveIntegerSchema.max(1_000_000).default(1_000),
+  defaultObjectSizeBytes: positiveIntegerSchema.max(1_000_000_000_000).default(1_048_576),
+  readRatio: probabilitySchema.default(0.8),
+  baseLatencyMs: positiveSchema.default(20),
+  jitterMs: nonNegativeSchema.default(3),
+  readThroughputMbps: positiveSchema.default(1_000),
+  writeThroughputMbps: positiveSchema.default(500),
+  errorRate: probabilitySchema.default(0.001),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(100_000),
+})
+
+export const databaseV1ConfigSchema = z.object({
   maxConnections: positiveIntegerSchema.max(1_000_000).default(100),
   queryTimeMs: positiveSchema.default(12),
   jitterMs: nonNegativeSchema.default(3),
   errorRate: probabilitySchema.default(0.001),
   maxQueueSize: z.number().int().min(0).max(10_000_000).default(10_000),
+})
+
+export const databaseConfigSchema = databaseV1ConfigSchema.extend({
+  shardCount: positiveIntegerSchema.max(100_000).default(1),
+  replicasPerShard: z.number().int().min(0).max(1_000).default(0),
+  readPreference: z.enum(['primary', 'replica-preferred', 'replica-only']).default('primary'),
+  replicationDelayMs: nonNegativeSchema.max(86_400_000).default(100),
+  writeRatio: probabilitySchema.default(0.2),
+  keySpaceSize: positiveIntegerSchema.max(1_000_000_000).default(1_000_000),
+  hotKeyProbability: probabilitySchema.default(0),
+}).superRefine((config, context) => {
+  if (config.readPreference === 'replica-only' && config.replicasPerShard === 0) {
+    context.addIssue({ code: 'custom', path: ['replicasPerShard'], message: 'Replica-only reads require at least one replica per shard.' })
+  }
 })
 
 export const componentNodeSchema = z.discriminatedUnion('type', [
@@ -101,6 +158,21 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('queue'),
     config: queueConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('cache'),
+    config: cacheConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('stream'),
+    config: streamConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('object-storage'),
+    config: objectStorageConfigSchema,
   }),
   z.object({
     ...commonNodeFields,

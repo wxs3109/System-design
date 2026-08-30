@@ -24,4 +24,8 @@ describe('runtime telemetry contracts', () => {
     const progress = { runId: 'run', simulatedTimeMs: 2, simulatedDurationMs: 10, generatedRequests: 0, completedRequests: 0, failedRequests: 0, events: [event, { ...event, runId: 'run', sequence: 1 }] }
     expect(simulationProgressSchema.safeParse(progress).success).toBe(false)
   })
+
+  it.each(['cache-hit', 'stream-record-appended', 'object-read', 'database-written'] as const)('accepts the %s domain event', (type) => {
+    expect(runtimeEventSchema.parse({ runId: 'run', timestampMs: 1, sequence: 0, requestId: '1', traceId: 'trace', spanId: 'span', nodeId: 'data', type, status: 'ok' }).type).toBe(type)
+  })
 })

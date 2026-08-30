@@ -8,7 +8,9 @@ export const runtimeEventTypeSchema = z.enum([
   'dependency-started', 'dependency-returned', 'retry-scheduled', 'attempt-started', 'timeout-fired',
   'circuit-opened', 'circuit-half-opened', 'circuit-closed', 'rate-limit-accepted', 'rate-limit-rejected',
   'cache-hit', 'cache-miss', 'cache-evicted', 'cache-expired', 'message-published', 'message-consumed',
-  'message-acknowledged', 'message-dead-lettered', 'fault-activated', 'fault-recovered', 'metric-sampled', 'node-snapshot',
+  'message-acknowledged', 'message-dead-lettered', 'stream-record-appended', 'stream-record-consumed',
+  'object-read', 'object-written', 'database-read', 'database-written',
+  'fault-activated', 'fault-recovered', 'metric-sampled', 'node-snapshot',
 ])
 
 export const eventStatusSchema = z.enum(['pending', 'ok', 'error', 'rejected', 'cancelled'])

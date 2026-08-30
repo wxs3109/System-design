@@ -21,13 +21,14 @@ export const reduceNodeMetrics = (events: readonly RuntimeEvent[], nodes: readon
   const latest = snapshots.at(-1)
   const completed = new Set(nodeEvents.filter((event) => event.type === 'request-completed' && event.durationMs !== undefined && event.requestId && event.spanId).map((event) => `${event.requestId}:${event.spanId}:${event.nodeId}`))
   const failed = new Set(nodeEvents.filter((event) => event.type === 'request-failed' && event.attributes.terminal !== true && event.requestId && event.spanId).map((event) => `${event.requestId}:${event.spanId}:${event.nodeId}`))
+  const details = Object.fromEntries(Object.entries(latest?.attributes ?? {}).filter(([key]) => !['queueLength', 'capacity', 'unitsInUse', 'utilization', 'averageQueueLength', 'maxQueueLength'].includes(key)))
   return {
     nodeId: node.id, nodeName: node.name, nodeType: node.type,
     processedRequests: completed.size,
     failedRequests: failed.size,
     utilization: round(Number(latest?.attributes.utilization ?? 0)),
     averageQueueLength: round(Number(latest?.attributes.averageQueueLength ?? 0)),
-    maxQueueLength: Number(latest?.attributes.maxQueueLength ?? 0),
+    maxQueueLength: Number(latest?.attributes.maxQueueLength ?? 0), details,
   }
 })
 

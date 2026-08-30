@@ -204,7 +204,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 1 Implementation Plan](docs/roadmap/phase-1.md)。
 
-当前进度：P1.0 基础加固、P1.1 类型化执行与事件遥测、P1.2 可靠性策略与 Load Balancer 已完成；下一步是 P1.3 数据与异步组件。
+当前进度：P1.0 基础加固、P1.1 类型化执行与事件遥测、P1.2 可靠性策略与 Load Balancer、P1.3 数据与异步组件已完成；下一步是 P1.4 故障实验室。
 
 - 增加负载均衡、缓存、消息流、对象存储、分片与副本。
 - 增加超时、重试、熔断、背压和流量控制策略。
@@ -250,7 +250,9 @@ Phase 1 的 P1.1 已完成：画布按 manifest 渲染类型化端口，连线�
 
 Phase 1 的 P1.2 已完成：Load Balancer 支持 weighted、round-robin 与 health-aware 路由；边可组合超时、确定性退避重试和熔断；节点可使用令牌桶限流；异步链路支持背压和死信；这些策略由 manifest 驱动的通用编辑器配置，并在节点 badge、边标签、runtime events 和 spans 中保持一致。
 
-当前仍是早期平台。下一步是 P1.3 的 Cache、Stream、Object Storage，以及数据库分片、副本、读路由和复制延迟，不能退回文档站或案例专用 Demo。
+Phase 1 的 P1.3 已完成：Cache 支持 key 分布、TTL、容量、LRU/FIFO 与 hit/miss 路由，并且只在 miss 下游成功后填充；Stream 支持稳定分区、consumer group、batch、ACK、lag 与背压；Object Storage 按实际对象字节建模读写吞吐；Database v2 支持分片、热点、主从读路由和复制延迟，同时保留 Database v1 的运行语义。所有领域指标均由 runtime events 和 node snapshots 归约得到。
+
+当前仍是早期平台。下一步是 P1.4 的可编辑故障时间线、节点/链路/工作负载/区域故障、确定性重叠与恢复规则、故障状态可视化，以及本地版本和运行历史；不能退回文档站或案例专用 Demo。
 
 本地运行：
 
