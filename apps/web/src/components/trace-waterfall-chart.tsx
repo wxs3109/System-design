@@ -16,6 +16,7 @@ interface TraceWaterfallChartProps {
   durationMs: number
   selectedSpanId: string | undefined
   onSelectSpan: (spanId: string) => void
+  theme?: string | undefined
 }
 
 interface WaterfallRenderApi {
@@ -26,18 +27,18 @@ interface WaterfallRenderApi {
 
 const asNumber = (value: unknown) => typeof value === 'number' ? value : Number(value ?? 0)
 
-export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId, onSelectSpan }: TraceWaterfallChartProps) {
+export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId, onSelectSpan, theme }: TraceWaterfallChartProps) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!hostRef.current) return
     const styles = getComputedStyle(document.documentElement)
     const color = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback
-    const queueColor = '#7c3aed'
+    const queueColor = color('--queue', '#7c3aed')
     const serviceColor = color('--cyan-deep', '#0891b2')
     const failedColor = color('--danger', '#fb7185')
     const selectedColor = color('--cyan', '#67e8f9')
-    const markerColor = '#fbbf24'
+    const markerColor = color('--warning', '#fbbf24')
     const borderColor = color('--border-bright', '#304056')
     const textColor = color('--muted-bright', '#a8b4c7')
     const data: WaterfallDatum[] = [
@@ -54,7 +55,7 @@ export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId
       animation: false,
       grid: { top: 9, right: 12, bottom: 24, left: 145 },
       tooltip: {
-        trigger: 'item', backgroundColor: '#111827', borderColor, textStyle: { color: '#e5e7eb', fontSize: 10 },
+        trigger: 'item', backgroundColor: color('--panel-raised', '#111827'), borderColor, textStyle: { color: color('--text', '#e5e7eb'), fontSize: 10 },
         formatter: (params: { data?: WaterfallDatum }) => {
           const datum = params.data
           if (!datum) return ''
@@ -65,7 +66,7 @@ export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId
       xAxis: {
         type: 'value', min: 0, max: Math.max(0.001, durationMs),
         axisLabel: { color: textColor, fontSize: 9, formatter: (value: number) => `${Number(value.toFixed(1))} ms` },
-        axisLine: { lineStyle: { color: borderColor } }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#182333' } },
+        axisLine: { lineStyle: { color: borderColor } }, axisTick: { show: false }, splitLine: { lineStyle: { color: color('--border', '#182333') } },
       },
       yAxis: {
         type: 'category', inverse: true, data: lanes.map((lane) => lane.label), axisTick: { show: false },
@@ -86,7 +87,7 @@ export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId
     const observer = new ResizeObserver(() => chart.resize())
     observer.observe(hostRef.current)
     return () => { observer.disconnect(); chart.dispose() }
-  }, [durationMs, lanes, markers, onSelectSpan, selectedSpanId])
+  }, [durationMs, lanes, markers, onSelectSpan, selectedSpanId, theme])
 
   return <div ref={hostRef} className="trace-waterfall-chart" role="img" aria-label={`Dependency waterfall with ${lanes.length} spans and ${markers.length} policy or fault markers`} />
 }

@@ -6,7 +6,9 @@ import { builtInComponentTypes, componentRegistry, policyRegistry, rolePresetReg
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, History, Layers3, MousePointer2, Play, Plus, Redo2, RotateCcw, Save, Square, Trash2, Undo2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, History, Layers3, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ComponentNode, componentIcons } from './component-node'
 import { BottleneckExplanations } from './bottleneck-explanations'
 import { FaultLaboratory } from './fault-laboratory'
@@ -14,12 +16,26 @@ import { affectedTopology } from './fault-topology'
 import { MetricChart } from './metric-chart'
 import { RunComparisonPanel } from './run-comparison-panel'
 import { TraceExplorer } from './trace-explorer'
+import { WorkbenchShell } from './workbench-shell'
 import { createAsyncExample, createDataPlatformExample, createDirectExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
+type PanelName = 'faults' | 'inspector' | 'results'
+type PanelVisibility = Record<PanelName, boolean>
+const panelVisibilityStorageKey = 'system-design-panel-visibility'
+const defaultPanelVisibility: PanelVisibility = { faults: true, inspector: true, results: true }
+
+function loadPanelVisibility(): PanelVisibility {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(panelVisibilityStorageKey) ?? '{}') as Partial<PanelVisibility>
+    return { faults: saved.faults !== false, inspector: saved.inspector !== false, results: saved.results !== false }
+  } catch {
+    return defaultPanelVisibility
+  }
+}
 
 function Field({ label, value, min = 0, max, step = 1, onChange }: { label: string; value: number; min?: number; max?: number; step?: number; onChange: (value: number) => void }) {
   return (
@@ -196,7 +212,7 @@ function FaultTraceEvidence({ result }: { result: SimulationResult }) {
   )
 }
 
-function ResultsPanel({ result, progress, running, nodes, onShowTraceNode }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean; nodes: Array<{ id: string; name: string }>; onShowTraceNode: (nodeId: string) => void }) {
+function ResultsPanel({ result, progress, running, nodes, onShowTraceNode, theme }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean; nodes: Array<{ id: string; name: string }>; onShowTraceNode: (nodeId: string) => void; theme?: string | undefined }) {
   const [traceRequest, setTraceRequest] = useState<{ traceId: string; sequence: number } | null>(null)
   if (!result && running) {
     const simulatedTimeMs = progress?.simulatedTimeMs ?? 0
@@ -213,11 +229,11 @@ function ResultsPanel({ result, progress, running, nodes, onShowTraceNode }: { r
         <div><span>Error rate</span><strong>{(result.summary.errorRate * 100).toFixed(2)}<small>%</small></strong></div>
         <div><span>Completed</span><strong>{result.summary.completedRequests.toLocaleString()}</strong></div>
       </div>
-      <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run · shaded fault windows</span></div><MetricChart points={result.timeSeries} events={result.events} simulatedDurationMs={result.simulatedDurationMs} /></div>
+      <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run · shaded fault windows</span></div><MetricChart points={result.timeSeries} events={result.events} simulatedDurationMs={result.simulatedDurationMs} theme={theme} /></div>
       <div className="node-table-wrap"><table className="node-table"><thead><tr><th>Component</th><th>Util.</th><th>Avg queue</th><th>Max queue</th><th>Domain metrics</th></tr></thead><tbody>{result.nodes.map((node) => <tr key={node.nodeId}><td><strong>{node.nodeName}</strong><span>{node.nodeType}</span></td><td>{(node.utilization * 100).toFixed(1)}%</td><td>{node.averageQueueLength.toFixed(1)}</td><td>{node.maxQueueLength}</td><td><span className="domain-metrics">{formatDomainMetrics(node.details)}</span></td></tr>)}</tbody></table></div>
       <FaultTraceEvidence result={result} />
       <BottleneckExplanations result={result} onShowNode={onShowTraceNode} onShowTrace={(traceId) => setTraceRequest((current) => ({ traceId, sequence: (current?.sequence ?? 0) + 1 }))} />
-      <TraceExplorer key={`${result.runId}:${traceRequest?.sequence ?? 0}`} result={result} nodes={nodes} onShowOnCanvas={onShowTraceNode} {...(traceRequest ? { requestedTraceId: traceRequest.traceId } : {})} />
+      <TraceExplorer key={`${result.runId}:${traceRequest?.sequence ?? 0}`} result={result} nodes={nodes} onShowOnCanvas={onShowTraceNode} theme={theme} {...(traceRequest ? { requestedTraceId: traceRequest.traceId } : {})} />
       {result.warnings.length ? <div className="warnings"><CircleAlert size={15} /> {result.warnings.join(' ')}</div> : null}
     </>
   )
@@ -239,6 +255,7 @@ function formatDomainMetrics(details: SimulationResult['nodes'][number]['details
 }
 
 function WorkbenchInner() {
+  const { resolvedTheme, setTheme } = useTheme()
   const project = useWorkbenchStore((state) => state.project)
   const experiment = getActiveExperiment(project)
   const selectedNodeId = useWorkbenchStore((state) => state.selectedNodeId)
@@ -266,6 +283,10 @@ function WorkbenchInner() {
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
+  const faultsPanelRef = useRef<ImperativePanelHandle>(null)
+  const inspectorPanelRef = useRef<ImperativePanelHandle>(null)
+  const resultsPanelRef = useRef<ImperativePanelHandle>(null)
+  const [panelVisibility, setPanelVisibility] = useState(defaultPanelVisibility)
   const topologyNodes = project.topology.nodes
   const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(affected.nodes.has(node.id) ? { className: 'is-fault-target' } : {}) })), [affected.nodes, topologyNodes, selectedNodeId])
   const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(affected.edges.has(edge.id) ? { className: 'is-fault-target' } : {}) })), [affected.edges, project, selectedEdgeId])
@@ -299,6 +320,16 @@ function WorkbenchInner() {
     }, 350)
     return () => window.clearTimeout(timer)
   }, [historyReady, project, refreshHistory, setError])
+
+  // Layout preferences are local UI state, independent from the exported project file.
+  useEffect(() => {
+    const visibility = loadPanelVisibility()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPanelVisibility(visibility)
+    if (!visibility.faults) faultsPanelRef.current?.collapse()
+    if (!visibility.inspector) inspectorPanelRef.current?.collapse()
+    if (!visibility.results) resultsPanelRef.current?.collapse()
+  }, [])
 
   const addAtCenter = useCallback((type: ComponentType) => {
     const viewport = reactFlow.getViewport()
@@ -355,6 +386,15 @@ function WorkbenchInner() {
   }
 
   const cancelRun = () => clientRef.current?.cancelActive()
+  const setPanelVisible = (panel: PanelName, ref: React.RefObject<ImperativePanelHandle | null>, visible: boolean) => {
+    if (visible) ref.current?.expand()
+    else ref.current?.collapse()
+    setPanelVisibility((current) => {
+      const next = { ...current, [panel]: visible }
+      window.localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next))
+      return next
+    })
+  }
   const selectResultsView = (view: 'run' | 'compare') => {
     setResultsView(view)
     ;(view === 'run' ? runTabRef : compareTabRef).current?.focus()
@@ -400,12 +440,57 @@ function WorkbenchInner() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore simulation run.') }
   }
 
+  const palettePanel = (
+      <aside className="palette">
+        <div className="panel-header"><span>Behaviors</span><small>New runtime semantics</small></div>
+        <div className="palette-list">{orderedTypes.map((type) => <PaletteItem key={type} type={type} onAdd={() => addAtCenter(type)} />)}</div>
+        <div className="panel-header palette-section-heading"><span>Role presets</span><small>Reuse behaviors</small></div>
+        <div className="palette-list">{rolePresetRegistry.list().map((preset) => <RolePresetItem key={`${preset.id}@${preset.version}`} preset={preset} onAdd={() => addPresetAtCenter(preset.id, preset.version)} />)}</div>
+        <div className="palette-help"><strong>Build from scratch</strong><p>Components are executable behaviors, not decorative icons. Connect output ports to input ports.</p></div>
+      </aside>
+  )
+
+  const canvasPanel = (
+      <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
+        <ReactFlow
+          nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+          onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onEdgeClick={(_, edge) => selectEdge(edge.id)} onPaneClick={() => { selectNode(null); selectEdge(null); selectFault(null) }}
+          deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
+          defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
+          <Controls position="bottom-left" showInteractive={false} />
+          <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
+          {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
+          <Panel position="top-left"><div className="canvas-toolbar"><button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button type="button" onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button type="button" onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button type="button" onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
+        </ReactFlow>
+        {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
+      </section>
+  )
+
+  const inspectorPanel = (
+      <aside className="inspector">
+        <div className="inspector-tabs"><span className="active">Properties</span><button type="button" className="panel-close" aria-label="Hide properties panel" title="Hide properties panel" onClick={() => setPanelVisible('inspector', inspectorPanelRef, false)}><X size={13} /></button></div>
+        <PropertiesPanel node={selectedNode} edge={selectedEdge} />
+        <RegionSection />
+        <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
+      </aside>
+  )
+
+  const resultsPanel = (
+      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div><div className="panel-heading-actions"><div className="results-views" role="tablist" aria-label="Simulation result views"><button ref={runTabRef} type="button" role="tab" aria-selected={resultsView === 'run'} tabIndex={resultsView === 'run' ? 0 : -1} onKeyDown={handleResultsTabKey} onClick={() => setResultsView('run')}>Run details</button><button ref={compareTabRef} type="button" role="tab" aria-selected={resultsView === 'compare'} tabIndex={resultsView === 'compare' ? 0 : -1} onKeyDown={handleResultsTabKey} onClick={() => setResultsView('compare')}>Compare runs <small>{runs.length}</small></button></div><button type="button" className="panel-close" aria-label="Hide simulation output" title="Hide simulation output" onClick={() => setPanelVisible('results', resultsPanelRef, false)}><X size={13} /></button></div></div><div role="tabpanel" aria-label={resultsView === 'run' ? 'Run details' : 'Compare runs'}>{resultsView === 'run' ? <ResultsPanel result={result} progress={progress} running={running} nodes={project.topology.nodes} onShowTraceNode={showTraceNode} theme={resolvedTheme} /> : <RunComparisonPanel key={`${project.id}:${result?.runId ?? ''}`} runs={runs} theme={resolvedTheme} {...(result ? { activeRunId: result.runId } : {})} />}</div></section>
+  )
+
   return (
     <main className="workbench">
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>System Design Simulator</strong><span>Build · Run · Break · Measure</span></div></div>
         <div className="topbar-center"><span className="status-dot" /> Local simulation <span className="separator" /> <strong>{project.topology.nodes.length}</strong> components <span className="separator" /> <strong>{project.topology.edges.length}</strong> links</div>
         <div className="top-actions">
+          <button type="button" className="button subtle icon-only theme-toggle" aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}><span className="theme-icon theme-icon--light"><Moon size={15} /></span><span className="theme-icon theme-icon--dark"><Sun size={15} /></span></button>
+          <button type="button" className="button subtle layout-toggle" aria-label={`${panelVisibility.faults ? 'Hide' : 'Show'} fault laboratory`} title={`${panelVisibility.faults ? 'Hide' : 'Show'} fault laboratory`} aria-pressed={panelVisibility.faults} onClick={() => setPanelVisible('faults', faultsPanelRef, !panelVisibility.faults)}><FlaskConical size={15} /><span>Fault lab</span></button>
+          <button type="button" className="button subtle layout-toggle" aria-label={`${panelVisibility.results ? 'Hide' : 'Show'} simulation output`} title={`${panelVisibility.results ? 'Hide' : 'Show'} simulation output`} aria-pressed={panelVisibility.results} onClick={() => setPanelVisible('results', resultsPanelRef, !panelVisibility.results)}><PanelBottom size={15} /><span>Output</span></button>
+          <button type="button" className="button subtle layout-toggle" aria-label={`${panelVisibility.inspector ? 'Hide' : 'Show'} properties panel`} title={`${panelVisibility.inspector ? 'Hide' : 'Show'} properties panel`} aria-pressed={panelVisibility.inspector} onClick={() => setPanelVisible('inspector', inspectorPanelRef, !panelVisibility.inspector)}><PanelRight size={15} /><span>Properties</span></button>
           <button type="button" className="button subtle icon-only" aria-label="Undo project change" title="Undo project change" disabled={!canUndo || running} onClick={undoProject}><Undo2 size={15} /></button>
           <button type="button" className="button subtle icon-only" aria-label="Redo project change" title="Redo project change" disabled={!canRedo || running} onClick={redoProject}><Redo2 size={15} /></button>
           <div className="history-picker">
@@ -422,41 +507,12 @@ function WorkbenchInner() {
           <button type="button" className="button run" onClick={() => void run()} disabled={running}><Play size={15} fill="currentColor" /> {running ? 'Running…' : 'Run simulation'}</button>
         </div>
       </header>
-
-      <aside className="palette">
-        <div className="panel-header"><span>Behaviors</span><small>New runtime semantics</small></div>
-        <div className="palette-list">{orderedTypes.map((type) => <PaletteItem key={type} type={type} onAdd={() => addAtCenter(type)} />)}</div>
-        <div className="panel-header palette-section-heading"><span>Role presets</span><small>Reuse behaviors</small></div>
-        <div className="palette-list">{rolePresetRegistry.list().map((preset) => <RolePresetItem key={`${preset.id}@${preset.version}`} preset={preset} onAdd={() => addPresetAtCenter(preset.id, preset.version)} />)}</div>
-        <div className="palette-help"><strong>Build from scratch</strong><p>Components are executable behaviors, not decorative icons. Connect output ports to input ports.</p></div>
-      </aside>
-
-      <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
-        <ReactFlow
-          nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-          onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onEdgeClick={(_, edge) => selectEdge(edge.id)} onPaneClick={() => { selectNode(null); selectEdge(null); selectFault(null) }}
-          deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
-          defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#334155" />
-          <Controls position="bottom-left" showInteractive={false} />
-          <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
-          {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
-          <Panel position="top-left"><div className="canvas-toolbar"><button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button type="button" onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button type="button" onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button type="button" onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
-        </ReactFlow>
-        {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
-      </section>
-
-      <FaultLaboratory experiment={experiment} project={project} selectedFaultId={selectedFaultId} onSelectFault={selectFault} onAddFault={addFault} onUpdateFault={updateFault} onDeleteFault={deleteFault} />
-
-      <aside className="inspector">
-        <div className="inspector-tabs"><span className="active">Properties</span></div>
-        <PropertiesPanel node={selectedNode} edge={selectedEdge} />
-        <RegionSection />
-        <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
-      </aside>
-
-      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div><div className="results-views" role="tablist" aria-label="Simulation result views"><button ref={runTabRef} type="button" role="tab" aria-selected={resultsView === 'run'} tabIndex={resultsView === 'run' ? 0 : -1} onKeyDown={handleResultsTabKey} onClick={() => setResultsView('run')}>Run details</button><button ref={compareTabRef} type="button" role="tab" aria-selected={resultsView === 'compare'} tabIndex={resultsView === 'compare' ? 0 : -1} onKeyDown={handleResultsTabKey} onClick={() => setResultsView('compare')}>Compare runs <small>{runs.length}</small></button></div></div><div role="tabpanel" aria-label={resultsView === 'run' ? 'Run details' : 'Compare runs'}>{resultsView === 'run' ? <ResultsPanel result={result} progress={progress} running={running} nodes={project.topology.nodes} onShowTraceNode={showTraceNode} /> : <RunComparisonPanel key={`${project.id}:${result?.runId ?? ''}`} runs={runs} {...(result ? { activeRunId: result.runId } : {})} />}</div></section>
+      <WorkbenchShell
+        palette={palettePanel} canvas={canvasPanel}
+        faults={<div className="panel-container"><button type="button" className="panel-close panel-close--overlay" aria-label="Hide fault laboratory" title="Hide fault laboratory" onClick={() => setPanelVisible('faults', faultsPanelRef, false)}><X size={13} /></button><FaultLaboratory experiment={experiment} project={project} selectedFaultId={selectedFaultId} onSelectFault={selectFault} onAddFault={addFault} onUpdateFault={updateFault} onDeleteFault={deleteFault} /></div>}
+        inspector={inspectorPanel} results={resultsPanel}
+        faultsRef={faultsPanelRef} inspectorRef={inspectorPanelRef} resultsRef={resultsPanelRef}
+      />
     </main>
   )
 }

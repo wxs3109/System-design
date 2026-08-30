@@ -10,6 +10,7 @@ import { selectInitialComparisonRuns } from './run-comparison-selection'
 interface RunComparisonPanelProps {
   runs: SimulationRunRecord[]
   activeRunId?: string
+  theme?: string | undefined
 }
 
 const seriesOptions: Array<{ key: ComparisonSeriesMetric; label: string; unit: string }> = [
@@ -42,7 +43,7 @@ const formatDelta = (metric: ComparedMetric) => {
   return `${absolute}${percent}`
 }
 
-export function RunComparisonPanel({ runs, activeRunId }: RunComparisonPanelProps) {
+export function RunComparisonPanel({ runs, activeRunId, theme }: RunComparisonPanelProps) {
   const initialSelection = selectInitialComparisonRuns(runs, activeRunId)
   const [baselineId, setBaselineId] = useState(initialSelection.baselineId)
   const [candidateId, setCandidateId] = useState(initialSelection.candidateId)
@@ -68,7 +69,7 @@ export function RunComparisonPanel({ runs, activeRunId }: RunComparisonPanelProp
           <div className="comparison-metrics">
             <table><thead><tr><th>Metric</th><th>Baseline</th><th>Candidate</th><th>Candidate − baseline</th></tr></thead><tbody>{comparison.metrics.map((metric) => <tr key={metric.key}><td>{metric.label}</td><td>{formatMetric(metric.baseline, metric)}</td><td>{formatMetric(metric.candidate, metric)}</td><td className={metric.delta === null || metric.delta === 0 ? '' : metric.delta > 0 ? 'is-increase' : 'is-decrease'}>{formatDelta(metric)}</td></tr>)}</tbody></table>
           </div>
-          <div className="comparison-plot"><div className="comparison-plot__heading"><strong>Aligned virtual-time series</strong><label><span>Metric</span><select aria-label="Comparison chart metric" value={seriesMetric} onChange={(event) => setSeriesMetric(event.target.value as ComparisonSeriesMetric)}>{seriesOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label></div><ComparisonChart points={comparison.series[seriesMetric]} metricLabel={selectedSeries.label} unit={selectedSeries.unit} events={comparison.baseline.result.events} simulatedDurationMs={comparison.baseline.result.simulatedDurationMs} /></div>
+          <div className="comparison-plot"><div className="comparison-plot__heading"><strong>Aligned virtual-time series</strong><label><span>Metric</span><select aria-label="Comparison chart metric" value={seriesMetric} onChange={(event) => setSeriesMetric(event.target.value as ComparisonSeriesMetric)}>{seriesOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label></div><ComparisonChart points={comparison.series[seriesMetric]} metricLabel={selectedSeries.label} unit={selectedSeries.unit} events={comparison.baseline.result.events} simulatedDurationMs={comparison.baseline.result.simulatedDurationMs} theme={theme} /></div>
         </>
       )}
     </section>

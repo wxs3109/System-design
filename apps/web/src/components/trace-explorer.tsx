@@ -11,12 +11,13 @@ interface TraceExplorerProps {
   nodes: Array<{ id: string; name: string }>
   onShowOnCanvas: (nodeId: string) => void
   requestedTraceId?: string | null
+  theme?: string | undefined
 }
 
 const humanize = (value: string) => value.replaceAll('_', ' ')
 const formatMs = (value: number) => value < 1 ? `${value.toFixed(2)} ms` : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`
 
-export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId }: TraceExplorerProps) {
+export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId, theme }: TraceExplorerProps) {
   const records = useMemo(() => buildTraceRecords(result), [result])
   const [filters, setFilters] = useState<TraceFilters>({ status: 'all', minimumLatencyMs: 0, componentId: '', reason: 'all' })
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(requestedTraceId ?? null)
@@ -68,7 +69,7 @@ export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId 
             {selectedLane ? <button type="button" onClick={() => onShowOnCanvas(selectedLane.span.nodeId)}><ArrowUpRight size={12} /> Show {nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId} on canvas</button> : null}
           </div>
           <div className="trace-waterfall__legend" aria-label="Waterfall legend"><span><i className="is-queue" /> Queue wait</span><span><i className="is-service" /> Service / dependency</span><span><i className="is-error" /> Failed span</span><span><i className="is-marker" /> Policy / fault event</span></div>
-          <TraceWaterfallChart lanes={lanes} markers={markers} durationMs={traceDuration} selectedSpanId={selectedLane?.span.spanId} onSelectSpan={selectSpan} />
+          <TraceWaterfallChart lanes={lanes} markers={markers} durationMs={traceDuration} selectedSpanId={selectedLane?.span.spanId} onSelectSpan={selectSpan} theme={theme} />
           {selectedLane ? <div className="trace-span-detail" aria-live="polite"><Timer size={12} /><strong>{nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId}</strong><span>{formatMs(selectedLane.queueDurationMs)} queue · {formatMs(selectedLane.serviceDurationMs)} service</span><span>{selectedLane.span.status}{selectedLane.span.reason === 'none' ? '' : ` · ${humanize(selectedLane.span.reason)}`}</span>{selectedLane.span.edgeId ? <code>{selectedLane.span.edgeId}</code> : null}</div> : null}
         </div> : <div className="trace-waterfall trace-waterfall--empty">No matching trace selected.</div>}
       </div>

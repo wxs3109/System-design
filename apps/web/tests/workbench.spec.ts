@@ -11,6 +11,56 @@ const legacyScenario = {
   faults: [], simulation: { durationSeconds: 2, sampleIntervalMs: 1_000, maxRequests: 100, traceLimit: 20, maxHops: 10 },
 }
 
+test('switches theme and preserves it after reload', async ({ page }) => {
+  await page.goto('/')
+  const themeToggle = page.getByRole('button', { name: /Switch to (light|dark) theme/ })
+  await expect(themeToggle).toBeVisible()
+  const initialTheme = await page.locator('html').getAttribute('data-theme')
+  await themeToggle.click()
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', initialTheme ?? '')
+  const selectedTheme = await page.locator('html').getAttribute('data-theme')
+  expect(selectedTheme).toMatch(/^(dark|light)$/)
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', selectedTheme!)
+})
+
+test('hides, restores and persists adaptable workbench panels', async ({ page }) => {
+  await page.goto('/')
+  const cases = [
+    { toggle: /Hide fault laboratory/, show: /Show fault laboratory/, panel: page.getByRole('region', { name: 'Fault laboratory' }) },
+    { toggle: /Hide simulation output/, show: /Show simulation output/, panel: page.getByText('No simulation yet') },
+    { toggle: /Hide properties panel/, show: /Show properties panel/, panel: page.getByText('Select a component to configure') },
+  ]
+
+  for (const entry of cases) {
+    await expect(entry.panel).toBeVisible()
+    const toggle = page.getByRole('button', { name: entry.toggle }).first()
+    await toggle.click()
+    await expect(entry.panel).toBeHidden()
+    await page.getByRole('button', { name: entry.show }).click()
+    await expect(entry.panel).toBeVisible()
+  }
+
+  await page.getByRole('button', { name: /Hide properties panel/ }).first().click()
+  await page.reload()
+  await expect(page.getByRole('button', { name: /Show properties panel/ })).toBeVisible()
+  await expect(page.getByText('Select a component to configure')).toBeHidden()
+})
+
+test('resizes workbench panels with an accessible keyboard separator and persists layout', async ({ page }) => {
+  await page.goto('/')
+  const separator = page.getByRole('separator', { name: 'Resize properties panel' })
+  await expect(separator).toBeVisible()
+  const initial = await separator.getAttribute('aria-valuenow')
+  await separator.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(separator).not.toHaveAttribute('aria-valuenow', initial ?? '')
+  const resized = await separator.getAttribute('aria-valuenow')
+  await page.waitForTimeout(150)
+  await page.reload()
+  await expect(page.getByRole('separator', { name: 'Resize properties panel' })).toHaveAttribute('aria-valuenow', resized!)
+})
+
 test('starts blank and rejects an unconnected design', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('Start with an empty canvas')).toBeVisible()

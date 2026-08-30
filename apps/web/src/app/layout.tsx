@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import '@xyflow/react/dist/style.css'
 import 'vis-timeline/styles/vis-timeline-graph2d.min.css'
 import './globals.css'
+import { ThemeProvider } from '@/components/theme-provider'
 
 export const metadata: Metadata = {
   title: 'System Design Simulator',
@@ -10,8 +11,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body><ThemeProvider>{children}</ThemeProvider></body>
     </html>
   )
 }
