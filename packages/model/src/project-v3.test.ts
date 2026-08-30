@@ -81,6 +81,26 @@ describe('ProjectFile v3', () => {
     expect(projectFileV3Schema.safeParse(wrongOwner).success).toBe(false)
   })
 
+  it('accepts Topic as an event broker while retaining event producer and consumer contracts', () => {
+    const fixture = createOrderSystemContractFixture()
+    fixture.topology.nodes.push({ ...createNode('topic', 'order-topic', { x: 600, y: 100 }), name: 'Order topic', componentVersion: 1 })
+    fixture.topology.edges = fixture.topology.edges.map((edge) => edge.source === 'orders-service' && edge.target === 'orders-stream'
+      ? { ...edge, target: 'order-topic' }
+      : edge.source === 'orders-stream' && edge.target === 'fulfillment-worker'
+        ? { ...edge, source: 'order-topic' }
+        : edge)
+    for (const action of fixture.definitions.interactions[0]!.actions) {
+      if (action.kind === 'event-publish' || action.kind === 'event-consume') action.brokerNodeId = 'order-topic'
+    }
+    expect(projectFileV3Schema.safeParse(fixture).success).toBe(true)
+
+    const wrongConsumer = structuredClone(fixture)
+    const consume = wrongConsumer.definitions.interactions[0]!.actions.find((action) => action.kind === 'event-consume')!
+    if (consume.kind !== 'event-consume') throw new Error('Expected consume action')
+    consume.consumerNodeId = 'orders-service'
+    expect(projectFileV3Schema.safeParse(wrongConsumer).success).toBe(false)
+  })
+
   it('keeps empty current projects explicitly capacity-only', () => {
     expect(createEmptyProject()).toMatchObject({ schemaVersion: 3, modelingMode: 'capacity-only', definitions: { schemaVersion: 1 }, experiments: [{ operationWorkloads: [] }] })
   })

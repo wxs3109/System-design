@@ -89,6 +89,17 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.safeParse({ ...search, config: { ...search.config, mergeTimePerCandidateMs: -1 } }).success).toBe(false)
   })
 
+  it('validates Topic subscription, retention, and capacity configuration', () => {
+    const topic = createNode('topic', 'topic', { x: 100, y: 50 })
+    if (topic.type !== 'topic') throw new Error('Expected a Topic node.')
+    topic.config.subscriptionCount = 4
+    topic.config.retentionMs = 60_000
+    expect(scenarioSchema.shape.nodes.element.parse(topic)).toEqual(topic)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...topic, config: { ...topic.config, subscriptionCount: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...topic, config: { ...topic.config, retentionMs: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...topic, config: { ...topic.config, maxRetainedMessages: 0 } }).success).toBe(false)
+  })
+
   it('validates fault-specific factor bounds', () => {
     const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
     expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)

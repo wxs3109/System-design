@@ -8,7 +8,7 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'object-storage', 'database',
+      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
     ])
   })
 
@@ -74,6 +74,16 @@ describe('component registry', () => {
     expect(manifest.ports.map((port) => port.id)).toEqual(['in', 'consume', 'out'])
     expect(manifest.capabilities).toEqual(expect.arrayContaining(['document-indexing', 'near-real-time-refresh', 'shard-query-fan-out', 'candidate-merge']))
     expect(componentCatalog.listPresets('search-index')).toEqual([])
+  })
+
+  it('declares Topic as an executable Messaging variant instead of a preset', () => {
+    const topic = componentRegistry.createNode('topic', 'topic', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('topic')
+    expect(topic.config).toMatchObject({ subscriptionCount: 2, maxRetainedMessages: 1_000_000, retentionMs: 86_400_000, acknowledgement: 'explicit' })
+    expect(manifest.category).toBe('messaging')
+    expect(manifest.ports.map((port) => port.id)).toEqual(['consume', 'publish'])
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['publish-subscribe', 'independent-subscriptions', 'retention', 'per-subscription-acknowledgement']))
+    expect(componentCatalog.listPresets('topic')).toEqual([])
   })
 
   it('advertises executable network fault modes', () => {
@@ -163,7 +173,7 @@ describe('component creation hierarchy', () => {
     expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['search-index', 'database'])
     expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler'])
     expect(componentCatalog.listVariants('cache').map((variant) => variant.type)).toEqual(['cache', 'cdn'])
-    expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream'])
+    expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream', 'topic'])
     expect(componentCatalog.listPresets('service', 1).map((preset) => preset.id)).toEqual(['worker'])
     expect(componentCatalog.listPresets('database', 2)).toEqual([])
     expect(componentCatalog.listPresets('database', 2, { includeLegacy: true }).map((preset) => preset.id)).toEqual(['sql-store', 'nosql-store'])

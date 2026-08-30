@@ -20,7 +20,7 @@ const executableScenarioArbitrary: fc.Arbitrary<Scenario> = fc.record({
   projectId: identifierArbitrary,
   name: identifierArbitrary,
   seed: identifierArbitrary,
-  componentType: fc.constantFrom<ComponentType>('network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'object-storage', 'database'),
+  componentType: fc.constantFrom<ComponentType>('network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database'),
   trafficPosition: fc.record({ x: finiteCoordinateArbitrary, y: finiteCoordinateArbitrary }),
   componentPosition: fc.record({ x: finiteCoordinateArbitrary, y: finiteCoordinateArbitrary }),
   edgeWeight: fc.integer({ min: 1, max: 100 }),

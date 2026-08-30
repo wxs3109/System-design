@@ -466,7 +466,8 @@ class OperationExecution extends Entity<SystemDesignSimulation> {
         continue
       }
       const execution = new OperationActionExecution(this.request, this.plan, action)
-      if (action.kind === 'event-publish' || action.kind === 'event-consume') {
+      const brokerType = action.kind === 'event-publish' ? simulation.nodes.get(action.nodeId)?.type : undefined
+      if (action.kind === 'event-consume' || (action.kind === 'event-publish' && brokerType !== 'topic')) {
         simulation.activate(execution)
         outcomes.set(action.id, 'success')
         continue
@@ -527,7 +528,7 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       }
       simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.target, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-returned', status: 'ok', durationMs: round(simulation.timeNow - startedAtMs), bytes: this.root.bytes, attributes })
     }
-    const request: RequestState = {
+    let request: RequestState = {
       ...this.root, spanId, parentSpanId: this.root.spanId, operationAction: this.action, actionId: this.action.id,
       ...(this.action.edgeIds.length === 0 ? {} : { incomingEdgeId: this.action.edgeIds[this.action.edgeIds.length - 1]! }),
       bytes: this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.action.requestBytes ?? this.root.bytes,
@@ -535,7 +536,23 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       ...(this.action.data === undefined ? {} : { entityId: this.action.data.objectId, queryShape: this.action.data.operation, operation: ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'write' as const : 'read' as const }),
       ...(this.action.event === undefined ? {} : { eventId: this.action.event.eventId }),
     }
-    const sampledValueBytes = sampleValueBytes(this.plan.valueSizeDistribution, request.bytes, simulation.random)
+    let topicDelivery: { runtime: RuntimeNode; request: RequestState } | undefined
+    if (this.action.event?.operation === 'consume' && this.action.sourceNodeId) {
+      const broker = simulation.runtimes.get(this.action.sourceNodeId)
+      if (broker?.node.type === 'topic' && broker.state?.prepareDelivery) {
+        const firstEdgeId = this.action.edgeIds[0]
+        const subscriptionEdges = (simulation.outgoing.get(broker.node.id) ?? []).filter((edge) => edge.routingMode === 'async-publish')
+        const subscriptionIndex = subscriptionEdges.findIndex((edge) => edge.id === firstEdgeId)
+        if (subscriptionIndex < 0 || subscriptionIndex >= broker.node.config.subscriptionCount) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
+        const delivery = broker.state.prepareDelivery(request, `subscription:${subscriptionIndex}`, simulation.timeNow)
+        for (const event of delivery.events ?? []) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: broker.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+        if (!delivery.deliver) { this.outcome = 'success'; this.reason = 'none'; this.finish(true, 'none', startedAtMs, { ...attributes, deliveredMessages: 0 }); return }
+        request = { ...request, ...(delivery.patch ?? {}) }
+        topicDelivery = { runtime: broker, request }
+        if (broker.node.config.deliveryTimeMs > 0) await this.delay(broker.node.config.deliveryTimeMs)
+      }
+    }
+    const sampledValueBytes = topicDelivery ? request.bytes : sampleValueBytes(this.plan.valueSizeDistribution, request.bytes, simulation.random)
     if (this.action.data || this.action.cache || this.action.event) request.bytes = sampledValueBytes
     const payloadCostMs = (this.action.data || this.action.cache || this.action.event) ? sampledValueBytes / 262_144 : 0
     const domainDecision = runtime.state?.begin(request, simulation.timeNow, simulation.random)
@@ -545,6 +562,10 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     if (!final.success) {
       runtime.state?.complete(domainRequest, false, simulation.timeNow)
       runtime.state?.outcome?.(domainRequest)
+      if (topicDelivery?.runtime.state?.dependencyComplete) {
+        const events = topicDelivery.runtime.state.dependencyComplete(topicDelivery.request, false, simulation.timeNow)
+        for (const event of events) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: topicDelivery.runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+      }
       this.finish(false, final.reason, startedAtMs, attributes); return
     }
     if (payloadCostMs > 0) await this.delay(payloadCostMs)
@@ -575,6 +596,10 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type, status: 'ok', ...(dataCost?.bytesProcessed === undefined ? {} : { bytes: dataCost.bytesProcessed }), attributes: { ...attributes, ...(routeEvent?.attributes ?? {}), recordsExamined: dataCost?.recordsExamined ?? 0, bytesProcessed: dataCost?.bytesProcessed ?? 0, explanation: dataCost?.explanation ?? '' } })
     }
     if (this.action.event) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: this.action.event.operation === 'publish' ? 'message-published' : 'message-consumed', status: 'ok', bytes: this.action.event.estimatedPayloadBytes, attributes })
+    if (topicDelivery?.runtime.state?.dependencyComplete) {
+      const events = topicDelivery.runtime.state.dependencyComplete(topicDelivery.request, true, simulation.timeNow)
+      for (const event of events) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: topicDelivery.runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+    }
     const cacheOutcome = runtime.state?.outcome?.(domainRequest)
     if (this.action.responseBytes !== undefined) await this.delay(this.action.responseBytes / 262_144)
     this.outcome = cacheOutcome === 'hit' ? 'cache-hit' : cacheOutcome === 'miss' ? 'cache-miss' : 'success'
@@ -907,6 +932,11 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
 
   async script() {
     const simulation = this.simulation
+    if (this.request.asyncDeliveryDelayMs !== undefined) {
+      const { asyncDeliveryDelayMs, ...request } = this.request
+      this.request = request
+      if (asyncDeliveryDelayMs > 0) await this.delay(asyncDeliveryDelayMs)
+    }
     while (true) {
       const runtime = simulation.runtimes.get(this.nodeId)
       if (!runtime) {
@@ -1003,8 +1033,10 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         simulation.exceededHopLimit = true; runtime.failed += 1; simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { reason: 'hop_limit', attributes: { terminal: false } }); this.finishBranch(false, node, 'hop_limit'); return
       }
       const asyncEdges = edges.filter((edge) => edge.routingMode === 'async-publish')
-      for (const [index, publishEdge] of asyncEdges.entries()) {
+      const publishEdges = node.type === 'topic' ? asyncEdges.slice(0, node.config.subscriptionCount) : asyncEdges
+      for (const [index, publishEdge] of publishEdges.entries()) {
         const branchPath = `${this.request.branchPath ?? 'root'}.async.${index}`
+        const topicSubscriptionId = node.type === 'topic' ? `subscription:${index}` : undefined
         const gateKeys = [`edge:${publishEdge.id}`, `node:${publishEdge.target}`].filter((key) => simulation.deliveryGates.has(key))
         const admitted: string[] = []
         let rejected: ReturnType<BackpressureGate['admit']> | undefined
@@ -1018,8 +1050,22 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
           simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: publishEdge.id, type: rejected.deadLettered ? 'message-dead-lettered' : 'request-failed', status: rejected.status, reason: rejected.reason, bytes: this.request.bytes, attributes: { terminal: false, routingMode: 'async-publish', branchPath } })
           continue
         }
+        const delivery = topicSubscriptionId === undefined ? undefined : runtime.state?.prepareDelivery?.(this.request, topicSubscriptionId, simulation.timeNow)
+        if (delivery) {
+          this.emitDomainEvents(node, delivery.events ?? [])
+          if (!delivery.deliver) {
+            for (const key of admitted) simulation.deliveryGates.get(key)!.acknowledge()
+            continue
+          }
+        }
         simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: publishEdge.id, type: 'message-published', status: 'ok', bytes: this.request.bytes, attributes: { routingMode: 'async-publish', branchPath } })
-        simulation.activate(new RequestEntity({ ...this.request, hops: this.request.hops + 1, parentSpanId: this.request.spanId, spanId: `${this.request.traceId}:${this.request.hops + 1}:${branchPath}`, incomingEdgeId: publishEdge.id, incomingRoutingMode: 'async-publish', dependencyStartedAtMs: simulation.timeNow, branchPath, ...(admitted.length === 0 ? {} : { deliveryGateKeys: admitted }) }, publishEdge.target, undefined, false))
+        simulation.activate(new RequestEntity({
+          ...this.request, ...(delivery?.patch ?? {}), hops: this.request.hops + 1, parentSpanId: this.request.spanId, spanId: `${this.request.traceId}:${this.request.hops + 1}:${branchPath}`,
+          incomingEdgeId: publishEdge.id, incomingRoutingMode: 'async-publish', dependencyStartedAtMs: simulation.timeNow, branchPath,
+          ...(node.type === 'topic' ? { asyncDeliveryDelayMs: node.config.deliveryTimeMs } : {}),
+          ...(admitted.length === 0 ? {} : { deliveryGateKeys: admitted }),
+          ...(topicSubscriptionId === undefined || !runtime.state?.dependencyComplete ? {} : { topicSubscriptionId, resumeNodeId: node.id, resumeRequestSpanId: this.request.spanId }),
+        }, publishEdge.target, undefined, false))
       }
       const synchronousEdges = edges.filter((edge) => edge.routingMode !== 'async-publish')
       if (synchronousEdges.length === 0) {

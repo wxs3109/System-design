@@ -66,6 +66,11 @@ const behaviors = [
     baseServiceTimeMs: (node) => node.config.publishTimeMs + (node.config.acknowledgement === 'explicit' ? node.config.consumeTimeMs / node.config.consumersPerGroup : 0),
     jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
   }),
+  defineBehavior<Extract<ComponentNode, { type: 'topic' }>>({
+    type: 'topic', capacity: (node) => node.config.publishCapacity, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node) => node.config.publishTimeMs,
+    jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
+  }),
   defineBehavior<Extract<ComponentNode, { type: 'object-storage' }>>({
     type: 'object-storage', capacity: (node) => node.config.maxConcurrentRequests, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node, request) => {

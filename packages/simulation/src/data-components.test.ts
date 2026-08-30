@@ -85,6 +85,44 @@ describe('P1.3 executable data components', () => {
     expect(pressured.summary.completedRequests).toBe(pressured.summary.generatedRequests)
   })
 
+  it('fans Topic publications into independent subscription deliveries', async () => {
+    const value = project('topic-path')
+    value.experiments[0]!.workloads[0] = { ...value.experiments[0]!.workloads[0]!, requestsPerSecond: 2, durationSeconds: 1 }
+    const topic = createRegisteredNode('topic', 'topic', { x: 100, y: 0 })
+    topic.config = { ...topic.config, subscriptionCount: 2, batchSize: 1, publishTimeMs: 0.1, deliveryTimeMs: 0.1, jitterMs: 0, errorRate: 0 }
+    const producer = createRegisteredNode('service', 'producer', { x: 50, y: 0 })
+    const email = createRegisteredNode('service', 'email', { x: 200, y: -50 })
+    const analytics = createRegisteredNode('service', 'analytics', { x: 200, y: 50 })
+    email.config = { ...email.config, serviceTimeMs: 0.1, jitterMs: 0, errorRate: 0 }
+    analytics.config = { ...analytics.config, serviceTimeMs: 0.1, jitterMs: 0, errorRate: 0 }
+    value.topology.nodes.push(producer, topic, email, analytics)
+    value.topology.edges = [edge('entry', 'traffic', 'producer'), edge('publish', 'producer', 'topic', 'publish', 'consume', 'async-publish'), edge('email-subscription', 'topic', 'email', 'publish', 'consume', 'async-publish'), edge('analytics-subscription', 'topic', 'analytics', 'publish', 'consume', 'async-publish')]
+
+    const result = await runSimulation(value, 'topic-run')
+    const details = result.nodes.find((node) => node.nodeId === 'topic')!.details
+    expect(Number(details.topicPublished)).toBe(result.summary.generatedRequests)
+    expect(Number(details.topicFanOutCopies)).toBe(result.summary.generatedRequests * 2)
+    expect(Number(details.topicAcknowledged)).toBe(result.summary.generatedRequests * 2)
+    expect(result.events.filter((event) => event.type === 'topic-message-delivered')).toHaveLength(result.summary.generatedRequests * 2)
+  })
+
+  it('makes Topic retention capacity change backlog and expiry evidence', async () => {
+    const value = project('topic-retention')
+    value.experiments[0]!.workloads[0] = { ...value.experiments[0]!.workloads[0]!, requestsPerSecond: 5, durationSeconds: 1 }
+    const topic = createRegisteredNode('topic', 'topic', { x: 100, y: 0 })
+    topic.config = { ...topic.config, subscriptionCount: 2, batchSize: 1, maxRetainedMessages: 1, retentionMs: 10_000, publishTimeMs: 0.1, deliveryTimeMs: 0.1, jitterMs: 0, errorRate: 0 }
+    const producer = createRegisteredNode('service', 'producer', { x: 50, y: 0 })
+    value.topology.nodes.push(producer, topic)
+    value.topology.edges = [edge('entry', 'traffic', 'producer'), edge('publish', 'producer', 'topic', 'publish', 'consume', 'async-publish')]
+
+    const result = await runSimulation(value, 'topic-retention-run')
+    const details = result.nodes.find((node) => node.nodeId === 'topic')!.details
+    expect(Number(details.topicRetainedMessages)).toBe(1)
+    expect(Number(details.topicCapacityExpiredMessages)).toBe(result.summary.generatedRequests - 1)
+    expect(Number(details.topicSubscriptionBacklog)).toBe(2)
+    expect(result.events.some((event) => event.type === 'topic-message-expired' && event.attributes.cause === 'capacity-retention')).toBe(true)
+  })
+
   it('records object reads and writes with successful byte throughput', async () => {
     const value = project('object-path')
     const storage = createRegisteredNode('object-storage', 'objects', { x: 100, y: 0 })

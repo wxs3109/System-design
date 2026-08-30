@@ -177,7 +177,7 @@ describe('order-system contract fixture', () => {
         if (action.kind === 'event-publish') action.brokerNodeId = 'orders-db'
       },
       path: ['definitions', 'interactions', 0, 'actions', 4, 'brokerNodeId'],
-      message: 'Node orders-db must be a queue or stream component.',
+      message: 'Node orders-db must be a queue, stream, or topic component.',
     },
     {
       name: 'workload source component',

@@ -76,6 +76,13 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
   for (const [source, sourceEdges] of outgoing) {
     const synchronousModes = new Set(sourceEdges.filter((edge) => edge.routingMode !== 'async-publish').map((edge) => edge.routingMode))
     if (synchronousModes.size > 1) throw new Error(`Node ${source} mixes synchronous routing modes. Split the behavior into explicit components.`)
+    const node = nodes.get(source)
+    if (node?.type === 'topic') {
+      const subscriptions = sourceEdges.filter((edge) => edge.routingMode === 'async-publish')
+      if (subscriptions.length > node.config.subscriptionCount) {
+        throw new Error(`Topic ${source} has ${subscriptions.length} subscription edges but is configured for ${node.config.subscriptionCount}. Increase subscriptionCount or remove an edge.`)
+      }
+    }
   }
   const operations = project?.schemaVersion === 3 ? compileOperationPlans(project, edges, outgoing) : { phases: [], schedulerWorkloads: new Map(), plans: new Map(), warnings: [] }
   return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies, operations }

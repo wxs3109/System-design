@@ -243,6 +243,44 @@ test('loads log search as a distinct streaming-ingest Search Index system', asyn
   await expect(row.getByText(/index backlog/)).toBeVisible()
 })
 
+test('loads order event fan-out and exposes Topic subscriptions and acknowledgements', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Order event fan-out/ }).click()
+  await expect(page.getByText('5 components')).toBeVisible()
+  await expect(page.getByTestId('rf__node-fulfillment-subscription')).toContainText('Fulfillment subscription')
+  await expect(page.getByTestId('rf__node-email-subscription')).toContainText('Email subscription')
+  await page.getByTestId('rf__node-order-events-topic').dispatchEvent('click')
+  await expect(page.getByLabel('Subscriptions')).toHaveValue('2')
+  await expect(page.getByLabel('Acknowledgement')).toHaveValue('explicit')
+  await expect(page.getByLabel('Retention (ms)')).toHaveValue('60000')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  const row = page.getByRole('row').filter({ hasText: 'Order events topic' })
+  await expect(row.getByText(/fan-out copies/)).toBeVisible()
+  await expect(row.getByText(/acknowledged/)).toBeVisible()
+  await expect(row.getByText(/expired 0/)).toBeVisible()
+})
+
+test('loads incident fan-out and exposes independent Topic retention expiry', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Incident fan-out/ }).click()
+  await expect(page.getByText('6 components')).toBeVisible()
+  await page.getByTestId('rf__node-incident-topic').dispatchEvent('click')
+  await expect(page.getByLabel('Subscriptions')).toHaveValue('3')
+  await expect(page.getByLabel('Delivery batch size')).toHaveValue('10')
+  await expect(page.getByLabel('Retention (ms)')).toHaveValue('250')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  const row = page.getByRole('row').filter({ hasText: 'Incident topic' })
+  await expect(row.getByText(/fan-out copies/)).toBeVisible()
+  await expect(row.getByText(/acknowledged/)).toBeVisible()
+  await expect(row.getByText(/expired [1-9]/)).toBeVisible()
+})
+
 test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({

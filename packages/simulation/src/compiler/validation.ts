@@ -36,6 +36,10 @@ export const validateScenarioForSimulation = (input: unknown): ScenarioValidatio
     if (!edges.some((edge) => edge.sourcePort === 'miss')) errors.push(`CDN ${cdn.name} requires a connected miss path to an origin.`)
     if (!edges.some((edge) => edge.sourcePort === 'hit')) warnings.push(`CDN ${cdn.name} has no connected hit path; cached responses terminate at the CDN node.`)
   }
+  for (const topic of [...enabledNodes.values()].filter((node) => node.type === 'topic')) {
+    const subscriptions = (outgoing.get(topic.id) ?? []).filter((edge) => edge.routingMode === 'async-publish').length
+    if (subscriptions < topic.config.subscriptionCount) warnings.push(`Topic ${topic.name} has ${topic.config.subscriptionCount - subscriptions} offline subscription slot(s); their retained backlog can grow until retention expires.`)
+  }
   const reachable = new Set<string>()
   const visit = (nodeId: string) => { if (reachable.has(nodeId)) return; reachable.add(nodeId); for (const edge of outgoing.get(nodeId) ?? []) visit(edge.target) }
   for (const workload of scenario.workloads) visit(workload.sourceNodeId)

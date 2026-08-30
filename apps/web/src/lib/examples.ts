@@ -293,5 +293,109 @@ export const createLogSearchExample = (): ProjectFile => {
   return projectFileV3Schema.parse(project)
 }
 
+export const createOrderEventFanOutExample = (): ProjectFile => {
+  const project = createEmptyProject('order-event-fan-out')
+  project.name = 'Order event fan-out'
+  project.modelingMode = 'business-aware'
+  const checkout = createRegisteredNode('traffic', 'order-checkouts', { x: 30, y: 180 }, 'order-checkout-load')
+  const orders = createRegisteredNode('service', 'order-api', { x: 290, y: 180 })
+  const topic = createRegisteredNode('topic', 'order-events-topic', { x: 560, y: 180 })
+  const fulfillment = createRegisteredNode('service', 'fulfillment-subscription', { x: 860, y: 70 })
+  const email = createRegisteredNode('service', 'email-subscription', { x: 860, y: 290 })
+  checkout.name = 'Customer checkouts'
+  orders.name = 'Orders API'
+  topic.name = 'Order events topic'
+  fulfillment.name = 'Fulfillment subscription'
+  email.name = 'Email subscription'
+  orders.config = { ...orders.config, replicas: 2, concurrencyPerReplica: 20, serviceTimeMs: 4, jitterMs: 0, errorRate: 0 }
+  topic.config = { ...topic.config, subscriptionCount: 2, maxRetainedMessages: 10_000, retentionMs: 60_000, batchSize: 20, acknowledgement: 'explicit', publishCapacity: 200, publishTimeMs: 1, deliveryTimeMs: 4, jitterMs: 0, maxQueueSize: 10_000, errorRate: 0 }
+  fulfillment.config = { ...fulfillment.config, replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 8, jitterMs: 0, errorRate: 0 }
+  email.config = { ...email.config, replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 12, jitterMs: 0, errorRate: 0 }
+  project.topology.nodes = [checkout, orders, topic, fulfillment, email]
+  project.topology.edges = [
+    connection('checkouts-to-orders', 'order-checkouts', 'order-api'),
+    asyncConnection('orders-to-order-topic', 'order-api', 'order-events-topic'),
+    asyncConnection('order-topic-to-fulfillment', 'order-events-topic', 'fulfillment-subscription'),
+    asyncConnection('order-topic-to-email', 'order-events-topic', 'email-subscription'),
+  ]
+  project.definitions = {
+    schemaVersion: 1,
+    jsonSchemas: [{ id: 'schema.OrderEvent', version: 1, name: 'Order event', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['orderId'], properties: { orderId: { type: 'string' }, status: { type: 'string' } } } }],
+    apis: [{ id: 'order-events-api', version: 1, name: 'Order events API', ownerNodeId: 'order-api', operations: [{ id: 'accept-order', name: 'Accept order', method: 'POST', path: '/orders', request: { schema: { schemaId: 'schema.OrderEvent', schemaVersion: 1 }, estimatedBytes: 768 }, responses: [{ statusCode: '202' }], handlerTimeMs: 4 }] }],
+    dataModels: [], cacheKeys: [],
+    events: [{ id: 'order-accepted', version: 1, name: 'OrderAccepted', payloadSchema: { schemaId: 'schema.OrderEvent', schemaVersion: 1 }, estimatedPayloadBytes: 768, partitionKey: '/orderId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'order-api', consumerNodeIds: ['fulfillment-subscription', 'email-subscription'] }],
+    interactions: [{
+      id: 'order-event-flow', version: 1, name: 'Order event fan-out', entryOperation: { apiId: 'order-events-api', apiVersion: 1, operationId: 'accept-order' },
+      actions: [
+        { id: 'accept-order', kind: 'api-call', dependsOn: [], sourceNodeId: 'order-checkouts', targetNodeId: 'order-api', operation: { apiId: 'order-events-api', apiVersion: 1, operationId: 'accept-order' } },
+        { id: 'publish-order', kind: 'event-publish', dependsOn: ['accept-order'], producerNodeId: 'order-api', brokerNodeId: 'order-events-topic', event: { eventId: 'order-accepted', eventVersion: 1 } },
+        { id: 'consume-fulfillment', kind: 'event-consume', dependsOn: ['publish-order'], consumerNodeId: 'fulfillment-subscription', brokerNodeId: 'order-events-topic', event: { eventId: 'order-accepted', eventVersion: 1 } },
+        { id: 'consume-email', kind: 'event-consume', dependsOn: ['publish-order'], consumerNodeId: 'email-subscription', brokerNodeId: 'order-events-topic', event: { eventId: 'order-accepted', eventVersion: 1 } },
+      ],
+    }],
+  }
+  const experiment = project.experiments[0]!
+  experiment.seed = 'order-event-fan-out'
+  experiment.simulation = { durationSeconds: 4, sampleIntervalMs: 250, maxRequests: 1_000, traceLimit: 100, maxHops: 16 }
+  experiment.workloads = [{ id: 'order-checkout-load', name: 'Compatibility load', sourceNodeId: 'order-checkouts', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 768 }]
+  experiment.operationWorkloads = [{ id: 'order-event-operations', name: 'Completed checkouts', sourceNodeId: 'order-checkouts', phases: [{ id: 'steady', startAtSeconds: 0, durationSeconds: 3, requestsPerSecond: 20, pattern: 'constant' }], operationMix: [{ operation: { apiId: 'order-events-api', apiVersion: 1, operationId: 'accept-order' }, interaction: { interactionId: 'order-event-flow', interactionVersion: 1 }, weight: 1, requestBytes: 768, responseBytes: 128, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 }, valueSizeDistribution: { kind: 'fixed', bytes: 768 } }] }]
+  return projectFileV3Schema.parse(project)
+}
+
+export const createIncidentFanOutExample = (): ProjectFile => {
+  const project = createEmptyProject('incident-fan-out')
+  project.name = 'Incident fan-out'
+  project.modelingMode = 'business-aware'
+  const monitors = createRegisteredNode('traffic', 'incident-monitors', { x: 20, y: 190 }, 'incident-alert-load')
+  const alertManager = createRegisteredNode('service', 'alert-manager', { x: 260, y: 190 })
+  const topic = createRegisteredNode('topic', 'incident-topic', { x: 510, y: 190 })
+  const pager = createRegisteredNode('service', 'pager-subscription', { x: 800, y: 30 })
+  const chat = createRegisteredNode('service', 'chat-subscription', { x: 800, y: 190 })
+  const audit = createRegisteredNode('service', 'audit-subscription', { x: 800, y: 350 })
+  monitors.name = 'Monitoring signals'
+  alertManager.name = 'Alert manager'
+  topic.name = 'Incident topic'
+  pager.name = 'Pager subscription'
+  chat.name = 'Chat subscription'
+  audit.name = 'Audit subscription'
+  alertManager.config = { ...alertManager.config, replicas: 2, concurrencyPerReplica: 20, serviceTimeMs: 2, jitterMs: 0, errorRate: 0 }
+  topic.config = { ...topic.config, subscriptionCount: 3, maxRetainedMessages: 1_000, retentionMs: 250, batchSize: 10, acknowledgement: 'explicit', publishCapacity: 100, publishTimeMs: 1, deliveryTimeMs: 5, jitterMs: 0, maxQueueSize: 1_000, errorRate: 0 }
+  pager.config = { ...pager.config, replicas: 1, concurrencyPerReplica: 4, serviceTimeMs: 5, jitterMs: 0, errorRate: 0 }
+  chat.config = { ...chat.config, replicas: 1, concurrencyPerReplica: 4, serviceTimeMs: 7, jitterMs: 0, errorRate: 0 }
+  audit.config = { ...audit.config, replicas: 1, concurrencyPerReplica: 1, serviceTimeMs: 10, jitterMs: 0, errorRate: 0 }
+  project.topology.nodes = [monitors, alertManager, topic, pager, chat, audit]
+  project.topology.edges = [
+    connection('monitors-to-alert-manager', 'incident-monitors', 'alert-manager'),
+    asyncConnection('alert-manager-to-topic', 'alert-manager', 'incident-topic'),
+    asyncConnection('topic-to-pager', 'incident-topic', 'pager-subscription'),
+    asyncConnection('topic-to-chat', 'incident-topic', 'chat-subscription'),
+    asyncConnection('topic-to-audit', 'incident-topic', 'audit-subscription'),
+  ]
+  project.definitions = {
+    schemaVersion: 1,
+    jsonSchemas: [{ id: 'schema.Incident', version: 1, name: 'Incident', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['incidentId'], properties: { incidentId: { type: 'string' }, severity: { type: 'string' } } } }],
+    apis: [{ id: 'incident-api', version: 1, name: 'Incident API', ownerNodeId: 'alert-manager', operations: [{ id: 'trigger-incident', name: 'Trigger incident', method: 'POST', path: '/incidents', request: { schema: { schemaId: 'schema.Incident', schemaVersion: 1 }, estimatedBytes: 512 }, responses: [{ statusCode: '202' }], handlerTimeMs: 2 }] }],
+    dataModels: [], cacheKeys: [],
+    events: [{ id: 'incident-triggered', version: 1, name: 'IncidentTriggered', payloadSchema: { schemaId: 'schema.Incident', schemaVersion: 1 }, estimatedPayloadBytes: 512, partitionKey: '/incidentId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'alert-manager', consumerNodeIds: ['pager-subscription', 'chat-subscription', 'audit-subscription'] }],
+    interactions: [{
+      id: 'incident-fan-out-flow', version: 1, name: 'Incident fan-out', entryOperation: { apiId: 'incident-api', apiVersion: 1, operationId: 'trigger-incident' },
+      actions: [
+        { id: 'accept-incident', kind: 'api-call', dependsOn: [], sourceNodeId: 'incident-monitors', targetNodeId: 'alert-manager', operation: { apiId: 'incident-api', apiVersion: 1, operationId: 'trigger-incident' } },
+        { id: 'publish-incident', kind: 'event-publish', dependsOn: ['accept-incident'], producerNodeId: 'alert-manager', brokerNodeId: 'incident-topic', event: { eventId: 'incident-triggered', eventVersion: 1 } },
+        { id: 'consume-pager', kind: 'event-consume', dependsOn: ['publish-incident'], consumerNodeId: 'pager-subscription', brokerNodeId: 'incident-topic', event: { eventId: 'incident-triggered', eventVersion: 1 } },
+        { id: 'consume-chat', kind: 'event-consume', dependsOn: ['publish-incident'], consumerNodeId: 'chat-subscription', brokerNodeId: 'incident-topic', event: { eventId: 'incident-triggered', eventVersion: 1 } },
+        { id: 'consume-audit', kind: 'event-consume', dependsOn: ['publish-incident'], consumerNodeId: 'audit-subscription', brokerNodeId: 'incident-topic', event: { eventId: 'incident-triggered', eventVersion: 1 } },
+      ],
+    }],
+  }
+  const experiment = project.experiments[0]!
+  experiment.seed = 'incident-fan-out'
+  experiment.simulation = { durationSeconds: 3, sampleIntervalMs: 100, maxRequests: 500, traceLimit: 100, maxHops: 16 }
+  experiment.workloads = [{ id: 'incident-alert-load', name: 'Compatibility load', sourceNodeId: 'incident-monitors', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 512 }]
+  experiment.operationWorkloads = [{ id: 'incident-operations', name: 'Triggered incidents', sourceNodeId: 'incident-monitors', phases: [{ id: 'steady', startAtSeconds: 0, durationSeconds: 2, requestsPerSecond: 10, pattern: 'constant' }], operationMix: [{ operation: { apiId: 'incident-api', apiVersion: 1, operationId: 'trigger-incident' }, interaction: { interactionId: 'incident-fan-out-flow', interactionVersion: 1 }, weight: 1, requestBytes: 512, responseBytes: 128, keyDistribution: { kind: 'hotspot', keySpaceSize: 100_000, hotKeyCount: 10, hotTrafficFraction: 0.4 }, valueSizeDistribution: { kind: 'fixed', bytes: 512 } }] }]
+  experiment.faults = [{ id: 'audit-outage', type: 'node-down', target: { kind: 'node', id: 'audit-subscription' }, startAtSeconds: 0, durationSeconds: 3, enabled: true }]
+  return projectFileV3Schema.parse(project)
+}
+
 /** A normal ProjectFile v3 fixture: the editor and runtime contain no order-specific branches. */
 export const createOrderSystemExample = (): ProjectFile => createOrderSystemContractFixture()

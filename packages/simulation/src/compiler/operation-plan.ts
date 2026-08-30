@@ -152,6 +152,7 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
   const plans = new Map<string, CompiledOperationPlan>()
   const warnings = new Set<string>()
   const enabledNodeIds = new Set(project.topology.nodes.filter((node) => !node.disabled).map((node) => node.id))
+  const topologyNodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
   const requireEnabledNode = (nodeId: string, interactionId: string, actionId: string, role: 'source' | 'target') => {
     if (!enabledNodeIds.has(nodeId)) throw new Error(`Interaction ${interactionId} action ${actionId} has a disabled or missing ${role} node ${nodeId}.`)
   }
@@ -225,6 +226,14 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
       } else if (action.kind === 'event-publish' || action.kind === 'event-consume') {
         const event = events.get(referenceKey(action.event.eventId, action.event.eventVersion))!
         compiled.event = { operation: action.kind === 'event-publish' ? 'publish' : 'consume', eventId: referenceKey(event.id, event.version), estimatedPayloadBytes: event.estimatedPayloadBytes, delivery: event.delivery, ordering: event.ordering }
+        if (action.kind === 'event-consume' && topologyNodes.get(action.brokerNodeId)?.type === 'topic') {
+          const subscriptionEdges = outgoing.get(action.brokerNodeId)?.filter((edge) => edge.routingMode === 'async-publish') ?? []
+          const targetEdge = path[0]
+          const subscriptionIndex = targetEdge ? subscriptionEdges.findIndex((edge) => edge.id === targetEdge.id) : -1
+          if (subscriptionIndex < 0) throw new Error(`Interaction ${interaction.id} action ${action.id} does not map to a Topic subscription edge.`)
+          const duplicate = [...actionById.values()].find((candidate) => candidate.event?.operation === 'consume' && candidate.sourceNodeId === action.brokerNodeId && candidate.edgeIds[0] === targetEdge!.id)
+          if (duplicate) throw new Error(`Interaction ${interaction.id} maps Topic consumer actions ${duplicate.id} and ${action.id} to the same subscription edge ${targetEdge!.id}.`)
+        }
       }
       actionById.set(action.id, compiled)
       executionContextByActionId.set(action.id, executionContextNodeId)

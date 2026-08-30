@@ -317,7 +317,7 @@ const validateBusinessReferences = (project: {
       } else {
         const brokerNodeId = action.brokerNodeId
         const broker = requireNode(brokerNodeId, [...path, 'brokerNodeId'])
-        if (broker && broker.type !== 'queue' && broker.type !== 'stream') addReferenceIssue(context, [...path, 'brokerNodeId'], `Node ${brokerNodeId} must be a queue or stream component.`)
+        if (broker && broker.type !== 'queue' && broker.type !== 'stream' && broker.type !== 'topic') addReferenceIssue(context, [...path, 'brokerNodeId'], `Node ${brokerNodeId} must be a queue, stream, or topic component.`)
         const eventKey = referenceKey(action.event.eventId, action.event.eventVersion)
         const event = events.get(eventKey)
         if (!event) addReferenceIssue(context, [...path, 'event'], `Unknown event contract: ${eventKey}`)

@@ -47,6 +47,9 @@ export interface RequestState {
   searchResultCount?: number
   searchStale?: boolean
   searchVisibilityLagMs?: number
+  topicSubscriptionId?: string
+  topicMessageId?: number
+  asyncDeliveryDelayMs?: number
 }
 
 export interface RequestGroup {

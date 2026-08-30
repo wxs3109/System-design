@@ -17,6 +17,7 @@ export const componentTypeSchema = z.enum([
   'cdn',
   'search-index',
   'stream',
+  'topic',
   'object-storage',
   'database',
 ])
@@ -160,6 +161,20 @@ export const streamConfigSchema = z.object({
   errorRate: probabilitySchema.default(0),
 })
 
+export const topicConfigSchema = z.object({
+  subscriptionCount: positiveIntegerSchema.max(10_000).default(2),
+  maxRetainedMessages: positiveIntegerSchema.max(100_000_000).default(1_000_000),
+  retentionMs: positiveSchema.max(31_536_000_000).default(86_400_000),
+  batchSize: positiveIntegerSchema.max(1_000_000).default(100),
+  acknowledgement: z.enum(['auto', 'explicit']).default('explicit'),
+  publishCapacity: positiveIntegerSchema.max(1_000_000).default(1_000),
+  publishTimeMs: positiveSchema.default(2),
+  deliveryTimeMs: positiveSchema.default(10),
+  jitterMs: nonNegativeSchema.default(1),
+  maxQueueSize: z.number().int().min(0).max(100_000_000).default(1_000_000),
+  errorRate: probabilitySchema.default(0),
+})
+
 export const objectStorageConfigSchema = z.object({
   maxConcurrentRequests: positiveIntegerSchema.max(1_000_000).default(1_000),
   defaultObjectSizeBytes: positiveIntegerSchema.max(1_000_000_000_000).default(1_048_576),
@@ -244,6 +259,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('stream'),
     config: streamConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('topic'),
+    config: topicConfigSchema,
   }),
   z.object({
     ...commonNodeFields,
@@ -408,6 +428,7 @@ export type ComponentNode = z.infer<typeof componentNodeSchema>
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>
 export type CdnConfig = z.infer<typeof cdnConfigSchema>
 export type SearchIndexConfig = z.infer<typeof searchIndexConfigSchema>
+export type TopicConfig = z.infer<typeof topicConfigSchema>
 export type Connection = z.infer<typeof connectionSchema>
 export type Workload = z.infer<typeof workloadSchema>
 export type Fault = z.infer<typeof faultSchema>

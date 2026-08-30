@@ -2,6 +2,7 @@ import type { ComponentNode, EventStatus, RuntimeEventType } from '@system-desig
 import type { CompiledOperationAction } from '../compiler/operation-plan'
 import { CdnState, ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState } from './data-state'
 import { SearchIndexState, type SearchRefreshResult } from './search-state'
+import { TopicState, type TopicExpiredDelivery, type TopicMessage } from './topic-state'
 
 export interface StatefulRequest {
   id: number
@@ -21,6 +22,9 @@ export interface StatefulRequest {
   searchStale?: boolean
   searchVisibilityLagMs?: number
   incomingRoutingMode?: 'weighted-one' | 'fan-out' | 'async-publish'
+  incomingEdgeId?: string
+  topicSubscriptionId?: string
+  topicMessageId?: number
 }
 
 export interface ComponentDomainEvent {
@@ -36,13 +40,16 @@ export interface ComponentStateSnapshot {
 }
 
 export interface ComponentStateDecision {
-  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'searchCandidateCount' | 'searchFanOut' | 'searchResultCount' | 'searchStale' | 'searchVisibilityLagMs' | 'bytes'>>
+  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'searchCandidateCount' | 'searchFanOut' | 'searchResultCount' | 'searchStale' | 'searchVisibilityLagMs' | 'topicSubscriptionId' | 'topicMessageId' | 'bytes'>>
   events?: ComponentDomainEvent[]
 }
+
+export interface ComponentDeliveryDecision extends ComponentStateDecision { deliver: boolean }
 
 export interface ComponentStateRuntime {
   begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision
   complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
+  prepareDelivery?(request: StatefulRequest, subscriptionId: string, nowMs: number): ComponentDeliveryDecision
   dependencyComplete?(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
   snapshot(nowMs: number): ComponentStateSnapshot
   outcome?(request: StatefulRequest): 'hit' | 'miss' | undefined
@@ -316,6 +323,100 @@ class StreamRuntime implements ComponentStateRuntime {
   }
 }
 
+class TopicRuntime implements ComponentStateRuntime {
+  private readonly topic
+  private readonly subscriptionIds
+  private readonly pending = new Map<string, { key: string; bytes: number }>()
+  private readonly inFlight = new Map<string, Map<string, number[]>>()
+
+  constructor(private readonly node: Extract<ComponentNode, { type: 'topic' }>) {
+    this.subscriptionIds = Array.from({ length: node.config.subscriptionCount }, (_, index) => `subscription:${index}`)
+    this.topic = new TopicState({ subscriptionIds: this.subscriptionIds, retentionMs: node.config.retentionMs, maxRetainedMessages: node.config.maxRetainedMessages })
+  }
+
+  begin(request: StatefulRequest, nowMs: number): ComponentStateDecision {
+    const key = request.key ?? (request.operationAction?.event ? `${request.operationAction.event.eventId}:${request.id}` : `message:${request.id}`)
+    this.pending.set(token(request), { key, bytes: request.bytes })
+    return { patch: { key, outgoingPort: 'publish' }, events: this.expirationEvents(this.topic.expire(nowMs)) }
+  }
+
+  complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[] {
+    const requestToken = token(request)
+    const pending = this.pending.get(requestToken)
+    this.pending.delete(requestToken)
+    if (!pending || !success) return []
+    const published = this.topic.publish(pending.key, pending.bytes, nowMs)
+    return [
+      ...this.expirationEvents(published.expired),
+      { type: 'topic-message-published', status: 'ok', bytes: pending.bytes, attributes: { messageId: published.message.id, key: pending.key, fanOut: published.fanOut, expiresAtMs: published.message.expiresAtMs } },
+    ]
+  }
+
+  prepareDelivery(request: StatefulRequest, subscriptionId: string, nowMs: number): ComponentDeliveryDecision {
+    const deliveryToken = this.deliveryToken(request, subscriptionId)
+    if (this.inFlight.has(deliveryToken)) return { deliver: false }
+    const delivery = this.topic.deliver(subscriptionId, this.node.config.batchSize, nowMs)
+    const ids = delivery.deliveries.map((item) => item.message.id)
+    const deliveryBytes = delivery.deliveries.reduce((total, item) => total + item.message.bytes, 0)
+    const events: ComponentDomainEvent[] = [
+      ...this.expirationEvents(delivery.expired),
+      ...delivery.deliveries.map((item) => this.deliveryEvent(item.subscriptionId, item.message, item.attempt)),
+    ]
+    if (ids.length === 0) return { deliver: false, events }
+    if (this.node.config.acknowledgement === 'auto') {
+      const acknowledged = this.topic.acknowledge(subscriptionId, ids, nowMs)
+      events.push(...this.expirationEvents(acknowledged.expired), ...acknowledged.acknowledged.map((message) => this.acknowledgementEvent(subscriptionId, message)))
+    } else this.inFlight.set(deliveryToken, new Map([[subscriptionId, ids]]))
+    return { deliver: true, patch: { topicSubscriptionId: subscriptionId, topicMessageId: ids[0]!, bytes: deliveryBytes }, events }
+  }
+
+  dependencyComplete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[] {
+    const subscriptionId = request.topicSubscriptionId
+    if (!subscriptionId) return []
+    const requestToken = this.deliveryToken(request, subscriptionId)
+    const batches = this.inFlight.get(requestToken)
+    const messageIds = batches?.get(subscriptionId)
+    if (!messageIds || messageIds.length === 0) return []
+    batches!.delete(subscriptionId)
+    if (batches!.size === 0) this.inFlight.delete(requestToken)
+    if (!success) return this.expirationEvents(this.topic.release(subscriptionId, messageIds, nowMs))
+    const acknowledged = this.topic.acknowledge(subscriptionId, messageIds, nowMs)
+    return [...this.expirationEvents(acknowledged.expired), ...acknowledged.acknowledged.map((message) => this.acknowledgementEvent(subscriptionId, message))]
+  }
+
+  snapshot(nowMs: number): ComponentStateSnapshot {
+    const value = this.topic.snapshot(nowMs)
+    return {
+      metrics: {
+        topicPublished: value.published, topicPublishedBytes: value.publishedBytes, topicFanOutCopies: value.fanOutCopies, topicRetainedMessages: value.retainedMessages,
+        topicSubscriptionBacklog: value.totalBacklog, topicMaximumSubscriptionBacklog: value.maximumSubscriptionBacklog, topicDelivered: value.delivered,
+        topicAcknowledged: value.acknowledged, topicExpiredMessages: value.expiredMessages, topicTimeExpiredMessages: value.timeExpiredMessages,
+        topicCapacityExpiredMessages: value.capacityExpiredMessages, topicExpiredDeliveries: value.expiredDeliveries,
+        ...indexedMetrics('subscriptionBacklog', value.subscriptions.map((subscription) => subscription.backlog)),
+        ...indexedMetrics('subscriptionInFlight', value.subscriptions.map((subscription) => subscription.inFlight)),
+        ...indexedMetrics('subscriptionOldestAgeMs', value.subscriptions.map((subscription) => subscription.oldestUnacknowledgedAgeMs)),
+      },
+      events: this.expirationEvents(value.expired),
+    }
+  }
+
+  private deliveryEvent(subscriptionId: string, message: TopicMessage, attempt: number): ComponentDomainEvent {
+    return { type: 'topic-message-delivered', status: 'ok', bytes: message.bytes, attributes: { subscriptionId, messageId: message.id, key: message.key, attempt } }
+  }
+
+  private acknowledgementEvent(subscriptionId: string, message: TopicMessage): ComponentDomainEvent {
+    return { type: 'topic-message-acknowledged', status: 'ok', bytes: message.bytes, attributes: { subscriptionId, messageId: message.id, key: message.key } }
+  }
+
+  private expirationEvents(expired: readonly TopicExpiredDelivery[]): ComponentDomainEvent[] {
+    return expired.map(({ subscriptionId, message, wasInFlight, cause }) => ({ type: 'topic-message-expired', status: 'ok', bytes: message.bytes, attributes: { subscriptionId, messageId: message.id, key: message.key, wasInFlight, cause } }))
+  }
+
+  private deliveryToken(request: StatefulRequest, subscriptionId: string) {
+    return `${request.id}:${subscriptionId}`
+  }
+}
+
 class ObjectStorageRuntime implements ComponentStateRuntime {
   private readonly storage = new ObjectStorageState()
   private readonly pending = new Map<string, { operation: 'read' | 'write'; bytes: number }>()
@@ -384,6 +485,7 @@ export const createComponentStateRuntime = (node: ComponentNode): ComponentState
     case 'cdn': return new CdnRuntime(node)
     case 'search-index': return new SearchIndexRuntime(node)
     case 'stream': return new StreamRuntime(node)
+    case 'topic': return new TopicRuntime(node)
     case 'object-storage': return new ObjectStorageRuntime(node)
     case 'database': return node.componentVersion === 2 ? new DatabaseRuntime(node) : undefined
     default: return undefined
