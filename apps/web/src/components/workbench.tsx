@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type OnConnect } from '@xyflow/react'
-import { builtInComponentTypes, componentRegistry, type ConfigField } from '@system-design/components'
-import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
+import { builtInComponentTypes, componentRegistry, policyRegistry, type ConfigField } from '@system-design/components'
+import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { ChevronDown, CircleAlert, Download, FlaskConical, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Square, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Square, Trash2, Upload } from 'lucide-react'
 import { ComponentNode, componentIcons } from './component-node'
 import { MetricChart } from './metric-chart'
 import { createAsyncExample, createDirectExample } from '@/lib/examples'
@@ -15,11 +15,11 @@ import { projectToEdges, projectToNodes, useWorkbenchStore, type ProjectNode } f
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
 
-function Field({ label, value, min = 0, step = 1, onChange }: { label: string; value: number; min?: number; step?: number; onChange: (value: number) => void }) {
+function Field({ label, value, min = 0, max, step = 1, onChange }: { label: string; value: number; min?: number; max?: number; step?: number; onChange: (value: number) => void }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <input type="number" min={min} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <input type="number" min={min} {...(max === undefined ? {} : { max })} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   )
 }
@@ -44,9 +44,59 @@ function PaletteItem({ type, onAdd }: { type: ComponentType; onAdd: () => void }
 }
 
 function ConfigFieldControl({ field, value, onChange }: { field: ConfigField; value: unknown; onChange: (value: number | string) => void }) {
-  if (field.kind === 'number') return <Field label={field.label} value={Number(value)} {...(field.min === undefined ? {} : { min: field.min })} {...(field.step === undefined ? {} : { step: field.step })} onChange={onChange} />
+  if (field.kind === 'number') return <Field label={field.label} value={Number(value)} {...(field.min === undefined ? {} : { min: field.min })} {...(field.max === undefined ? {} : { max: field.max })} {...(field.step === undefined ? {} : { step: field.step })} onChange={onChange} />
   if (field.kind === 'select') return <label className="field"><span>{field.label}</span><select value={String(value)} onChange={(event) => onChange(event.target.value)}>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
   return <label className="field"><span>{field.label}</span><input value={String(value)} onChange={(event) => onChange(event.target.value)} /></label>
+}
+
+function PolicyEditor({ policy, index, count }: { policy: PolicyAttachment; index: number; count: number }) {
+  const updatePolicy = useWorkbenchStore((state) => state.updatePolicy)
+  const movePolicy = useWorkbenchStore((state) => state.movePolicy)
+  const deletePolicy = useWorkbenchStore((state) => state.deletePolicy)
+  const manifest = policyRegistry.get(policy.type, policy.version)
+  return (
+    <section className="policy-editor" aria-label={`${manifest.label} policy`}>
+      <div className="policy-editor__heading">
+        <label className="policy-toggle"><input type="checkbox" checked={policy.enabled} onChange={(event) => updatePolicy(policy.id, { enabled: event.target.checked })} /><span>{manifest.label}</span></label>
+        <div className="policy-actions">
+          <button type="button" onClick={() => movePolicy(policy.id, -1)} disabled={index === 0} aria-label={`Move ${manifest.label} earlier`}><ArrowUp size={13} /></button>
+          <button type="button" onClick={() => movePolicy(policy.id, 1)} disabled={index === count - 1} aria-label={`Move ${manifest.label} later`}><ArrowDown size={13} /></button>
+          <button type="button" className="danger" onClick={() => deletePolicy(policy.id)} aria-label={`Remove ${manifest.label}`}><Trash2 size={13} /></button>
+        </div>
+      </div>
+      <p>{manifest.description}</p>
+      <div className={policy.enabled ? 'policy-fields' : 'policy-fields is-disabled'}>
+        {manifest.configFields.map((field) => <ConfigFieldControl key={field.key} field={field} value={policy.config[field.key]} onChange={(value) => updatePolicy(policy.id, { config: { [field.key]: value } })} />)}
+      </div>
+    </section>
+  )
+}
+
+function PolicySection({ target }: { target: PolicyAttachment['target'] }) {
+  const allPolicies = useWorkbenchStore((state) => state.project.topology.policies)
+  const policies = useMemo(() => allPolicies
+    .filter((policy) => policy.target.kind === target.kind && policy.target.id === target.id)
+    .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id)), [allPolicies, target.id, target.kind])
+  const attachPolicy = useWorkbenchStore((state) => state.attachPolicy)
+  const manifests = policyRegistry.list().filter((manifest) => manifest.targets.includes(target.kind))
+  const available = manifests.filter((manifest) => !manifest.singletonPerTarget || !policies.some((policy) => policy.type === manifest.type && policy.version === manifest.version))
+  const [selection, setSelection] = useState('')
+  const add = () => {
+    const manifest = available.find((candidate) => `${candidate.type}@${candidate.version}` === selection)
+    if (!manifest) return
+    attachPolicy(target, manifest.type, manifest.version)
+    setSelection('')
+  }
+  return (
+    <div className="policy-section">
+      <div className="policy-section__heading"><span>Reliability policies</span><small>{policies.length ? `${policies.length} attached · evaluated top to bottom` : 'No policies attached'}</small></div>
+      {policies.map((policy, index) => <PolicyEditor key={policy.id} policy={policy} index={index} count={policies.length} />)}
+      <div className="policy-add">
+        <label className="field"><span>Add policy</span><select aria-label={`Policy for selected ${target.kind}`} value={selection} disabled={available.length === 0} onChange={(event) => setSelection(event.target.value)}><option value="">{available.length ? 'Choose a policy…' : 'All available policies attached'}</option>{available.map((manifest) => <option key={`${manifest.type}@${manifest.version}`} value={`${manifest.type}@${manifest.version}`}>{manifest.label}</option>)}</select></label>
+        <button type="button" className="button" disabled={!selection || available.length === 0} onClick={add}><Plus size={14} /> Add</button>
+      </div>
+    </div>
+  )
 }
 
 function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: ProjectConnection | undefined }) {
@@ -64,6 +114,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
         <label className="field"><span>Routing mode</span><select value={edge.routingMode} disabled={asynchronous} onChange={(event) => updateEdge({ routingMode: event.target.value as 'weighted-one' | 'fan-out' })}>{asynchronous ? <option value="async-publish">Async publish</option> : <><option value="weighted-one">Weighted one-of</option><option value="fan-out">Fan-out</option></>}</select></label>
         {edge.routingMode === 'weighted-one' ? <Field label="Routing weight" value={edge.weight} min={0.001} step={0.1} onChange={(weight) => updateEdge({ weight })} /> : null}
         <p className="property-help">Routing is applied to every connection from the same output port.</p>
+        <PolicySection key={`edge:${edge.id}`} target={{ kind: 'edge', id: edge.id }} />
       </div>
     )
   }
@@ -81,6 +132,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
         <label className="field"><span>Arrival pattern</span><select value={workload.pattern} onChange={(event) => updateWorkload({ pattern: event.target.value as 'constant' | 'poisson' })}><option value="poisson">Poisson</option><option value="constant">Constant</option></select></label>
       </> : null}
       {manifest.configFields.map((field) => <ConfigFieldControl key={field.key} field={field} value={(node.config as Record<string, unknown>)[field.key]} onChange={(value) => setConfig(field.key, value)} />)}
+      <PolicySection key={`node:${node.id}`} target={{ kind: 'node', id: node.id }} />
     </div>
   )
 }
@@ -124,7 +176,8 @@ function WorkbenchInner() {
   const clientRef = useRef<SimulationWorkerClient | null>(null)
   const [exampleOpen, setExampleOpen] = useState(false)
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
-  const nodes = useMemo(() => projectToNodes(project).map((node) => ({ ...node, selected: node.id === selectedNodeId })), [project, selectedNodeId])
+  const topologyNodes = project.topology.nodes
+  const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId })), [topologyNodes, selectedNodeId])
   const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId })), [project, selectedEdgeId])
 
   useEffect(() => () => clientRef.current?.dispose(), [])

@@ -78,6 +78,35 @@ describe('explicit routing modes', () => {
     expect(result.events.some((event) => event.nodeId === 'left' || event.nodeId === 'right')).toBe(true)
   })
 
+  it('releases backpressure gates after every hop in an asynchronous chain', async () => {
+    const project = routingProject('weighted-one')
+    project.topology.nodes = [
+      project.topology.nodes[0]!,
+      createRegisteredNode('service', 'producer', { x: 200, y: 0 }),
+      createRegisteredNode('queue', 'relay', { x: 400, y: 0 }),
+      createRegisteredNode('queue', 'consumer', { x: 600, y: 0 }),
+    ]
+    project.topology.edges = [
+      { id: 'entry', source: 'traffic', target: 'producer', sourcePort: 'out', targetPort: 'in', weight: 1, routingMode: 'weighted-one', sourceSemantic: 'request', targetSemantic: 'request' },
+      { id: 'publish', source: 'producer', target: 'relay', sourcePort: 'publish', targetPort: 'consume', weight: 1, routingMode: 'async-publish', sourceSemantic: 'publish', targetSemantic: 'consume' },
+      { id: 'forward', source: 'relay', target: 'consumer', sourcePort: 'publish', targetPort: 'consume', weight: 1, routingMode: 'async-publish', sourceSemantic: 'publish', targetSemantic: 'consume' },
+    ]
+    project.topology.policies = [
+      { id: 'publish-pressure', type: 'backpressure', version: 1, target: { kind: 'edge', id: 'publish' }, order: 0, enabled: true, config: { maxInFlight: 1, overflow: 'reject' } },
+      { id: 'forward-pressure', type: 'backpressure', version: 1, target: { kind: 'edge', id: 'forward' }, order: 0, enabled: true, config: { maxInFlight: 1, overflow: 'reject' } },
+    ]
+    for (const node of project.topology.nodes.filter((candidate) => candidate.type === 'queue')) {
+      node.config = { ...node.config, consumers: 1, deliveryTimeMs: 1, jitterMs: 0 }
+    }
+    project.experiments[0]!.workloads[0] = { ...project.experiments[0]!.workloads[0]!, requestsPerSecond: 10, durationSeconds: 1 }
+
+    const result = await runSimulation(project, 'async-chain-backpressure')
+    expect(result.summary.completedRequests).toBe(result.summary.generatedRequests)
+    expect(result.events.filter((event) => event.type === 'message-acknowledged' && event.edgeId === 'publish')).toHaveLength(result.summary.generatedRequests)
+    expect(result.events.filter((event) => event.type === 'message-acknowledged' && event.edgeId === 'forward')).toHaveLength(result.summary.generatedRequests)
+    expect(result.events.some((event) => event.reason === 'backpressure')).toBe(false)
+  })
+
   it('replays ProjectFile v2 events deterministically for a fixed run id and seed', async () => {
     const project = routingProject('weighted-one')
     const [first, second] = await Promise.all([runSimulation(project, 'project-replay'), runSimulation(structuredClone(project), 'project-replay')])

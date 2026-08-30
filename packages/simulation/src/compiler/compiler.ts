@@ -1,6 +1,7 @@
 import { parseProjectFile, projectToScenario, scenarioSchema, type ComponentNode, type Connection, type PortSemantic, type ProjectConnection, type ProjectFileV2, type RoutingMode, type Scenario } from '@system-design/model'
 import { arePortSemanticsCompatible, componentRegistry } from '@system-design/components'
 import { getNodeBehavior } from '../components/behavior'
+import { compilePolicies, type CompiledPolicy } from '../policies/compiler'
 
 export type SimulationInput = Scenario | ProjectFileV2
 export interface CompiledConnection {
@@ -21,6 +22,7 @@ export interface CompiledScenario {
   nodes: Map<string, ComponentNode>
   outgoing: Map<string, CompiledConnection[]>
   edges: CompiledConnection[]
+  policies: Map<string, CompiledPolicy[]>
 }
 
 const legacyConnection = (edge: Connection): CompiledConnection => ({ ...edge, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
@@ -34,6 +36,7 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
   let scenario: Scenario
   let edges: CompiledConnection[]
   let experimentId: string
+  let policies = new Map<string, CompiledPolicy[]>()
   if (version === 2) {
     const project = parseProjectFile(input)
     for (const edge of project.topology.edges) {
@@ -51,6 +54,7 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
     scenario = projectToScenario(project)
     edges = project.topology.edges.map(projectConnection)
     experimentId = project.activeExperimentId
+    policies = compilePolicies(project.topology.policies)
   } else {
     scenario = scenarioSchema.parse(input)
     edges = scenario.edges.map(legacyConnection)
@@ -69,7 +73,7 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
     const synchronousModes = new Set(sourceEdges.filter((edge) => edge.routingMode !== 'async-publish').map((edge) => edge.routingMode))
     if (synchronousModes.size > 1) throw new Error(`Node ${source} mixes synchronous routing modes. Split the behavior into explicit components.`)
   }
-  return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges }
+  return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies }
 }
 
 export const compileScenario = (input: unknown): CompiledScenario => compileSimulationInput(input)

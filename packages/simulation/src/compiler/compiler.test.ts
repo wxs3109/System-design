@@ -26,4 +26,18 @@ describe('generic project compiler', () => {
     project.topology.edges[0] = { ...project.topology.edges[0]!, id: 'mismatch', sourcePort: 'out', targetPort: 'consume' }
     expect(() => compileSimulationInput(project)).toThrow('semantics do not match')
   })
+
+  it('validates and orders policy attachments through the registry', () => {
+    const project = createEmptyProject('policies')
+    project.topology.nodes = [createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }), createRegisteredNode('service', 'service', { x: 100, y: 0 })]
+    project.experiments[0]!.workloads = [{ id: 'load', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 1 }]
+    project.topology.edges = [{ id: 'edge', source: 'traffic', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' }]
+    project.topology.policies = [
+      { id: 'timeout', type: 'timeout', version: 1, target: { kind: 'edge', id: 'edge' }, order: 1, enabled: true, config: { timeoutMs: 20 } },
+      { id: 'retry', type: 'retry', version: 1, target: { kind: 'edge', id: 'edge' }, order: 0, enabled: true, config: { maxAttempts: 2, backoff: 'exponential', baseDelayMs: 50, maxDelayMs: 2_000, jitterRatio: 0 } },
+    ]
+    expect(compileSimulationInput(project).policies.get('edge:edge')?.map((policy) => policy.type)).toEqual(['retry', 'timeout'])
+    project.topology.policies[0]!.config = { timeoutMs: -1 }
+    expect(() => compileSimulationInput(project)).toThrow()
+  })
 })

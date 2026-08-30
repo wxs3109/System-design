@@ -48,4 +48,12 @@ describe('scenario schema', () => {
     expect(canConnect(traffic, service).valid).toBe(true)
     expect(canConnect(service, traffic)).toMatchObject({ valid: false })
   })
+
+  it('round-trips a configured Load Balancer node', () => {
+    const loadBalancer = createNode('load-balancer', 'lb', { x: 100, y: 50 })
+    if (loadBalancer.type !== 'load-balancer') throw new Error('Expected a Load Balancer node.')
+    loadBalancer.config.algorithm = 'health-aware'
+    loadBalancer.config.failureThreshold = 3
+    expect(scenarioSchema.shape.nodes.element.parse(loadBalancer)).toEqual(loadBalancer)
+  })
 })

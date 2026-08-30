@@ -1,4 +1,6 @@
 export * from './engine'
+export * from './policies/delivery'
+export * from './policies/reliability'
 export * from './protocol'
 export * from './compiler/compiler'
 export * from './compiler/validation'

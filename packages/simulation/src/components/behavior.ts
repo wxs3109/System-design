@@ -21,6 +21,10 @@ const behaviors = [
     baseServiceTimeMs: (node, request) => node.config.latencyMs + (request.bytes * 8) / (node.config.bandwidthMbps * 1_000),
     jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.packetLossRate,
   }),
+  defineBehavior<Extract<ComponentNode, { type: 'load-balancer' }>>({
+    type: 'load-balancer', capacity: (node) => node.config.capacity, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node) => node.config.routingTimeMs, jitterMs: () => 0, intrinsicErrorRate: () => 0,
+  }),
   defineBehavior<Extract<ComponentNode, { type: 'service' }>>({
     type: 'service', capacity: (node) => node.config.replicas * node.config.concurrencyPerReplica, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node) => node.config.serviceTimeMs, jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,

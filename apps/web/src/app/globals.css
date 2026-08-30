@@ -78,6 +78,9 @@ button { color: inherit; }
 .component-node strong { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .component-node span { color: var(--node-color); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-top: 2px; }
 .component-node small { color: var(--muted); font-size: 8px; margin-top: 5px; white-space: nowrap; }
+.component-node__policies { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 7px; }
+.component-node__policies span { max-width: 105px; margin: 0; padding: 2px 5px; color: #bae6fd; background: rgba(103, 232, 249, .08); border: 1px solid rgba(103, 232, 249, .22); border-radius: 999px; font-size: 6px; line-height: 1.2; letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.component-node__policies span.is-disabled { color: var(--muted); background: transparent; border-color: var(--border-bright); text-decoration: line-through; }
 .component-node .react-flow__handle { width: 9px; height: 9px; background: #0c131f; border: 2px solid var(--node-color); }
 .canvas-empty { margin-top: 80px; width: 300px; display: flex; flex-direction: column; align-items: center; text-align: center; pointer-events: none; }
 .canvas-empty > span { width: 46px; height: 46px; display: grid; place-items: center; color: var(--cyan); border: 1px dashed #325062; border-radius: 12px; background: rgba(103, 232, 249, .04); }
@@ -114,6 +117,26 @@ button { color: inherit; }
 .field input:focus, .field select:focus { border-color: var(--cyan-deep); box-shadow: 0 0 0 2px rgba(8, 145, 178, .15); }
 .field select:disabled { color: var(--muted); cursor: not-allowed; }
 .property-help { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.policy-section { margin-top: 4px; padding-top: 13px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.policy-section__heading { display: flex; flex-direction: column; gap: 3px; }
+.policy-section__heading span { color: var(--muted-bright); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+.policy-section__heading small { color: var(--muted); font-size: 8px; }
+.policy-editor { padding: 9px; background: #0e1622; border: 1px solid var(--border); border-radius: 7px; }
+.policy-editor__heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.policy-toggle { min-width: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.policy-toggle input { accent-color: var(--cyan); }
+.policy-toggle span { overflow: hidden; color: var(--text); font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.policy-actions { display: flex; gap: 2px; }
+.policy-actions button { width: 23px; height: 23px; display: grid; place-items: center; padding: 0; color: var(--muted-bright); background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+.policy-actions button:hover:not(:disabled) { background: #182436; border-color: var(--border); }
+.policy-actions button.danger { color: var(--danger); }
+.policy-actions button:disabled { color: #3c485a; cursor: default; }
+.policy-editor > p { margin: 7px 0; color: var(--muted); font-size: 8px; line-height: 1.4; }
+.policy-fields { display: flex; flex-direction: column; gap: 7px; }
+.policy-fields.is-disabled { opacity: .45; pointer-events: none; }
+.policy-add { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 6px; }
+.policy-add .button { height: 31px; }
+.policy-add .button:disabled { cursor: default; }
 .run-settings { border-top: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 10px; }
 .run-settings .panel-header { margin: 0 0 3px; }
 

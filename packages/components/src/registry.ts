@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { Fault, PortSemantic, Position, ProjectComponentNode } from '@system-design/model'
+import type { Fault, PolicyAttachment, PortSemantic, Position, ProjectComponentNode } from '@system-design/model'
 
 export type PortDirection = 'input' | 'output'
 
@@ -44,7 +44,7 @@ export interface ComponentManifest<TConfig extends Record<string, unknown> = Rec
   version: number
   label: string
   description: string
-  category: 'traffic' | 'network' | 'compute' | 'data' | 'async'
+  category: 'traffic' | 'network' | 'routing' | 'compute' | 'data' | 'async'
   iconToken: string
   color: string
   configSchema: z.ZodType<TConfig>
@@ -150,6 +150,7 @@ export interface PolicyManifest<TConfig extends Record<string, unknown> = Record
   defaultConfig: TConfig
   configFields: readonly ConfigField[]
   runtimeBehavior: string
+  singletonPerTarget?: boolean
 }
 
 export class PolicyRegistry {
@@ -160,6 +161,8 @@ export class PolicyRegistry {
   }
 
   register<TConfig extends Record<string, unknown>>(policy: PolicyManifest<TConfig>) {
+    if (!Number.isInteger(policy.version) || policy.version < 1) throw new Error(`Invalid policy version for ${policy.type}.`)
+    if (policy.targets.length === 0) throw new Error(`Policy ${policy.type} must support at least one target kind.`)
     const key = manifestKey(policy.type, policy.version)
     if (this.policies.has(key)) throw new Error(`Policy ${key} is already registered.`)
     policy.configSchema.parse(policy.defaultConfig)
@@ -175,6 +178,31 @@ export class PolicyRegistry {
 
   list(): PolicyManifest[] {
     return [...this.policies.values()]
+  }
+
+  validateAttachment(attachment: PolicyAttachment): PolicyAttachment {
+    const manifest = this.get(attachment.type, attachment.version)
+    if (!manifest.targets.includes(attachment.target.kind)) {
+      throw new Error(`Policy ${attachment.type}@${attachment.version} cannot target ${attachment.target.kind}.`)
+    }
+    return { ...attachment, config: manifest.configSchema.parse(attachment.config) }
+  }
+
+  validateOrder(attachments: readonly PolicyAttachment[]): PolicyAttachment[] {
+    const ordered = [...attachments].sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
+    const positions = new Set<string>()
+    const singletons = new Set<string>()
+    for (const attachment of ordered) {
+      this.validateAttachment(attachment)
+      const positionKey = `${attachment.target.kind}:${attachment.target.id}:${attachment.order}`
+      if (positions.has(positionKey)) throw new Error(`Policy order ${attachment.order} is duplicated for ${attachment.target.kind} ${attachment.target.id}.`)
+      positions.add(positionKey)
+      const manifest = this.get(attachment.type, attachment.version)
+      const singletonKey = `${attachment.type}@${attachment.version}:${attachment.target.kind}:${attachment.target.id}`
+      if (manifest.singletonPerTarget && singletons.has(singletonKey)) throw new Error(`Policy ${attachment.type}@${attachment.version} may only be attached once per target.`)
+      singletons.add(singletonKey)
+    }
+    return ordered
   }
 }
 

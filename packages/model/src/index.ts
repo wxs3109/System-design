@@ -1,6 +1,7 @@
 export * from './catalog'
 export * from './events'
 export * from './factories'
+export * from './policies'
 export * from './project'
 export * from './result'
 export * from './schema'

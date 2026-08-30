@@ -54,3 +54,53 @@ test('migrates a v1 import and exports ProjectFile v2', async ({ page }) => {
   expect(project.topology.nodes[0].componentVersion).toBe(1)
   expect(project.experiments[0].seed).toBe('legacy-seed')
 })
+
+test('attaches and configures manifest-driven reliability policies', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Direct service/ }).click()
+
+  const serviceNode = page.getByTestId('rf__node-service-direct')
+  await expect(serviceNode).toBeVisible()
+  await serviceNode.dispatchEvent('click')
+  await page.getByLabel('Policy for selected node').selectOption({ label: 'Rate Limit' })
+  await page.locator('.policy-add').getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByRole('region', { name: 'Rate Limit policy' })).toBeVisible()
+  await page.getByLabel('Bucket capacity').fill('25')
+  await expect(serviceNode.locator('.component-node__policies')).toContainText('Rate Limit')
+
+  const rateLimitEditor = page.getByRole('region', { name: 'Rate Limit policy' })
+  await rateLimitEditor.getByRole('checkbox').uncheck()
+  await expect(serviceNode.locator('.component-node__policies span', { hasText: 'Rate Limit' })).toHaveClass(/is-disabled/)
+  await rateLimitEditor.getByRole('checkbox').check()
+
+  await page.getByLabel('Policy for selected node').selectOption({ label: 'Backpressure' })
+  await page.locator('.policy-add').getByRole('button', { name: 'Add' }).click()
+  await page.getByRole('button', { name: 'Remove Backpressure' }).click()
+  await expect(page.getByRole('region', { name: 'Backpressure policy' })).toHaveCount(0)
+
+  const serviceEdge = page.getByTestId('rf__edge-edge-direct-2')
+  await expect(serviceEdge).toBeVisible()
+  await serviceEdge.dispatchEvent('click')
+  await page.getByLabel('Policy for selected edge').selectOption({ label: 'Timeout' })
+  await page.locator('.policy-add').getByRole('button', { name: 'Add' }).click()
+  await page.getByLabel('Timeout (ms)').fill('250')
+  await page.getByLabel('Policy for selected edge').selectOption({ label: 'Retry' })
+  await page.locator('.policy-add').getByRole('button', { name: 'Add' }).click()
+  await page.getByRole('button', { name: 'Move Retry earlier' }).click()
+  await expect(serviceEdge).toContainText('Retry · Timeout')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const download = await downloadPromise
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const project = JSON.parse(Buffer.concat(chunks).toString())
+  expect(project.topology.policies).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: 'rate-limit', target: { kind: 'node', id: 'service-direct' }, enabled: true, config: expect.objectContaining({ capacity: 25 }) }),
+    expect.objectContaining({ type: 'timeout', target: { kind: 'edge', id: 'edge-direct-2' }, order: 1, config: expect.objectContaining({ timeoutMs: 250 }) }),
+    expect.objectContaining({ type: 'retry', target: { kind: 'edge', id: 'edge-direct-2' }, order: 0 }),
+  ]))
+  expect(project.topology.policies).toHaveLength(3)
+})

@@ -9,6 +9,7 @@ const positiveIntegerSchema = z.number().int().positive()
 export const componentTypeSchema = z.enum([
   'traffic',
   'network',
+  'load-balancer',
   'service',
   'queue',
   'database',
@@ -50,6 +51,15 @@ export const serviceConfigSchema = z.object({
   maxQueueSize: z.number().int().min(0).max(1_000_000).default(1_000),
 })
 
+export const loadBalancerConfigSchema = z.object({
+  algorithm: z.enum(['weighted', 'round-robin', 'health-aware']).default('weighted'),
+  capacity: positiveIntegerSchema.max(1_000_000).default(1_000),
+  routingTimeMs: positiveSchema.default(0.2),
+  maxQueueSize: z.number().int().min(0).max(1_000_000).default(10_000),
+  failureThreshold: positiveIntegerSchema.max(1_000).default(1),
+  recoveryTimeMs: nonNegativeSchema.max(3_600_000).default(5_000),
+})
+
 export const queueConfigSchema = z.object({
   consumers: positiveIntegerSchema.max(100_000).default(4),
   deliveryTimeMs: positiveSchema.default(10),
@@ -81,6 +91,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('service'),
     config: serviceConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('load-balancer'),
+    config: loadBalancerConfigSchema,
   }),
   z.object({
     ...commonNodeFields,

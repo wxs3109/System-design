@@ -204,7 +204,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 1 Implementation Plan](docs/roadmap/phase-1.md)。
 
-当前进度：P1.0 基础加固与 P1.1 类型化执行、事件遥测已完成；下一步是 P1.2 可靠性策略与 Load Balancer。
+当前进度：P1.0 基础加固、P1.1 类型化执行与事件遥测、P1.2 可靠性策略与 Load Balancer 已完成；下一步是 P1.3 数据与异步组件。
 
 - 增加负载均衡、缓存、消息流、对象存储、分片与副本。
 - 增加超时、重试、熔断、背压和流量控制策略。
@@ -248,7 +248,9 @@ Phase 1 的 P1.0 已完成：ProjectFile v2 将拓扑和实验分开，旧 Scena
 
 Phase 1 的 P1.1 已完成：画布按 manifest 渲染类型化端口，连线支持 weighted one-of、fan-out 与 async publish；ProjectFile v2 由通用 compiler 编译；仿真只以有序 runtime event stream 作为结果真相，summary、节点指标、时间序列、trace 与 span 均由 reducer 重建；Worker 会批量发送进度和事件，固定项目、实验、种子与 run ID 可以确定性重放。
 
-当前仍是早期平台。下一步是 P1.2 的 Load Balancer、超时与重试、熔断、令牌桶限流、背压和死信行为，不能退回文档站或案例专用 Demo。
+Phase 1 的 P1.2 已完成：Load Balancer 支持 weighted、round-robin 与 health-aware 路由；边可组合超时、确定性退避重试和熔断；节点可使用令牌桶限流；异步链路支持背压和死信；这些策略由 manifest 驱动的通用编辑器配置，并在节点 badge、边标签、runtime events 和 spans 中保持一致。
+
+当前仍是早期平台。下一步是 P1.3 的 Cache、Stream、Object Storage，以及数据库分片、副本、读路由和复制延迟，不能退回文档站或案例专用 Demo。
 
 本地运行：
 

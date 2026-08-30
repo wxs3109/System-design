@@ -54,19 +54,29 @@ export const reduceTimeSeries = (events: readonly RuntimeEvent[], scenario: Scen
 
 export const reduceSpans = (events: readonly RuntimeEvent[]): TraceSpan[] => {
   const started = new Map<string, RuntimeEvent>()
+  const queueDurations = new Map<string, number>()
   const spans: TraceSpan[] = []
   for (const event of events) {
     if (!event.spanId || !event.traceId || !event.requestId || !event.nodeId) continue
-    if (event.type === 'request-started') started.set(event.spanId, event)
-    if ((event.type === 'request-completed' || event.type === 'request-failed') && started.has(event.spanId)) {
-      const start = started.get(event.spanId)!
+    if (event.type === 'attempt-started') started.set(event.spanId, event)
+    if (event.type === 'request-started') {
+      if (started.get(event.spanId)?.type === 'attempt-started') queueDurations.set(event.spanId, event.queueDurationMs ?? 0)
+      else started.set(event.spanId, event)
+    }
+    const start = started.get(event.spanId)
+    if (!start) continue
+    const isAttempt = start.type === 'attempt-started'
+    const attemptEnded = isAttempt && (event.type === 'timeout-fired' || event.type === 'dependency-returned' || (event.type === 'request-failed' && event.reason === 'circuit_open'))
+    const requestEnded = !isAttempt && (event.type === 'request-completed' || event.type === 'request-failed')
+    if (attemptEnded || requestEnded) {
       spans.push({
         runId: event.runId, traceId: event.traceId, spanId: event.spanId, ...(event.parentSpanId === undefined ? {} : { parentSpanId: event.parentSpanId }),
         requestId: event.requestId, nodeId: event.nodeId, ...(event.edgeId === undefined ? {} : { edgeId: event.edgeId }), attempt: event.attempt,
-        startedAtMs: start.timestampMs, endedAtMs: event.timestampMs, durationMs: event.durationMs ?? round(event.timestampMs - start.timestampMs),
-        queueDurationMs: start.queueDurationMs ?? 0, status: event.type === 'request-completed' ? 'ok' : 'error', reason: event.reason,
+        startedAtMs: start.timestampMs, endedAtMs: event.timestampMs, durationMs: round(event.timestampMs - start.timestampMs),
+        queueDurationMs: isAttempt ? queueDurations.get(event.spanId) ?? 0 : start.queueDurationMs ?? 0, status: event.status === 'ok' ? 'ok' : 'error', reason: event.reason,
       })
       started.delete(event.spanId)
+      queueDurations.delete(event.spanId)
     }
   }
   return spans

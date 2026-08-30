@@ -15,6 +15,7 @@ export const eventStatusSchema = z.enum(['pending', 'ok', 'error', 'rejected', '
 export const reasonCodeSchema = z.enum([
   'none', 'timeout', 'queue_full', 'node_down', 'rate_limited', 'circuit_open', 'packet_loss',
   'intrinsic_error', 'hop_limit', 'missing_node', 'simulation_ended',
+  'backpressure', 'dead_lettered', 'no_healthy_target',
 ])
 export const eventAttributeValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean()])
 

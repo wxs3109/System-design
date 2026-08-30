@@ -1,6 +1,6 @@
 # Phase 1 Implementation Plan
 
-> Status: in progress — P1.0 and P1.1 complete
+> Status: in progress — P1.0 through P1.2 complete
 >
 > Objective: evolve the Phase 0 workbench from “a topology can run” into a reusable system-behavior and failure laboratory.
 
@@ -366,12 +366,14 @@ Exit criteria:
 
 Deliverables:
 
-- [ ] Load Balancer with weighted, round-robin and health-aware routing;
-- [ ] timeout and bounded retry with deterministic backoff and optional jitter;
-- [ ] circuit breaker with closed, open and half-open transitions;
-- [ ] token-bucket rate limiting;
-- [ ] backpressure and dead-letter behavior;
-- [ ] policy badges and manifest-driven editors.
+- [x] Load Balancer with weighted, round-robin and health-aware routing;
+- [x] timeout and bounded retry with deterministic backoff and optional jitter;
+- [x] circuit breaker with closed, open and half-open transitions;
+- [x] token-bucket rate limiting;
+- [x] backpressure and dead-letter behavior;
+- [x] policy badges and manifest-driven editors.
+
+Status: complete. Verified by deterministic routing and health-state tests, timeout/retry/circuit transition tests, rate-limit and asynchronous delivery tests, canonical event and span assertions, production build, and browser end-to-end policy editing and export.
 
 Exit criteria:
 

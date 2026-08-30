@@ -6,7 +6,10 @@ import { getNodeBehavior } from '../components/behavior'
 import { applyCapacityFault, applyLatencyFault, resolveActiveFault } from '../faults/resolver'
 import { round } from '../telemetry/math'
 import { RuntimeEventSink } from '../telemetry/event-sink'
-import type { RequestGroup, RequestState, RuntimeNode } from './types'
+import { BackpressureGate, TokenBucket } from '../policies/delivery'
+import { policiesFor } from '../policies/compiler'
+import { CircuitBreaker, retryDelayMs, type CircuitCompletionResult, type CircuitPermit, type CircuitTransition, type ReliabilityCall } from '../policies/reliability'
+import type { LoadBalancerRuntimeState, ReliabilityCompletionContext, RequestGroup, RequestState, RuntimeNode } from './types'
 
 export class SystemDesignSimulation extends Simulation {
   readonly scenario: Scenario
@@ -16,6 +19,10 @@ export class SystemDesignSimulation extends Simulation {
   readonly outgoing = new Map<string, CompiledConnection[]>()
   readonly warnings: string[]
   readonly eventSink: RuntimeEventSink
+  readonly deliveryGates = new Map<string, BackpressureGate>()
+  readonly loadBalancers = new Map<string, LoadBalancerRuntimeState>()
+  readonly circuitBreakers = new Map<string, CircuitBreaker>()
+  readonly rateLimits = new Map<string, TokenBucket>()
   generated = 0
   completed = 0
   failed = 0
@@ -31,11 +38,22 @@ export class SystemDesignSimulation extends Simulation {
     this.eventSink = new RuntimeEventSink(runId, onEventBatch, eventBatchSize)
     this.nodes = compiled.nodes
     compiled.outgoing.forEach((edges, nodeId) => this.outgoing.set(nodeId, edges))
+    for (const edge of compiled.edges) {
+      const circuit = policiesFor(compiled.policies, 'edge', edge.id, 'circuit-breaker')[0]
+      if (circuit) this.circuitBreakers.set(edge.id, new CircuitBreaker(circuit.config))
+      const backpressure = policiesFor(compiled.policies, 'edge', edge.id, 'backpressure')[0]
+      if (backpressure) this.deliveryGates.set(`edge:${edge.id}`, new BackpressureGate(backpressure.config))
+    }
     for (const node of this.nodes.values()) {
       this.runtimes.set(node.id, {
         node, resource: new SimQueue(`${node.id}:resource`, getNodeBehavior(node).capacity(node)), waiting: new SimQueue(`${node.id}:waiting`),
         admitted: 0, processed: 0, failed: 0, rejected: 0, maxWaiting: 0,
       })
+      if (node.type === 'load-balancer') this.loadBalancers.set(node.id, { roundRobinIndex: 0, targets: new Map() })
+      const rateLimit = policiesFor(compiled.policies, 'node', node.id, 'rate-limit')[0]
+      if (rateLimit) this.rateLimits.set(node.id, new TokenBucket(rateLimit.config))
+      const backpressure = policiesFor(compiled.policies, 'node', node.id, 'backpressure')[0]
+      if (backpressure) this.deliveryGates.set(`node:${node.id}`, new BackpressureGate(backpressure.config))
     }
   }
 
@@ -53,6 +71,7 @@ export class SystemDesignSimulation extends Simulation {
       timestampMs: round(this.timeNow), requestId: String(request.id), traceId: request.traceId, spanId: request.spanId,
       ...(request.parentSpanId === undefined ? {} : { parentSpanId: request.parentSpanId }), nodeId: node.id,
       ...((extra.edgeId ?? request.incomingEdgeId) === undefined ? {} : { edgeId: extra.edgeId ?? request.incomingEdgeId }), type, status, bytes: request.bytes,
+      attempt: request.reliabilityAttempt?.attempt ?? 1,
       ...extra,
     })
   }
@@ -76,6 +95,49 @@ export class SystemDesignSimulation extends Simulation {
     let choice = this.random() * totalWeight
     for (const edge of edges) { choice -= edge.weight; if (choice <= 0) return edge }
     return edges[edges.length - 1]!
+  }
+
+  chooseLoadBalancerEdge(node: Extract<ComponentNode, { type: 'load-balancer' }>, edges: CompiledConnection[]) {
+    const state = this.loadBalancers.get(node.id)!
+    if (node.config.algorithm === 'weighted') return this.chooseEdge(edges)
+    if (node.config.algorithm === 'round-robin') {
+      const edge = edges[state.roundRobinIndex % edges.length]!
+      state.roundRobinIndex = (state.roundRobinIndex + 1) % edges.length
+      return edge
+    }
+    const healthy = edges.filter((edge) => (state.targets.get(edge.id)?.unhealthyUntilMs ?? 0) <= this.timeNow)
+    if (healthy.length === 0) return undefined
+    return this.chooseEdge(healthy)
+  }
+
+  recordLoadBalancerOutcome(nodeId: string, edgeId: string, success: boolean) {
+    const node = this.nodes.get(nodeId)
+    if (node?.type !== 'load-balancer' || node.config.algorithm !== 'health-aware') return
+    const state = this.loadBalancers.get(nodeId)!
+    const target = state.targets.get(edgeId) ?? { consecutiveFailures: 0, unhealthyUntilMs: 0 }
+    if (success) { target.consecutiveFailures = 0; target.unhealthyUntilMs = 0 }
+    else {
+      target.consecutiveFailures += 1
+      if (target.consecutiveFailures >= node.config.failureThreshold) {
+        target.unhealthyUntilMs = this.timeNow + node.config.recoveryTimeMs
+        target.consecutiveFailures = 0
+      }
+    }
+    state.targets.set(edgeId, target)
+  }
+
+  emitCircuitTransition(edgeId: string, nodeId: string, transition: CircuitTransition | undefined) {
+    if (!transition) return
+    const type = transition === 'opened' ? 'circuit-opened' : transition === 'half-opened' ? 'circuit-half-opened' : 'circuit-closed'
+    this.eventSink.emit({ timestampMs: round(this.timeNow), nodeId, edgeId, type, status: transition === 'opened' ? 'error' : 'ok' })
+  }
+
+  circuitOutcome(edgeId: string, nodeId: string, permit: CircuitPermit | undefined, success: boolean): CircuitCompletionResult | undefined {
+    const circuit = this.circuitBreakers.get(edgeId)
+    if (!circuit || !permit) return undefined
+    const outcome = success ? circuit.succeed(permit) : circuit.fail(permit, this.timeNow)
+    this.emitCircuitTransition(edgeId, nodeId, outcome.transition)
+    return outcome
   }
 
   sampleMetrics() {
@@ -143,12 +205,150 @@ class WorkloadGenerator extends Entity<SystemDesignSimulation> {
   }
 }
 
+class AttemptTimeout extends Entity<SystemDesignSimulation> {
+  private finished = false
+  private target?: RequestEntity
+
+  constructor(private readonly request: RequestState, private readonly targetNodeId: string, private readonly timeoutMs: number, readonly completionContext: ReliabilityCompletionContext) { super() }
+
+  cancel() { this.finished = true }
+
+  watch(target: RequestEntity) { this.target = target }
+
+  async script() {
+    await this.delay(this.timeoutMs)
+    if (this.finished) return
+    const simulation = this.simulation
+    const attempt = this.request.reliabilityAttempt
+    if (!attempt) return
+    this.finished = true
+    this.target?.cancelForTimeout()
+    simulation.eventSink.emit({
+      timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId,
+      nodeId: this.targetNodeId, edgeId: attempt.edgeId, attempt: attempt.attempt, type: 'timeout-fired', status: 'error', durationMs: round(simulation.timeNow - attempt.startedAtMs), reason: 'timeout', bytes: this.request.bytes,
+    })
+    simulation.eventSink.emit({
+      timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId,
+      nodeId: this.targetNodeId, edgeId: attempt.edgeId, attempt: attempt.attempt, type: 'request-failed', status: 'error', durationMs: round(simulation.timeNow - attempt.startedAtMs),
+      reason: 'timeout', bytes: this.request.bytes, attributes: { terminal: false },
+    })
+    simulation.activate(new AttemptResult(this.request, this.targetNodeId, false, 'timeout', this.completionContext))
+  }
+}
+
+class AttemptResult extends Entity<SystemDesignSimulation> {
+  constructor(
+    private readonly request: RequestState, private readonly nodeId: string, private readonly success: boolean, private readonly reason: ReasonCode,
+    private readonly completion: ReliabilityCompletionContext,
+  ) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const call = this.request.reliabilityCall
+    const attempt = this.request.reliabilityAttempt
+    if (!call || !attempt) return
+    simulation.circuitOutcome(attempt.edgeId, call.callerNodeId, attempt.circuitPermit, this.success)
+    if ((this.success || call.attempt >= call.maxAttempts) && this.request.loadBalancerNodeId) {
+      simulation.recordLoadBalancerOutcome(this.request.loadBalancerNodeId, attempt.edgeId, this.success)
+    }
+    if (this.success || call.attempt >= call.maxAttempts) {
+      const { reliabilityCall: _call, reliabilityAttempt: _attempt, ...settled } = this.request
+      const {
+        incomingEdgeId: _settledIncomingEdgeId, incomingRoutingMode: _settledIncomingRoutingMode,
+        dependencyStartedAtMs: _settledDependencyStartedAtMs, loadBalancerNodeId: _settledLoadBalancerNodeId,
+        ...withoutCurrentDependency
+      } = settled
+      const resumed: RequestState = {
+        ...withoutCurrentDependency, spanId: call.callerRequest.spanId, hops: call.callerRequest.hops,
+        ...(call.callerRequest.parentSpanId === undefined ? {} : { parentSpanId: call.callerRequest.parentSpanId }),
+        ...(call.callerRequest.incomingEdgeId === undefined ? {} : { incomingEdgeId: call.callerRequest.incomingEdgeId }),
+        ...(call.callerRequest.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: call.callerRequest.incomingRoutingMode }),
+        ...(call.callerRequest.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: call.callerRequest.dependencyStartedAtMs }),
+        ...(call.callerRequest.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: call.callerRequest.loadBalancerNodeId }),
+      }
+      if (this.success) {
+        simulation.activate(new RequestEntity({ ...withoutCurrentDependency, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId }, this.nodeId, this.completion.group, this.completion.countsAsRequest, undefined, undefined, true))
+      } else simulation.activate(new RequestEntity({ ...resumed, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId }, call.callerNodeId, this.completion.group, this.completion.countsAsRequest, undefined, this.reason))
+      return
+    }
+    const nextAttempt = call.attempt + 1
+    const delayMs = call.retry ? retryDelayMs(call.retry, nextAttempt, simulation.random) : 0
+    simulation.eventSink.emit({
+      timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId,
+      nodeId: call.callerNodeId, edgeId: call.edgeId, attempt: nextAttempt, type: 'retry-scheduled', status: 'pending', reason: this.reason, attributes: { backoffMs: round(delayMs) },
+    })
+    if (delayMs > 0) await this.delay(delayMs)
+    const { reliabilityAttempt: _attempt, ...pending } = this.request
+    simulation.activate(new ReliabilityAttemptEntity({ ...pending, reliabilityCall: { ...call, attempt: nextAttempt } }, this.nodeId, this.completion))
+  }
+}
+
+class ReliabilityAttemptEntity extends Entity<SystemDesignSimulation> {
+  constructor(private readonly request: RequestState, private readonly targetNodeId: string, private readonly completion: ReliabilityCompletionContext) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const call = this.request.reliabilityCall
+    if (!call) return
+    const circuit = simulation.circuitBreakers.get(call.edgeId)
+    const acquired = circuit?.acquire(simulation.timeNow)
+    simulation.emitCircuitTransition(call.edgeId, call.callerNodeId, acquired?.transition)
+    const spanId = `${this.request.traceId}:${this.request.hops}:attempt:${call.edgeId}:${call.attempt}`
+    if (acquired && !acquired.allowed) {
+      simulation.eventSink.emit({
+        timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId, parentSpanId: call.callerSpanId, nodeId: this.targetNodeId, edgeId: call.edgeId,
+        attempt: call.attempt, type: 'attempt-started', status: 'rejected', reason: 'circuit_open', bytes: this.request.bytes, attributes: { circuitState: acquired.state },
+      })
+      simulation.eventSink.emit({
+        timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId, parentSpanId: call.callerSpanId, nodeId: this.targetNodeId, edgeId: call.edgeId,
+        attempt: call.attempt, type: 'request-failed', status: 'rejected', durationMs: 0, queueDurationMs: 0, reason: 'circuit_open', bytes: this.request.bytes, attributes: { terminal: false },
+      })
+      simulation.activate(new AttemptResult({ ...this.request, spanId, parentSpanId: call.callerSpanId, reliabilityAttempt: { attempt: call.attempt, spanId, parentSpanId: call.callerSpanId, edgeId: call.edgeId, startedAtMs: simulation.timeNow } }, this.targetNodeId, false, 'circuit_open', this.completion))
+      return
+    }
+    const attempt = {
+      attempt: call.attempt, spanId, parentSpanId: call.callerSpanId, edgeId: call.edgeId, startedAtMs: simulation.timeNow,
+      ...(call.timeout === undefined ? {} : { deadlineMs: simulation.timeNow + call.timeout.timeoutMs }),
+      ...(acquired?.permit === undefined ? {} : { circuitPermit: acquired.permit }),
+    }
+    const attemptRequest: RequestState = { ...this.request, spanId, parentSpanId: call.callerSpanId, reliabilityAttempt: attempt }
+    simulation.eventSink.emit({
+      timestampMs: round(simulation.timeNow), requestId: String(attemptRequest.id), traceId: attemptRequest.traceId, spanId, parentSpanId: call.callerSpanId, nodeId: this.targetNodeId, edgeId: call.edgeId,
+      attempt: call.attempt, type: 'attempt-started', status: 'pending', bytes: attemptRequest.bytes,
+    })
+    const timeout = call.timeout ? new AttemptTimeout(attemptRequest, this.targetNodeId, call.timeout.timeoutMs, this.completion) : undefined
+    if (timeout) simulation.activate(timeout)
+    const target = new RequestEntity(attemptRequest, this.targetNodeId, undefined, false, timeout)
+    timeout?.watch(target)
+    simulation.activate(target)
+  }
+}
+
 class RequestEntity extends Entity<SystemDesignSimulation> {
-  constructor(private request: RequestState, private nodeId: string, private readonly group?: RequestGroup, private readonly countsAsRequest = true) { super() }
+  private cancelledByTimeout = false
+  private heldResource: SimQueue | null = null
+
+  constructor(
+    private request: RequestState, private nodeId: string, private readonly group?: RequestGroup, private readonly countsAsRequest = true,
+    private readonly timeout?: AttemptTimeout, private readonly terminalFailureReason?: ReasonCode, private resumeAfterProcessing = false,
+  ) { super() }
+
+  cancelForTimeout() {
+    this.cancelledByTimeout = true
+    if (this.heldResource?.items.has(this)) {
+      this.leaveQueue(this.heldResource)
+      this.heldResource = null
+    }
+    for (const queue of this._queues.keys()) {
+      if (queue.items.has(this)) this.leaveQueue(queue)
+    }
+    this.sendSignal(this.timeout, 1)
+  }
 
   private returnDependency(success: boolean, node: ComponentNode, reason: ReasonCode) {
     const simulation = this.simulation
     if (!this.request.incomingEdgeId || this.request.dependencyStartedAtMs === undefined || this.request.incomingRoutingMode === 'async-publish') return
+    if (this.request.loadBalancerNodeId) simulation.recordLoadBalancerOutcome(this.request.loadBalancerNodeId, this.request.incomingEdgeId, success)
     simulation.eventSink.emit({
       timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId,
       ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, edgeId: this.request.incomingEdgeId,
@@ -156,13 +356,44 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     })
   }
 
+  private settleAttempt(success: boolean, node: ComponentNode, reason: ReasonCode): boolean {
+    const attempt = this.request.reliabilityAttempt
+    if (!attempt || this.cancelledByTimeout) return false
+    this.timeout?.cancel()
+    const simulation = this.simulation
+    simulation.eventSink.emit({
+      timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: attempt.spanId, parentSpanId: attempt.parentSpanId, nodeId: node.id, edgeId: attempt.edgeId,
+      attempt: attempt.attempt, type: 'dependency-returned', status: success ? 'ok' : 'error', durationMs: round(simulation.timeNow - attempt.startedAtMs), reason, bytes: this.request.bytes,
+    })
+    const completion = this.timeout?.completionContext ?? { countsAsRequest: this.countsAsRequest, ...(this.group === undefined ? {} : { group: this.group }) }
+    simulation.activate(new AttemptResult(this.request, node.id, success, reason, completion))
+    return true
+  }
+
   private clearDependency() {
-    const { incomingEdgeId: _incomingEdgeId, incomingRoutingMode: _incomingRoutingMode, dependencyStartedAtMs: _dependencyStartedAtMs, ...request } = this.request
+    const { incomingEdgeId: _incomingEdgeId, incomingRoutingMode: _incomingRoutingMode, dependencyStartedAtMs: _dependencyStartedAtMs, loadBalancerNodeId: _loadBalancerNodeId, ...request } = this.request
     this.request = request
   }
 
-  private finishBranch(success: boolean, node: ComponentNode, reason: 'none' | 'queue_full' | 'node_down' | 'packet_loss' | 'intrinsic_error' | 'hop_limit' | 'missing_node' = 'none') {
+  private acknowledgeDeliveries(node: ComponentNode) {
+    const keys = this.request.deliveryGateKeys
+    if (!keys) return
+    for (const key of keys) {
+      const gate = this.simulation.deliveryGates.get(key)
+      if (gate?.active) gate.acknowledge()
+    }
+    if (this.request.incomingEdgeId) {
+      this.simulation.eventSink.emit({ timestampMs: round(this.simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, edgeId: this.request.incomingEdgeId, type: 'message-acknowledged', status: 'ok', bytes: this.request.bytes })
+    }
+    const { deliveryGateKeys: _deliveryGateKeys, ...request } = this.request
+    this.request = request
+  }
+
+  private finishBranch(success: boolean, node: ComponentNode, reason: ReasonCode = 'none', terminalAttributes: Record<string, string | number | boolean> = {}) {
     const simulation = this.simulation
+    if (this.settleAttempt(success, node, reason)) return
+    if (this.cancelledByTimeout) return
+    this.acknowledgeDeliveries(node)
     this.returnDependency(success, node, reason)
     if (!this.group) {
       if (this.countsAsRequest) {
@@ -170,7 +401,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         else simulation.failed += 1
       }
       const totalLatencyMs = round(simulation.timeNow - this.request.createdAtMs)
-      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: success ? 'request-completed' : 'request-failed', status: success ? 'ok' : 'error', reason, bytes: this.request.bytes, attributes: { terminal: this.countsAsRequest, totalLatencyMs, ...(this.request.branchPath === undefined ? {} : { branchPath: this.request.branchPath }) } })
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: success ? 'request-completed' : 'request-failed', status: success ? 'ok' : 'error', reason, bytes: this.request.bytes, attributes: { terminal: this.countsAsRequest, totalLatencyMs, ...terminalAttributes, ...(this.request.branchPath === undefined ? {} : { branchPath: this.request.branchPath }) } })
       return
     }
     this.group.failed ||= !success
@@ -180,13 +411,16 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     if (this.group.failed) simulation.failed += 1
     else simulation.completed += 1
     const totalLatencyMs = round(simulation.timeNow - this.group.rootRequest.createdAtMs)
-    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.group.rootRequest.id), traceId: this.group.rootRequest.traceId, spanId: this.group.rootRequest.spanId, nodeId: node.id, type: this.group.failed ? 'request-failed' : 'request-completed', status: this.group.failed ? 'error' : 'ok', reason: this.group.failed ? this.group.failureReason ?? 'intrinsic_error' : 'none', bytes: this.group.rootRequest.bytes, attributes: { terminal: true, totalLatencyMs, routingMode: 'fan-out' } })
+    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.group.rootRequest.id), traceId: this.group.rootRequest.traceId, spanId: this.group.rootRequest.spanId, nodeId: node.id, type: this.group.failed ? 'request-failed' : 'request-completed', status: this.group.failed ? 'error' : 'ok', reason: this.group.failed ? this.group.failureReason ?? 'intrinsic_error' : 'none', bytes: this.group.rootRequest.bytes, attributes: { terminal: true, totalLatencyMs, routingMode: 'fan-out', ...terminalAttributes } })
   }
 
   private failAfterService(node: ComponentNode, reason: 'node_down' | 'packet_loss' | 'intrinsic_error') {
     const simulation = this.simulation
     const durationMs = round(simulation.timeNow - (this.request.startedAtMs ?? simulation.timeNow))
     simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { durationMs, reason, attributes: { terminal: false, ...(this.request.branchPath === undefined ? {} : { branchPath: this.request.branchPath }) } })
+    if (this.settleAttempt(false, node, reason)) return
+    if (this.cancelledByTimeout) return
+    this.acknowledgeDeliveries(node)
     this.returnDependency(false, node, reason)
     this.clearDependency()
     this.finishBranch(false, node, reason)
@@ -202,6 +436,11 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         return
       }
       const node = runtime.node
+      if (this.terminalFailureReason) {
+        this.finishBranch(false, node, this.terminalFailureReason)
+        return
+      }
+      if (!this.resumeAfterProcessing) {
       simulation.emitRequestEvent(this.request, node, 'request-arrived', 'pending')
       if (this.request.incomingRoutingMode === 'async-publish' && this.request.incomingEdgeId) {
         simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, edgeId: this.request.incomingEdgeId, type: 'message-consumed', status: 'pending', bytes: this.request.bytes })
@@ -211,6 +450,12 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         simulation.emitRequestEvent(this.request, node, 'request-started', 'pending', { queueDurationMs: 0 })
         simulation.emitRequestEvent(this.request, node, 'request-completed', 'ok', { durationMs: 0, queueDurationMs: 0 })
       } else {
+        const rateLimit = simulation.rateLimits.get(node.id)
+        if (rateLimit) {
+          const accepted = rateLimit.admit(simulation.timeNow)
+          simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: accepted ? 'rate-limit-accepted' : 'rate-limit-rejected', status: accepted ? 'ok' : 'rejected', reason: accepted ? 'none' : 'rate_limited', attributes: { tokensRemaining: rateLimit.available } })
+          if (!accepted) { runtime.failed += 1; runtime.rejected += 1; simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'rate_limited', attributes: { terminal: false } }); this.finishBranch(false, node, 'rate_limited'); return }
+        }
         if (simulation.activeFault(node.id, 'node-down')) { runtime.failed += 1; simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { reason: 'node_down', attributes: { terminal: false } }); this.finishBranch(false, node, 'node_down'); return }
         const effectiveCapacity = simulation.effectiveCapacity(node)
         runtime.resource.capacity = effectiveCapacity
@@ -226,12 +471,16 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
           simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: 'request-queued', status: 'pending', bytes: this.request.bytes, attributes: { queueLength: runtime.waiting.pop } })
         }
         await this.enterQueue(runtime.resource)
+        if (this.cancelledByTimeout) { if (runtime.resource.items.has(this)) this.leaveQueue(runtime.resource); return }
+        this.heldResource = runtime.resource
         if (runtime.waiting.items.has(this)) this.leaveQueue(runtime.waiting)
         runtime.admitted += 1
         this.request = { ...this.request, startedAtMs: simulation.timeNow }
         simulation.emitRequestEvent(this.request, node, 'request-started', 'pending', { queueDurationMs: this.request.queuedAtMs === undefined ? 0 : round(simulation.timeNow - this.request.queuedAtMs) })
-        await this.delay(simulation.serviceTime(node, this.request))
+        await this.delay(simulation.serviceTime(node, this.request), undefined, this.timeout)
+        if (this.cancelledByTimeout) return
         this.leaveQueue(runtime.resource)
+        this.heldResource = null
         runtime.processed += 1
         if (simulation.activeFault(node.id, 'node-down') || simulation.random() < getNodeBehavior(node).intrinsicErrorRate(node)) {
           const nodeDown = Boolean(simulation.activeFault(node.id, 'node-down'))
@@ -240,9 +489,12 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
           return
         }
         simulation.emitRequestEvent(this.request, node, 'request-completed', 'ok', { durationMs: round(simulation.timeNow - (this.request.startedAtMs ?? simulation.timeNow)), queueDurationMs: this.request.queuedAtMs === undefined ? 0 : round((this.request.startedAtMs ?? simulation.timeNow) - this.request.queuedAtMs) })
+        if (this.settleAttempt(true, node, 'none')) return
+        this.acknowledgeDeliveries(node)
         this.returnDependency(true, node, 'none')
         this.clearDependency()
       }
+      } else this.resumeAfterProcessing = false
 
       const edges = simulation.outgoing.get(node.id) ?? []
       if (edges.length === 0) {
@@ -255,33 +507,93 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
       const asyncEdges = edges.filter((edge) => edge.routingMode === 'async-publish')
       for (const [index, publishEdge] of asyncEdges.entries()) {
         const branchPath = `${this.request.branchPath ?? 'root'}.async.${index}`
+        const gateKeys = [`edge:${publishEdge.id}`, `node:${publishEdge.target}`].filter((key) => simulation.deliveryGates.has(key))
+        const admitted: string[] = []
+        let rejected: ReturnType<BackpressureGate['admit']> | undefined
+        for (const key of gateKeys) {
+          const decision = simulation.deliveryGates.get(key)!.admit()
+          if (!decision.accepted) { rejected = decision; break }
+          admitted.push(key)
+        }
+        if (rejected) {
+          for (const key of admitted) simulation.deliveryGates.get(key)!.acknowledge()
+          simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: publishEdge.id, type: rejected.deadLettered ? 'message-dead-lettered' : 'request-failed', status: rejected.status, reason: rejected.reason, bytes: this.request.bytes, attributes: { terminal: false, routingMode: 'async-publish', branchPath } })
+          continue
+        }
         simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: publishEdge.id, type: 'message-published', status: 'ok', bytes: this.request.bytes, attributes: { routingMode: 'async-publish', branchPath } })
-        simulation.activate(new RequestEntity({ ...this.request, hops: this.request.hops + 1, parentSpanId: this.request.spanId, spanId: `${this.request.traceId}:${this.request.hops + 1}:${branchPath}`, incomingEdgeId: publishEdge.id, incomingRoutingMode: 'async-publish', dependencyStartedAtMs: simulation.timeNow, branchPath }, publishEdge.target, undefined, false))
+        simulation.activate(new RequestEntity({ ...this.request, hops: this.request.hops + 1, parentSpanId: this.request.spanId, spanId: `${this.request.traceId}:${this.request.hops + 1}:${branchPath}`, incomingEdgeId: publishEdge.id, incomingRoutingMode: 'async-publish', dependencyStartedAtMs: simulation.timeNow, branchPath, ...(admitted.length === 0 ? {} : { deliveryGateKeys: admitted }) }, publishEdge.target, undefined, false))
       }
       const synchronousEdges = edges.filter((edge) => edge.routingMode !== 'async-publish')
       if (synchronousEdges.length === 0) {
-        simulation.completed += 1
-        const totalLatencyMs = round(simulation.timeNow - this.request.createdAtMs)
-        simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, type: 'request-completed', status: 'ok', bytes: this.request.bytes, attributes: { terminal: true, totalLatencyMs, asyncAccepted: true } })
+        this.finishBranch(true, node, 'none', this.countsAsRequest ? { asyncAccepted: true } : {})
         return
       }
       const mode = synchronousEdges[0]?.routingMode ?? 'weighted-one'
       if (mode === 'fan-out' && synchronousEdges.length > 1) {
         const group: RequestGroup = { remaining: synchronousEdges.length, failed: false, rootRequest: this.request }
+        const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, ...request } = this.request
         for (const [index, branchEdge] of synchronousEdges.entries()) {
           const branchPath = `${this.request.branchPath ?? 'root'}.${index}`
           const branchSpanId = `${this.request.traceId}:${this.request.hops + 1}:${branchPath}`
           simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: branchEdge.id, type: 'dependency-started', status: 'pending', bytes: this.request.bytes, attributes: { routingMode: mode, branchPath } })
-          simulation.activate(new RequestEntity({ ...this.request, hops: this.request.hops + 1, parentSpanId: this.request.spanId, spanId: branchSpanId, incomingEdgeId: branchEdge.id, incomingRoutingMode: mode, dependencyStartedAtMs: simulation.timeNow, branchPath }, branchEdge.target, group, false))
+          const branchRequest: RequestState = {
+            ...request, hops: request.hops + 1, parentSpanId: request.spanId, spanId: branchSpanId, incomingEdgeId: branchEdge.id,
+            incomingRoutingMode: mode, dependencyStartedAtMs: simulation.timeNow, branchPath,
+            ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}),
+          }
+          const timeout = policiesFor(simulation.compiled.policies, 'edge', branchEdge.id, 'timeout')[0]
+          const retry = policiesFor(simulation.compiled.policies, 'edge', branchEdge.id, 'retry')[0]
+          const circuit = policiesFor(simulation.compiled.policies, 'edge', branchEdge.id, 'circuit-breaker')[0]
+          if (timeout || retry || circuit) {
+            const call: ReliabilityCall = {
+              callerNodeId: node.id, callerSpanId: request.spanId, callerRequest: {
+                hops: request.hops, spanId: request.spanId,
+                ...(request.parentSpanId === undefined ? {} : { parentSpanId: request.parentSpanId }),
+                ...(request.incomingEdgeId === undefined ? {} : { incomingEdgeId: request.incomingEdgeId }),
+                ...(request.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: request.incomingRoutingMode }),
+                ...(request.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: request.dependencyStartedAtMs }),
+                ...(request.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: request.loadBalancerNodeId }),
+              }, edgeId: branchEdge.id, attempt: 1, maxAttempts: retry?.config.maxAttempts ?? 1,
+              ...(retry === undefined ? {} : { retry: retry.config }), ...(timeout === undefined ? {} : { timeout: timeout.config }),
+            }
+            simulation.activate(new ReliabilityAttemptEntity({ ...branchRequest, reliabilityCall: call }, branchEdge.target, { group, countsAsRequest: false }))
+          } else simulation.activate(new RequestEntity(branchRequest, branchEdge.target, group, false))
         }
         return
       }
-      const edge = simulation.chooseEdge(synchronousEdges)
+      const edge = node.type === 'load-balancer' ? simulation.chooseLoadBalancerEdge(node, synchronousEdges) : simulation.chooseEdge(synchronousEdges)
+      if (!edge) {
+        runtime.failed += 1
+        simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'no_healthy_target', attributes: { terminal: false, routingAlgorithm: node.type === 'load-balancer' ? node.config.algorithm : 'weighted' } })
+        this.finishBranch(false, node, 'no_healthy_target')
+        return
+      }
       simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: edge.id, type: 'dependency-started', status: 'pending', bytes: this.request.bytes })
-      this.nodeId = edge.target
       const parentSpanId = this.request.spanId
       const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, ...request } = this.request
-      this.request = { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow }
+      const timeout = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'timeout')[0]
+      const retry = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'retry')[0]
+      const circuit = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'circuit-breaker')[0]
+      if (timeout || retry || circuit) {
+        const call: ReliabilityCall = {
+          callerNodeId: node.id, callerSpanId: parentSpanId, callerRequest: {
+            hops: request.hops, spanId: parentSpanId,
+            ...(request.parentSpanId === undefined ? {} : { parentSpanId: request.parentSpanId }),
+            ...(request.incomingEdgeId === undefined ? {} : { incomingEdgeId: request.incomingEdgeId }),
+            ...(request.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: request.incomingRoutingMode }),
+            ...(request.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: request.dependencyStartedAtMs }),
+            ...(request.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: request.loadBalancerNodeId }),
+          }, edgeId: edge.id, attempt: 1, maxAttempts: retry?.config.maxAttempts ?? 1,
+          ...(retry === undefined ? {} : { retry: retry.config }), ...(timeout === undefined ? {} : { timeout: timeout.config }),
+        }
+        simulation.activate(new ReliabilityAttemptEntity(
+          { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, reliabilityCall: call, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}) },
+          edge.target, { countsAsRequest: this.countsAsRequest, ...(this.group === undefined ? {} : { group: this.group }) },
+        ))
+        return
+      }
+      this.nodeId = edge.target
+      this.request = { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}) }
     }
   }
 }

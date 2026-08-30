@@ -4,7 +4,7 @@ export interface ComponentDefinition {
   type: ComponentType
   label: string
   description: string
-  category: 'traffic' | 'network' | 'compute' | 'data' | 'async'
+  category: 'traffic' | 'network' | 'routing' | 'compute' | 'data' | 'async'
   color: string
   acceptsInput: boolean
   emitsOutput: boolean
@@ -18,6 +18,10 @@ export const componentCatalog = {
   network: {
     type: 'network', label: 'Network Link', description: 'Adds transfer time, latency, jitter and packet loss.',
     category: 'network', color: '#06b6d4', acceptsInput: true, emitsOutput: true,
+  },
+  'load-balancer': {
+    type: 'load-balancer', label: 'Load Balancer', description: 'Routes requests across weighted, round-robin or healthy targets.',
+    category: 'routing', color: '#ec4899', acceptsInput: true, emitsOutput: true,
   },
   service: {
     type: 'service', label: 'Service', description: 'A replicated concurrent request processor.',
@@ -38,6 +42,7 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
   switch (type) {
     case 'traffic': return { id, name, position, type, config: { workloadId } }
     case 'network': return { id, name, position, type, config: { latencyMs: 20, jitterMs: 2, bandwidthMbps: 100, parallelism: 1_000, packetLossRate: 0, maxQueueSize: 10_000 } }
+    case 'load-balancer': return { id, name, position, type, config: { algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 } }
     case 'service': return { id, name, position, type, config: { replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 } }
     case 'queue': return { id, name, position, type, config: { consumers: 4, deliveryTimeMs: 10, jitterMs: 2, maxDepth: 10_000, errorRate: 0 } }
     case 'database': return { id, name, position, type, config: { maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000 } }
