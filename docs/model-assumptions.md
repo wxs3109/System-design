@@ -105,6 +105,25 @@ Policy attachments are singletons per supported target in Phase 1. Timeout, retr
 | Database v1 | a bounded connection/query resource | It has no key, shard, replica, query-plan, transaction, lock, or storage-engine semantics. |
 | Database v2 | stable key-to-shard hashing, primary writes, round-robin replica reads, version lag, and fixed replication delay | Capacity is an aggregate approximation. There are no transactions, indexes, joins, locks, failover/election, replication bandwidth, conflict resolution, cross-shard queries, or consensus. `replica-preferred` and `replica-only` both choose a replica when one exists. |
 | Scheduler | periodic or batched release ticks, seeded bounded jitter, real in-flight concurrency, skip/catch-up pending behavior, and optional v3 operation-plan selection | It has no cron calendar/time zone/DST semantics, durable job store, leader election, distributed leases, priority, retry policy, or persistence across runs. Direct faults and node policies are rejected because Scheduler-specific failure/retry semantics are not yet modeled. |
+| Search Index | document mutations acknowledged after successful node work, delayed primary/replica refresh visibility, query fan-out across primary shards, round-robin copy selection, bounded candidate merge, stale-query evidence, and cardinality/byte-aware action metrics | It is not a text engine: there is no analyzer/tokenizer, query DSL, relevance/ranking, term statistics, Lucene segment/merge model, cache, shard relocation, failover, consensus, or cross-index query. Only Document models may bind to it; `point-read` is rejected. |
+
+### Search Index approximation
+
+For $S$ primary shards, $R$ replicas per shard, result limit $L$, and visible documents $D_s$ on the selected copy of shard $s$, a query visits one copy of every primary shard:
+
+$$
+F=S,\qquad C=\sum_{s=1}^{S}\min(L,D_s),\qquad N=\min(L,C)
+$$
+
+where $F$ is fan-out, $C$ is the merged candidate count, and $N$ is the reported result count. The explainable query service-time approximation is:
+
+$$
+T_q=T_{coord}+T_{shard}+F\,T_{fanout}+C\,T_{merge}
+$$
+
+Shards search in parallel in this abstraction, so $T_{shard}$ is charged once; candidate merge and fan-out are charged explicitly. Whole-query concurrent capacity is $K_{copy}(R+1)$, not multiplied by $S$, because every logical query consumes one copy in every shard. A successful write of $B$ bytes uses $T_w=T_{write}+8B/(1000\,M_{index})$. Its primary visibility time is the first refresh boundary at or after `acceptedAt + indexingDelay`; replicas become visible after the additional replica refresh delay. A query is stale when its selected copy differs from the latest accepted version/presence of the requested key.
+
+Collection `estimatedDocuments` initializes candidate availability and `estimatedDocumentBytes` drives records/bytes evidence. `keySpaceSize` is only the fallback for capacity-only traffic without a bound document model. The model intentionally does not infer search relevance from JSON Schema or secondary-index field names.
 
 Generated key traffic uses one distinguished hot key plus a uniform distribution over the remaining configured key space. A hot-key fault overrides the per-request hot-key probability. It does not model Zipfian or user-supplied traces.
 

@@ -8,7 +8,7 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'stream', 'object-storage', 'database',
+      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'object-storage', 'database',
     ])
   })
 
@@ -64,6 +64,16 @@ describe('component registry', () => {
     expect(manifest.ports.map((port) => port.id)).toEqual(['in', 'hit', 'miss'])
     expect(manifest.capabilities).toEqual(expect.arrayContaining(['pop-selection', 'origin-fetch', 'byte-throughput']))
     expect(componentCatalog.listPresets('cdn')).toEqual([])
+  })
+
+  it('declares Search Index as an executable Database variant instead of a preset', () => {
+    const search = componentRegistry.createNode('search-index', 'search', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('search-index')
+    expect(search.config).toMatchObject({ shardCount: 6, replicasPerShard: 1, refreshIntervalMs: 1_000 })
+    expect(manifest.category).toBe('database')
+    expect(manifest.ports.map((port) => port.id)).toEqual(['in', 'consume', 'out'])
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['document-indexing', 'near-real-time-refresh', 'shard-query-fan-out', 'candidate-merge']))
+    expect(componentCatalog.listPresets('search-index')).toEqual([])
   })
 
   it('advertises executable network fault modes', () => {
@@ -150,7 +160,7 @@ describe('component creation hierarchy', () => {
     expect(componentCatalog.listCategories().map((category) => category.id)).toEqual([
       'traffic', 'automation', 'network', 'gateway', 'service', 'cache', 'database', 'object-storage', 'messaging',
     ])
-    expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['database'])
+    expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['search-index', 'database'])
     expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler'])
     expect(componentCatalog.listVariants('cache').map((variant) => variant.type)).toEqual(['cache', 'cdn'])
     expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream'])

@@ -42,6 +42,11 @@ export interface RequestState {
   schedulerRunId?: number
   cdnOutcome?: 'hit' | 'miss'
   cdnPop?: number
+  searchCandidateCount?: number
+  searchFanOut?: number
+  searchResultCount?: number
+  searchStale?: boolean
+  searchVisibilityLagMs?: number
 }
 
 export interface RequestGroup {

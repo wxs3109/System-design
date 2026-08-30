@@ -15,6 +15,7 @@ export const componentTypeSchema = z.enum([
   'queue',
   'cache',
   'cdn',
+  'search-index',
   'stream',
   'object-storage',
   'database',
@@ -123,6 +124,28 @@ export const cdnConfigSchema = z.object({
   maxQueueSize: z.number().int().min(0).max(10_000_000).default(100_000),
 })
 
+export const searchIndexConfigSchema = z.object({
+  shardCount: positiveIntegerSchema.max(100_000).default(6),
+  replicasPerShard: z.number().int().min(0).max(1_000).default(1),
+  maxConcurrentRequestsPerCopy: positiveIntegerSchema.max(1_000_000).default(100),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(100_000),
+  writeRatio: probabilitySchema.default(0.2),
+  keySpaceSize: positiveIntegerSchema.max(1_000_000_000).default(1_000_000),
+  hotKeyProbability: probabilitySchema.default(0),
+  indexingDelayMs: nonNegativeSchema.max(86_400_000).default(200),
+  refreshIntervalMs: positiveSchema.max(86_400_000).default(1_000),
+  replicaRefreshDelayMs: nonNegativeSchema.max(86_400_000).default(100),
+  queryBaseTimeMs: positiveSchema.default(2),
+  shardQueryTimeMs: positiveSchema.default(4),
+  fanOutTimePerShardMs: nonNegativeSchema.default(0.2),
+  mergeTimePerCandidateMs: nonNegativeSchema.default(0.01),
+  defaultResultLimit: positiveIntegerSchema.max(100_000).default(20),
+  indexWriteTimeMs: positiveSchema.default(3),
+  indexingThroughputMbps: positiveSchema.default(500),
+  jitterMs: nonNegativeSchema.default(1),
+  errorRate: probabilitySchema.default(0),
+})
+
 export const streamConfigSchema = z.object({
   partitions: positiveIntegerSchema.max(100_000).default(12),
   producerCapacity: positiveIntegerSchema.max(1_000_000).default(1_000),
@@ -211,6 +234,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('cdn'),
     config: cdnConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('search-index'),
+    config: searchIndexConfigSchema,
   }),
   z.object({
     ...commonNodeFields,
@@ -379,6 +407,7 @@ export type Position = z.infer<typeof positionSchema>
 export type ComponentNode = z.infer<typeof componentNodeSchema>
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>
 export type CdnConfig = z.infer<typeof cdnConfigSchema>
+export type SearchIndexConfig = z.infer<typeof searchIndexConfigSchema>
 export type Connection = z.infer<typeof connectionSchema>
 export type Workload = z.infer<typeof workloadSchema>
 export type Fault = z.infer<typeof faultSchema>

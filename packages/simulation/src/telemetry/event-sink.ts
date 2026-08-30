@@ -54,6 +54,7 @@ export interface ActionTelemetryAggregate {
   recordsExamined: number
   bytesProcessed: number
   explanation?: string
+  details: Record<string, string | number | boolean>
 }
 
 export class RuntimeEventSink {
@@ -129,7 +130,7 @@ export class RuntimeEventSink {
       const key = `${input.operationId}:${input.actionId}`
       const action = this.actions.get(key) ?? {
         operationId: input.operationId, actionId: input.actionId, actionKind: String(input.attributes?.actionKind ?? 'unknown'),
-        completed: 0, failed: 0, totalDurationMs: 0, recordsExamined: 0, bytesProcessed: 0,
+        completed: 0, failed: 0, totalDurationMs: 0, recordsExamined: 0, bytesProcessed: 0, details: {},
       }
       if (input.status === 'ok') action.completed += 1
       else action.failed += 1
@@ -137,6 +138,9 @@ export class RuntimeEventSink {
       action.recordsExamined += Number(input.attributes?.recordsExamined ?? 0)
       action.bytesProcessed += Number(input.attributes?.bytesProcessed ?? 0)
       if (typeof input.attributes?.explanation === 'string' && input.attributes.explanation) action.explanation = input.attributes.explanation
+      for (const [name, value] of Object.entries(input.attributes ?? {})) {
+        if (name.startsWith('search') && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) action.details[name] = value
+      }
       this.actions.set(key, action)
     }
     if (input.nodeId && input.requestId && input.spanId) {
@@ -195,7 +199,7 @@ export class RuntimeEventSink {
       completedLatenciesByInterval: new Map([...this.completedLatenciesByInterval].map(([interval, latencies]) => [interval, latencies.slice()])),
       queueSnapshotsByInterval: new Map([...this.queueSnapshotsByInterval].map(([interval, snapshots]) => [interval, new Map(snapshots)])),
       operations: new Map([...this.operations].map(([operationId, operation]) => [operationId, { ...operation, completedLatencies: operation.completedLatencies.slice() }])),
-      actions: new Map([...this.actions].map(([key, action]) => [key, { ...action }])),
+      actions: new Map([...this.actions].map(([key, action]) => [key, { ...action, details: { ...action.details } }])),
     }
   }
 

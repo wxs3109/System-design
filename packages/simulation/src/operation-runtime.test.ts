@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOrderSystemContractFixture, projectToScenario } from '@system-design/model'
+import { createNode, createOrderSystemContractFixture, projectToScenario } from '@system-design/model'
 import { runSimulation } from './engine'
 import { reduceActionMetrics, reduceNodeMetrics, reduceOperationMetrics } from './telemetry/reducers'
 
@@ -13,6 +13,36 @@ const operationOnly = () => {
     if (node.type === 'cache') node.config = { ...node.config, operationTimeMs: 1, jitterMs: 0, errorRate: 0 }
     if (node.type === 'stream') node.config = { ...node.config, publishTimeMs: 1, consumeTimeMs: 1, jitterMs: 0, errorRate: 0 }
   }
+  return project
+}
+
+const searchQueryOnly = (estimatedDocuments: number) => {
+  const project = operationOnly()
+  const search = { ...createNode('search-index', 'orders-search', { x: 600, y: 100 }), componentVersion: 1 }
+  if (search.type !== 'search-index') throw new Error('Expected Search Index')
+  Object.assign(search.config, { shardCount: 2, replicasPerShard: 0, queryBaseTimeMs: 1, shardQueryTimeMs: 1, fanOutTimePerShardMs: 0, mergeTimePerCandidateMs: 1, jitterMs: 0, errorRate: 0 })
+  project.topology.nodes.push(search)
+  project.topology.edges.push({ id: 'orders-to-search', source: 'orders-service', target: search.id, sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
+  const model = project.definitions.dataModels.find((candidate) => candidate.kind === 'document')!
+  model.ownerNodeId = search.id
+  model.collections[0]!.estimatedDocuments = estimatedDocuments
+  const interaction = project.definitions.interactions[0]!
+  interaction.actions = [
+    interaction.actions[0]!,
+    { id: 'query-search', kind: 'data-access', dependsOn: [interaction.actions[0]!.id], nodeId: search.id, model: { modelId: model.id, modelVersion: model.version }, objectId: model.collections[0]!.id, operation: 'scan', estimatedRows: 10 },
+  ]
+  project.experiments[0]!.operationWorkloads[0]!.operationMix = [project.experiments[0]!.operationWorkloads[0]!.operationMix[0]!]
+  return project
+}
+
+const searchWriteOnly = (errorRate = 0) => {
+  const project = searchQueryOnly(100)
+  const search = project.topology.nodes.find((node) => node.id === 'orders-search')!
+  if (search.type !== 'search-index') throw new Error('Expected Search Index')
+  search.config.errorRate = errorRate
+  const action = project.definitions.interactions[0]!.actions[1]!
+  if (action.kind !== 'data-access') throw new Error('Expected data action')
+  action.operation = 'insert'
   return project
 }
 
@@ -51,6 +81,55 @@ describe('operation-aware runtime', () => {
     const indexedRecords = Number(indexResult.events.find((event) => event.type === 'database-read' && event.actionId === 'write-order' && event.attributes.recordsExamined !== undefined)?.attributes.recordsExamined)
     const scannedRecords = Number(scanResult.events.find((event) => event.type === 'database-read' && event.actionId === 'write-order' && event.attributes.recordsExamined !== undefined)?.attributes.recordsExamined)
     expect(scannedRecords).toBeGreaterThan(indexedRecords)
+  })
+
+  it('uses document cardinality in Search Index merge cost and result telemetry', async () => {
+    const [small, large] = await Promise.all([
+      runSimulation(searchQueryOnly(4), 'small-search-index'),
+      runSimulation(searchQueryOnly(100), 'large-search-index'),
+    ])
+    const completed = (result: Awaited<ReturnType<typeof runSimulation>>) => result.events.find((event) => event.type === 'action-completed' && event.actionId === 'query-search')!
+    const smallQuery = completed(small)
+    const largeQuery = completed(large)
+    expect(smallQuery.attributes).toMatchObject({ searchFanOut: 2, searchCandidates: 4, searchResultCount: 4, searchStale: false, recordsExamined: 4 })
+    expect(largeQuery.attributes).toMatchObject({ searchFanOut: 2, searchCandidates: 20, searchResultCount: 10, searchStale: false, recordsExamined: 20 })
+    expect(Number(largeQuery.attributes.bytesProcessed)).toBeGreaterThan(Number(smallQuery.attributes.bytesProcessed))
+    expect(String(largeQuery.attributes.explanation)).toContain('merges 20 candidates into 10 results')
+    expect(large.actions.find((action) => action.actionId === 'query-search')).toMatchObject({
+      recordsExamined: 20,
+      details: { searchFanOut: 2, searchCandidates: 20, searchResultCount: 10, searchStale: false },
+    })
+    expect(large.summary.latencyP95Ms).toBeGreaterThan(small.summary.latencyP95Ms)
+  })
+
+  it('keeps Search Index action evidence exact when detailed traces are disabled', async () => {
+    const fullProject = searchQueryOnly(100)
+    fullProject.experiments[0]!.simulation.traceLimit = 100
+    const sampledProject = structuredClone(fullProject)
+    sampledProject.experiments[0]!.simulation.traceLimit = 0
+
+    const [full, sampled] = await Promise.all([
+      runSimulation(fullProject, 'search-full-traces'),
+      runSimulation(sampledProject, 'search-no-traces'),
+    ])
+
+    expect(sampled.actions).toEqual(full.actions)
+    expect(sampled.actions.find((action) => action.actionId === 'query-search')).toMatchObject({
+      recordsExamined: 20,
+      bytesProcessed: 20 * 2_048,
+      explanation: expect.stringContaining('fans out to 2 shards'),
+      details: { searchFanOut: 2, searchCandidates: 20, searchResultCount: 10, searchStale: false },
+    })
+    expect(sampled.events.every((event) => event.requestId === undefined)).toBe(true)
+  })
+
+  it('accepts an index mutation only after the Search Index node succeeds', async () => {
+    const failed = await runSimulation(searchWriteOnly(1), 'failed-search-write')
+    const succeeded = await runSimulation(searchWriteOnly(0), 'successful-search-write')
+
+    expect(failed.events.some((event) => event.type === 'search-index-write-accepted')).toBe(false)
+    expect(Number(failed.nodes.find((node) => node.nodeId === 'orders-search')?.details.searchIndexWrites ?? 0)).toBe(0)
+    expect(succeeded.events.some((event) => event.type === 'search-index-write-accepted')).toBe(true)
   })
 
   it('keeps operation, action, and node metrics exact when detailed traces are disabled', async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createNode } from './catalog'
 import { createOrderSystemContractFixture } from './project-fixtures'
 import { createEmptyProject, migrateProjectV2ToProjectV3, migrateScenarioV1ToProjectV2, parseProjectFile, projectFileV3Schema, projectToScenario } from './project'
 import { createEmptyScenario } from './factories'
@@ -48,6 +49,36 @@ describe('ProjectFile v3', () => {
     const fixture = createOrderSystemContractFixture()
     fixture.definitions.apis[0]!.ownerNodeId = 'orders-db'
     expect(projectFileV3Schema.safeParse(fixture).success).toBe(false)
+  })
+
+  it('allows only document models and supported operations on Search Index nodes', () => {
+    const fixture = createOrderSystemContractFixture()
+    fixture.topology.nodes.push({ ...createNode('search-index', 'orders-search', { x: 600, y: 100 }), name: 'Orders search', componentVersion: 1 })
+    fixture.topology.edges.push({ id: 'orders-to-search', source: 'orders-service', target: 'orders-search', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
+    const document = fixture.definitions.dataModels.find((model) => model.kind === 'document')!
+    document.ownerNodeId = 'orders-search'
+    const action = fixture.definitions.interactions[0]!.actions[1]!
+    if (action.kind !== 'data-access') throw new Error('Expected data action')
+    action.nodeId = 'orders-search'
+    action.model = { modelId: document.id, modelVersion: document.version }
+    action.objectId = document.collections[0]!.id
+    action.operation = 'scan'
+    delete action.indexId
+    expect(projectFileV3Schema.safeParse(fixture).success).toBe(true)
+
+    const relationalOwner = structuredClone(fixture)
+    relationalOwner.definitions.dataModels[0]!.ownerNodeId = 'orders-search'
+    expect(projectFileV3Schema.safeParse(relationalOwner).success).toBe(false)
+
+    const pointRead = structuredClone(fixture)
+    const pointReadAction = pointRead.definitions.interactions[0]!.actions[1]!
+    if (pointReadAction.kind !== 'data-access') throw new Error('Expected data action')
+    pointReadAction.operation = 'point-read'
+    expect(projectFileV3Schema.safeParse(pointRead).success).toBe(false)
+
+    const wrongOwner = structuredClone(fixture)
+    wrongOwner.definitions.dataModels.find((model) => model.id === document.id)!.ownerNodeId = 'orders-db'
+    expect(projectFileV3Schema.safeParse(wrongOwner).success).toBe(false)
   })
 
   it('keeps empty current projects explicitly capacity-only', () => {

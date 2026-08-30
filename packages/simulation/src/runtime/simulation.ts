@@ -549,12 +549,27 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     }
     if (payloadCostMs > 0) await this.delay(payloadCostMs)
     let dataCost: ReturnType<typeof estimateDataAccessCost> | undefined
+    let searchCost: { recordsExamined: number; bytesProcessed: number; explanation: string; fanOut: number; candidates: number; resultCount: number; stale: boolean; visibilityLagMs: number } | undefined
     if (this.action.data && runtime.node.type === 'database') {
       dataCost = estimateDataAccessCost(this.action.data, runtime.node.config.queryTimeMs)
     }
+    if (this.action.data && runtime.node.type === 'search-index') {
+      const isWrite = ['insert', 'update', 'delete'].includes(this.action.data.operation)
+      const fanOut = domainRequest.searchFanOut ?? (isWrite ? 1 : runtime.node.config.shardCount)
+      const candidates = domainRequest.searchCandidateCount ?? 0
+      const resultCount = domainRequest.searchResultCount ?? 0
+      const recordsExamined = isWrite ? Math.max(1, Math.min(this.action.data.cardinality, this.action.data.estimatedRows)) : candidates
+      searchCost = {
+        recordsExamined, bytesProcessed: Math.max(this.action.data.recordBytes, recordsExamined * this.action.data.recordBytes), fanOut, candidates, resultCount,
+        stale: domainRequest.searchStale ?? false, visibilityLagMs: domainRequest.searchVisibilityLagMs ?? 0,
+        explanation: isWrite
+          ? `Index mutation is acknowledged before refresh visibility on ${runtime.node.config.shardCount} primary shards.`
+          : `Search fans out to ${fanOut} shards and merges ${candidates} candidates into ${resultCount} results.`,
+      }
+    }
     const domainEvents = runtime.state?.complete(domainRequest, true, simulation.timeNow) ?? []
-    for (const event of this.action.data ? domainEvents.filter((candidate) => candidate.type !== 'database-read' && candidate.type !== 'database-written') : domainEvents) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
-    if (this.action.data) {
+    for (const event of this.action.data && runtime.node.type === 'database' ? domainEvents.filter((candidate) => candidate.type !== 'database-read' && candidate.type !== 'database-written') : domainEvents) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+    if (this.action.data && runtime.node.type === 'database') {
       const type = ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'database-written' as const : 'database-read' as const
       const routeEvent = domainEvents.find((event) => event.type === type)
       simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type, status: 'ok', ...(dataCost?.bytesProcessed === undefined ? {} : { bytes: dataCost.bytesProcessed }), attributes: { ...attributes, ...(routeEvent?.attributes ?? {}), recordsExamined: dataCost?.recordsExamined ?? 0, bytesProcessed: dataCost?.bytesProcessed ?? 0, explanation: dataCost?.explanation ?? '' } })
@@ -564,7 +579,11 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     if (this.action.responseBytes !== undefined) await this.delay(this.action.responseBytes / 262_144)
     this.outcome = cacheOutcome === 'hit' ? 'cache-hit' : cacheOutcome === 'miss' ? 'cache-miss' : 'success'
     this.reason = 'none'
-    this.finish(true, 'none', startedAtMs, { ...attributes, ...(dataCost ? { recordsExamined: dataCost.recordsExamined, bytesProcessed: dataCost.bytesProcessed, explanation: dataCost.explanation } : {}) })
+    this.finish(true, 'none', startedAtMs, {
+      ...attributes,
+      ...(dataCost ? { recordsExamined: dataCost.recordsExamined, bytesProcessed: dataCost.bytesProcessed, explanation: dataCost.explanation } : {}),
+      ...(searchCost ? { recordsExamined: searchCost.recordsExamined, bytesProcessed: searchCost.bytesProcessed, explanation: searchCost.explanation, searchFanOut: searchCost.fanOut, searchCandidates: searchCost.candidates, searchResultCount: searchCost.resultCount, searchStale: searchCost.stale, searchVisibilityLagMs: searchCost.visibilityLagMs } : {}),
+    })
   }
 
   private async processNode(nodeId: string, request: RequestState, attributes: Record<string, string | number | boolean>, finalNode: boolean): Promise<{ success: true; duration: number } | { success: false; reason: ReasonCode }> {

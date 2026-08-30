@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOrderSystemContractFixture } from '@system-design/model'
+import { createNode, createOrderSystemContractFixture } from '@system-design/model'
 import { compileSimulationInput } from './compiler'
 
 describe('operation-aware compiler', () => {
@@ -18,6 +18,31 @@ describe('operation-aware compiler', () => {
     ])
     expect(plan.actions.find((action) => action.id === 'write-order')?.data).toMatchObject({ operation: 'insert', cardinality: 10_000_000, recordBytes: 512 })
     expect(plan.actions.find((action) => action.id === 'call-api')?.handlerTimeMs).toBe(5)
+  })
+
+  it('compiles Search Index document cardinality and bytes into its executable action', () => {
+    const project = createOrderSystemContractFixture()
+    project.topology.nodes.push({ ...createNode('search-index', 'orders-search', { x: 600, y: 100 }), componentVersion: 1 })
+    project.topology.edges.push({
+      id: 'orders-to-search', source: 'orders-service', target: 'orders-search', sourcePort: 'out', targetPort: 'in',
+      weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one',
+    })
+    const document = project.definitions.dataModels.find((model) => model.kind === 'document')!
+    document.ownerNodeId = 'orders-search'
+    const action = project.definitions.interactions[0]!.actions[1]!
+    if (action.kind !== 'data-access') throw new Error('Expected data action')
+    action.nodeId = 'orders-search'
+    action.model = { modelId: document.id, modelVersion: document.version }
+    action.objectId = document.collections[0]!.id
+    action.operation = 'scan'
+    delete action.indexId
+
+    const compiled = compileSimulationInput(project)
+    const plan = [...compiled.operations.plans.values()].find((candidate) => candidate.operation.operationId === 'create-order')!
+    expect(plan.actions.find((candidate) => candidate.id === action.id)).toMatchObject({
+      nodeId: 'orders-search',
+      data: { modelKind: 'document', cardinality: 10_000_000, recordBytes: 2_048, operation: 'scan' },
+    })
   })
 
   it('rejects an interaction whose claimed action has no matching topology path', () => {

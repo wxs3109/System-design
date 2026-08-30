@@ -22,6 +22,8 @@ Project contracts are not component variants. Defining an Orders table once and 
 
 Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants:
 
+Phase 2 behavior expansion has also shipped Scheduler, CDN, and Search Index. Search Index is reused by the Product Search and streaming Log Search acceptance projects and consumes the same Document Model and interaction contracts as the generic editor; it is not a named preset or a case-specific page.
+
 | Category | Behavior | Modeled boundary |
 |---|---|---|
 | Traffic | Traffic Generator | Constant or Poisson request arrivals, size, duration, and generation cap |

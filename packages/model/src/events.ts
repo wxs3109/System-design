@@ -9,6 +9,7 @@ export const runtimeEventTypeSchema = z.enum([
   'circuit-opened', 'circuit-half-opened', 'circuit-closed', 'rate-limit-accepted', 'rate-limit-rejected',
   'cache-hit', 'cache-miss', 'cache-written', 'cache-deleted', 'cache-evicted', 'cache-expired', 'message-published', 'message-consumed',
   'cdn-pop-selected', 'cdn-cache-hit', 'cdn-cache-miss', 'cdn-origin-fetch',
+  'search-index-write-accepted', 'search-document-indexed', 'search-index-refreshed', 'search-replica-refreshed', 'search-query-fan-out', 'search-query-completed',
   'message-acknowledged', 'message-dead-lettered', 'stream-record-appended', 'stream-record-consumed',
   'object-read', 'object-written', 'database-read', 'database-written',
   'scheduler-tick', 'scheduler-run-released', 'scheduler-run-queued', 'scheduler-run-skipped', 'scheduler-run-settled',

@@ -148,19 +148,23 @@ export const reduceActionMetrics = (events: readonly RuntimeEvent[], aggregate?:
     operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed,
     averageDurationMs: round(value.totalDurationMs / Math.max(1, value.completed + value.failed)), recordsExamined: value.recordsExamined, bytesProcessed: value.bytesProcessed,
     ...(value.explanation === undefined ? {} : { explanation: value.explanation }),
+    ...(Object.keys(value.details).length === 0 ? {} : { details: { ...value.details } }),
   }))
-  const byAction = new Map<string, { operationId: string; actionId: string; actionKind: string; completed: number; failed: number; duration: number; records: number; bytes: number; explanation?: string }>()
+  const byAction = new Map<string, { operationId: string; actionId: string; actionKind: string; completed: number; failed: number; duration: number; records: number; bytes: number; explanation?: string; details: Record<string, string | number | boolean> }>()
   for (const event of events) {
     if (event.type !== 'action-completed' || !event.operationId || !event.actionId) continue
     const key = `${event.operationId}:${event.actionId}`
-    const value = byAction.get(key) ?? { operationId: event.operationId, actionId: event.actionId, actionKind: String(event.attributes.actionKind ?? 'unknown'), completed: 0, failed: 0, duration: 0, records: 0, bytes: 0 }
+    const value = byAction.get(key) ?? { operationId: event.operationId, actionId: event.actionId, actionKind: String(event.attributes.actionKind ?? 'unknown'), completed: 0, failed: 0, duration: 0, records: 0, bytes: 0, details: {} }
     if (event.status === 'ok') value.completed += 1
     else value.failed += 1
     value.duration += event.durationMs ?? 0
     value.records += Number(event.attributes.recordsExamined ?? 0)
     value.bytes += Number(event.attributes.bytesProcessed ?? 0)
     if (typeof event.attributes.explanation === 'string' && event.attributes.explanation) value.explanation = event.attributes.explanation
+    for (const [name, detail] of Object.entries(event.attributes)) {
+      if (name.startsWith('search') && (typeof detail === 'string' || typeof detail === 'number' || typeof detail === 'boolean')) value.details[name] = detail
+    }
     byAction.set(key, value)
   }
-  return [...byAction.values()].map((value) => ({ operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed, averageDurationMs: round(value.duration / Math.max(1, value.completed + value.failed)), recordsExamined: value.records, bytesProcessed: value.bytes, ...(value.explanation === undefined ? {} : { explanation: value.explanation }) }))
+  return [...byAction.values()].map((value) => ({ operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed, averageDurationMs: round(value.duration / Math.max(1, value.completed + value.failed)), recordsExamined: value.records, bytesProcessed: value.bytes, ...(value.explanation === undefined ? {} : { explanation: value.explanation }), ...(Object.keys(value.details).length === 0 ? {} : { details: { ...value.details } }) }))
 }

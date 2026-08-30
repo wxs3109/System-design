@@ -183,9 +183,9 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 3. **Preset** 只是一种 variant 的可选初始参数模板，可以附加已有策略，但不增加端口、Schema 或运行能力，也不在 Palette 中单独占一栏。
 4. **业务契约**定义组件实际处理的内容，包括 API operation、事件、table/collection、typed field、主键/分区键、index、关系、访问模式和 workload mix。它们是项目级可复用资源，不能只是塞进节点配置后被仿真忽略。
 
-Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。P2.6a 增加了独立 Scheduler 行为，P2.6b 增加了具有 POP 选择、独立边缘缓存、origin fetch 与带宽成本的 CDN 行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
+Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。P2.6a 增加了独立 Scheduler 行为，P2.6b 增加了具有 POP 选择、独立边缘缓存、origin fetch 与带宽成本的 CDN 行为，P2.6c 增加了具有索引延迟、refresh 可见性、分片/副本查询 fan-out 与候选合并成本的 Search Index 行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
 
-P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证完整闭环。P2.6a 的 Scheduler 已具备周期/批次释放、seeded jitter、skip/catch-up 与并发限制；P2.6b 的 CDN 使用可执行的 POP、TTL、origin fetch 和传输成本模型。下一步是 P2.6c Search Index。
+P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证完整闭环。P2.6a 的 Scheduler 已具备周期/批次释放、seeded jitter、skip/catch-up 与并发限制；P2.6b 的 CDN 使用可执行的 POP、TTL、origin fetch 和传输成本模型；P2.6c 的 Search Index 执行 Document Model、延迟 refresh、分片/副本查询和候选合并，并由 Product Search 与 Log Search 两个普通项目复用。下一步是 P2.6d Topic。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -222,7 +222,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 到 P2.5、P2.6a Scheduler 和 P2.6b CDN 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。Scheduler 是 Automation 类别中的独立 source variant；CDN 是 Cache 类别中的独立 executable variant，不是预设或装饰节点。下一步是 P2.6c Search Index。
+当前进度：P2.0 到 P2.5、P2.6a Scheduler、P2.6b CDN 和 P2.6c Search Index 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。Scheduler、CDN 与 Search Index 都是独立 executable variant，不是预设或装饰节点。下一步是 P2.6d Topic。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
@@ -278,7 +278,7 @@ Phase 2 的 P2.2 与 P2.3 已完成：`ProjectFile v3` 区分 `capacity-only` �
 
 Phase 2 的 P2.4 已完成：operation workload 会编译为拓扑绑定的交互计划，按依赖和条件执行 API/service、数据、缓存与事件 action；表或 collection 的 cardinality、记录大小、索引形态、estimated rows、handler time、operation mix 和键分布会进入可复现的成本与负载模型。Results 展示 operation 成功/失败/p95 和 action 延迟、records examined、bytes processed，Trace 保留 operation/action 身份。具体公式和仍属描述性的字段见 [Simulation Model Assumptions](docs/model-assumptions.md)。
 
-当前仍是早期平台：P2.5 已用完全由通用合同组成的订单系统完成浏览器纵切，覆盖写入后发事件、cache-aside、索引与扫描、热点键和不同读写混合的对比。后续新增组件仍必须拥有独立、可测的运行时语义，不能用新增图标替代端到端行为。
+当前仍是早期平台：P2.5 已用完全由通用合同组成的订单系统完成浏览器纵切；P2.6c 又用 Product Search 与 streaming Log Search 验收同一 Search Index 行为，覆盖 Document Model、成功写入后的索引队列、refresh/replica 可见性、stale query、shard fan-out、candidate merge 及其 action/node evidence。后续新增组件仍必须拥有独立、可测的运行时语义，不能用新增图标替代端到端行为。
 
 本地运行：
 

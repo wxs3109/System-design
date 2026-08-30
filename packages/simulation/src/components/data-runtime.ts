@@ -1,6 +1,7 @@
 import type { ComponentNode, EventStatus, RuntimeEventType } from '@system-design/model'
 import type { CompiledOperationAction } from '../compiler/operation-plan'
 import { CdnState, ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState } from './data-state'
+import { SearchIndexState, type SearchRefreshResult } from './search-state'
 
 export interface StatefulRequest {
   id: number
@@ -14,6 +15,12 @@ export interface StatefulRequest {
   payloadBytes?: number
   cdnOutcome?: 'hit' | 'miss'
   cdnPop?: number
+  searchCandidateCount?: number
+  searchFanOut?: number
+  searchResultCount?: number
+  searchStale?: boolean
+  searchVisibilityLagMs?: number
+  incomingRoutingMode?: 'weighted-one' | 'fan-out' | 'async-publish'
 }
 
 export interface ComponentDomainEvent {
@@ -29,7 +36,7 @@ export interface ComponentStateSnapshot {
 }
 
 export interface ComponentStateDecision {
-  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'bytes'>>
+  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'searchCandidateCount' | 'searchFanOut' | 'searchResultCount' | 'searchStale' | 'searchVisibilityLagMs' | 'bytes'>>
   events?: ComponentDomainEvent[]
 }
 
@@ -167,6 +174,105 @@ export class CdnRuntime implements ComponentStateRuntime {
   }
 }
 
+class SearchIndexRuntime implements ComponentStateRuntime {
+  private readonly indexes = new Map<string, SearchIndexState>()
+  private readonly pending = new Map<string, {
+    key: string
+    operation: 'read' | 'write'
+    search: SearchIndexState
+    mutationOperation?: 'insert' | 'update' | 'delete'
+    query?: ReturnType<SearchIndexState['query']>
+    resultLimit?: number
+    bytes: number
+  }>()
+
+  constructor(private readonly node: Extract<ComponentNode, { type: 'search-index' }>) {}
+
+  begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision {
+    const key = generatedKey(request, this.node.config.keySpaceSize, request.hotKeyProbabilityOverride ?? this.node.config.hotKeyProbability, random)
+    const dataOperation = request.operationAction?.data?.operation
+    const operation = request.operation ?? (dataOperation && ['insert', 'update', 'delete'].includes(dataOperation)
+      ? 'write'
+      : request.incomingRoutingMode === 'async-publish' || random() < this.node.config.writeRatio ? 'write' : 'read')
+    const bytes = request.payloadBytes ?? request.bytes
+    const search = this.indexFor(request)
+    if (operation === 'write') {
+      const mutationOperation = dataOperation === 'delete' ? 'delete' as const : dataOperation === 'update' ? 'update' as const : 'insert' as const
+      this.pending.set(token(request), { key, operation, search, mutationOperation, bytes })
+      return { patch: { key, operation, outgoingPort: 'out', bytes } }
+    }
+    const resultLimit = Math.max(1, request.operationAction?.data?.estimatedRows ?? this.node.config.defaultResultLimit)
+    const query = search.query(key, resultLimit, nowMs)
+    this.pending.set(token(request), { key, operation, search, query, resultLimit, bytes })
+    return {
+      patch: {
+        key, operation, outgoingPort: 'out', searchCandidateCount: query.candidateCount, searchFanOut: query.fanOut,
+        searchResultCount: query.resultCount, searchStale: query.stale, searchVisibilityLagMs: query.visibilityLagMs,
+      },
+      events: [
+        ...this.refreshEvents(query.refresh),
+        { type: 'search-query-fan-out', status: 'ok', attributes: { key, fanOut: query.fanOut, primaryCopies: query.routes.filter((route) => route.role === 'primary').length, replicaCopies: query.routes.filter((route) => route.role === 'replica').length, candidates: query.candidateCount, resultLimit } },
+      ],
+    }
+  }
+
+  complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[] {
+    const pending = this.pending.get(token(request))
+    this.pending.delete(token(request))
+    if (!pending) return []
+    if (!success) return []
+    if (pending.operation === 'write') {
+      const accepted = pending.search.accept(pending.key, pending.mutationOperation ?? 'insert', nowMs)
+      return [
+        ...this.refreshEvents(accepted.refresh),
+        { type: 'search-index-write-accepted', status: 'ok', bytes: pending.bytes, attributes: { key: pending.key, operation: accepted.mutation.operation, shard: accepted.mutation.shard, version: accepted.mutation.version, visibleAtMs: accepted.mutation.visibleAtMs, replicaVisibleAtMs: accepted.mutation.replicaVisibleAtMs } },
+      ]
+    }
+    const query = pending.query!
+    return [{ type: 'search-query-completed', status: 'ok', attributes: { key: pending.key, stale: query.stale, visible: query.visible, resultCount: query.resultCount, resultLimit: pending.resultLimit ?? query.resultCount, candidates: query.candidateCount, fanOut: query.fanOut, latestVersion: query.latestVersion, visibleVersion: query.visibleVersion, visibilityLagMs: query.visibilityLagMs } }]
+  }
+
+  snapshot(nowMs: number): ComponentStateSnapshot {
+    const values = [...this.indexes.values()].map((search) => search.snapshot(nowMs))
+    const sum = (select: (value: (typeof values)[number]) => number) => values.reduce((total, value) => total + select(value), 0)
+    const queries = sum((value) => value.queries)
+    const staleQueries = sum((value) => value.staleQueries)
+    const queriesByShard = Array.from({ length: this.node.config.shardCount }, (_, shard) => values.reduce((total, value) => total + (value.queriesByShard[shard] ?? 0), 0))
+    return {
+      metrics: {
+        searchStaleQueryRate: queries === 0 ? 0 : staleQueries / queries, searchPendingMutations: sum((value) => value.pendingMutations), searchReplicaRefreshBacklog: sum((value) => value.replicaRefreshBacklog),
+        searchIndexWrites: sum((value) => value.acceptedWrites), searchIndexedMutations: sum((value) => value.indexedMutations), searchVisibleDocuments: sum((value) => value.visibleDocuments), searchQueries: queries, searchStaleQueries: staleQueries, searchShardSearches: sum((value) => value.shardSearches),
+        searchCandidatesMerged: sum((value) => value.candidatesMerged), searchPrimaryShardQueries: sum((value) => value.primaryShardQueries), searchReplicaShardQueries: sum((value) => value.replicaShardQueries), searchMaxRefreshLagMs: Math.max(0, ...values.map((value) => value.maximumRefreshLagMs)),
+        ...indexedMetrics('searchQueriesByShard', queriesByShard),
+      },
+      events: values.flatMap((value) => this.refreshEvents(value.refresh)),
+    }
+  }
+
+  private indexFor(request: StatefulRequest) {
+    const data = request.operationAction?.data
+    const id = data ? `${data.modelId}:${data.objectId}` : '__capacity__'
+    let search = this.indexes.get(id)
+    if (!search) {
+      search = new SearchIndexState({
+        shardCount: this.node.config.shardCount, replicasPerShard: this.node.config.replicasPerShard, indexingDelayMs: this.node.config.indexingDelayMs,
+        refreshIntervalMs: this.node.config.refreshIntervalMs, replicaRefreshDelayMs: this.node.config.replicaRefreshDelayMs,
+        initialDocumentCount: data?.cardinality ?? this.node.config.keySpaceSize,
+      })
+      this.indexes.set(id, search)
+    }
+    return search
+  }
+
+  private refreshEvents(refresh: SearchRefreshResult): ComponentDomainEvent[] {
+    if (refresh.primary.length === 0 && refresh.replicas.length === 0) return []
+    const indexed = refresh.primary.map((mutation) => ({ type: 'search-document-indexed' as const, status: 'ok' as const, attributes: { key: mutation.key, operation: mutation.operation, shard: mutation.shard, version: mutation.version, visibleAtMs: mutation.visibleAtMs } }))
+    const primary = refresh.primary.length === 0 ? [] : [{ type: 'search-index-refreshed' as const, status: 'ok' as const, attributes: { mutations: refresh.primary.length, shards: new Set(refresh.primary.map((mutation) => mutation.shard)).size, refreshBoundaryMs: Math.max(...refresh.primary.map((mutation) => mutation.visibleAtMs)) } }]
+    const replicas = refresh.replicas.map(({ mutation, replica }) => ({ type: 'search-replica-refreshed' as const, status: 'ok' as const, attributes: { key: mutation.key, shard: mutation.shard, replica, version: mutation.version, visibleAtMs: mutation.replicaVisibleAtMs } }))
+    return [...indexed, ...primary, ...replicas]
+  }
+}
+
 class StreamRuntime implements ComponentStateRuntime {
   private readonly stream
 
@@ -276,6 +382,7 @@ export const createComponentStateRuntime = (node: ComponentNode): ComponentState
   switch (node.type) {
     case 'cache': return new CacheRuntime(node)
     case 'cdn': return new CdnRuntime(node)
+    case 'search-index': return new SearchIndexRuntime(node)
     case 'stream': return new StreamRuntime(node)
     case 'object-storage': return new ObjectStorageRuntime(node)
     case 'database': return node.componentVersion === 2 ? new DatabaseRuntime(node) : undefined

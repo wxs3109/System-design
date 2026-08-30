@@ -122,6 +122,7 @@ export const createDefinitionResource = (project: ProjectFile, kind: DefinitionK
   const schemas = project.definitions.jsonSchemas
   const services = project.topology.nodes.filter((node) => node.type === 'service')
   const databases = project.topology.nodes.filter((node) => node.type === 'database')
+  const documentStores = project.topology.nodes.filter((node) => node.type === 'database' || node.type === 'search-index')
   const traffic = project.topology.nodes.filter((node) => node.type === 'traffic')
   const schedulers = project.topology.nodes.filter((node) => node.type === 'scheduler')
   if (kind === 'jsonSchemas') {
@@ -135,7 +136,7 @@ export const createDefinitionResource = (project: ProjectFile, kind: DefinitionK
     return { id, version: 1, name: 'New API', ownerNodeId: owner.id, operations: [{ id: uniqueId('operation', operationIds), name: 'New operation', method: 'GET', path: '/resource', responses: [{ statusCode: '200' }] }] }
   }
   if (kind === 'dataModels') {
-    const owner = requireFirst(databases, 'Add a Database component before defining a data model.')
+    const owner = requireFirst(modelKind === 'document' ? documentStores : databases, modelKind === 'document' ? 'Add a Database or Search Index before defining a document model.' : 'Add a Database component before defining a data model.')
     const id = uniqueId(`${modelKind}-model`, allResourceIds(project, kind))
     if (modelKind === 'relational') return {
       id, version: 1, name: 'Relational model', ownerNodeId: owner.id, kind: 'relational',

@@ -210,13 +210,14 @@ const validateBusinessReferences = (project: {
   const cacheKeys = new Set(project.definitions.cacheKeys.map((key) => referenceKey(key.id, key.version)))
   const interactions = new Map(project.definitions.interactions.map((interaction) => [referenceKey(interaction.id, interaction.version), interaction]))
 
-  const requireNode = (id: string, path: (string | number)[], expectedType?: string) => {
+  const requireNode = (id: string, path: (string | number)[], expectedType?: string | readonly string[]) => {
     const node = nodes.get(id)
     if (!node) {
       addReferenceIssue(context, path, `Unknown topology node: ${id}`)
       return undefined
     }
-    if (expectedType && node.type !== expectedType) addReferenceIssue(context, path, `Node ${id} must be a ${expectedType} component.`)
+    const expectedTypes = expectedType === undefined ? undefined : Array.isArray(expectedType) ? expectedType : [expectedType]
+    if (expectedTypes && !expectedTypes.includes(node.type)) addReferenceIssue(context, path, `Node ${id} must be a ${expectedTypes.join(' or ')} component.`)
     return node
   }
   const requireSchema = (reference: { schemaId: string; schemaVersion: number }, path: (string | number)[]) => {
@@ -241,7 +242,8 @@ const validateBusinessReferences = (project: {
   })
 
   project.definitions.dataModels.forEach((model, modelIndex) => {
-    requireNode(model.ownerNodeId, ['definitions', 'dataModels', modelIndex, 'ownerNodeId'], 'database')
+    const owner = requireNode(model.ownerNodeId, ['definitions', 'dataModels', modelIndex, 'ownerNodeId'], model.kind === 'document' ? ['database', 'search-index'] : 'database')
+    if (owner?.type === 'search-index' && model.kind !== 'document') addReferenceIssue(context, ['definitions', 'dataModels', modelIndex, 'kind'], 'Search Index can own only a document data model.')
     if (model.kind === 'document') model.collections.forEach((collection, collectionIndex) => {
       requireSchema(collection.documentSchema, ['definitions', 'dataModels', modelIndex, 'collections', collectionIndex, 'documentSchema'])
     })
@@ -277,7 +279,7 @@ const validateBusinessReferences = (project: {
           if (target && referenced && referenced.api.ownerNodeId !== target.id) addReferenceIssue(context, [...path, 'targetNodeId'], `API operation is owned by node ${referenced.api.ownerNodeId}, not ${target.id}.`)
         }
       } else if (action.kind === 'data-access') {
-        const node = requireNode(action.nodeId, [...path, 'nodeId'], 'database')
+        const node = requireNode(action.nodeId, [...path, 'nodeId'], ['database', 'search-index'])
         const modelKey = referenceKey(action.model.modelId, action.model.modelVersion)
         const model = models.get(modelKey)
         if (!model) {
@@ -285,6 +287,11 @@ const validateBusinessReferences = (project: {
           return
         }
         if (node && model.ownerNodeId !== node.id) addReferenceIssue(context, [...path, 'nodeId'], `Data model is owned by node ${model.ownerNodeId}, not ${node.id}.`)
+        if (node?.type === 'search-index') {
+          if (model.kind !== 'document') addReferenceIssue(context, [...path, 'model'], 'Search Index data access requires a document data model.')
+          const allowed = ['index-read', 'range-read', 'scan', 'insert', 'update', 'delete']
+          if (!allowed.includes(action.operation)) addReferenceIssue(context, [...path, 'operation'], `Search Index does not support ${action.operation}.`)
+        }
         const object = model.kind === 'relational' ? model.tables.find((candidate) => candidate.id === action.objectId)
           : model.kind === 'document' ? model.collections.find((candidate) => candidate.id === action.objectId)
             : model.namespaces.find((candidate) => candidate.id === action.objectId)

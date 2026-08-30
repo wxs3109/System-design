@@ -59,6 +59,7 @@ export interface ActionMetrics {
   recordsExamined: number
   bytesProcessed: number
   explanation?: string
+  details?: Record<string, string | number | boolean>
 }
 
 export interface SimulationResult {

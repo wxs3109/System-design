@@ -197,6 +197,52 @@ test('loads video delivery and exposes executable CDN controls and metrics', asy
   await expect(row.getByText(/origin fetches/)).toBeVisible()
 })
 
+test('loads product search and exposes executable Search Index contracts, controls, and metrics', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Product search/ }).click()
+  await expect(page.getByText('5 components')).toBeVisible()
+  await page.getByTestId('rf__node-product-search-index').dispatchEvent('click')
+  await expect(page.getByLabel('Primary shards')).toHaveValue('4')
+  await expect(page.getByLabel('Replicas / shard')).toHaveValue('1')
+  await expect(page.getByLabel('Refresh interval (ms)')).toHaveValue('500')
+  await expect(page.getByLabel('Merge / candidate (ms)')).toHaveValue('0.01')
+
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  const explorer = page.getByRole('navigation', { name: 'Project definitions' })
+  await explorer.getByRole('button', { name: /Product search documents/ }).click()
+  const editor = page.getByLabel('Definition editor')
+  await expect(editor.getByRole('textbox', { name: 'Collection ID' })).toHaveValue('products')
+  await expect(editor.getByRole('textbox', { name: 'Index ID' })).toHaveValue('ix-product-text')
+  await expect(editor.locator('input[value="product_text_and_facets"]')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  const row = page.getByRole('row').filter({ hasText: 'Product search index' })
+  await expect(row.getByText(/stale queries/)).toBeVisible()
+  await expect(row.getByText(/index backlog/)).toBeVisible()
+  await expect(row.getByText(/replica backlog/)).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Action metrics' }).getByText(/fan-out 4 · candidates 96 · results 24/).first()).toBeVisible()
+})
+
+test('loads log search as a distinct streaming-ingest Search Index system', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Log search/ }).click()
+  await expect(page.getByText('7 components')).toBeVisible()
+  await expect(page.getByTestId('rf__node-log-stream')).toContainText('Stream')
+  await page.getByTestId('rf__node-log-search-index').dispatchEvent('click')
+  await expect(page.getByLabel('Primary shards')).toHaveValue('8')
+  await expect(page.getByLabel('Replicas / shard')).toHaveValue('2')
+  await expect(page.getByLabel('Index-write ratio (0–1)')).toHaveValue('0.8')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  const row = page.getByRole('row').filter({ hasText: 'Log search index' })
+  await expect(row.getByText(/stale queries/)).toBeVisible()
+  await expect(row.getByText(/index backlog/)).toBeVisible()
+})
+
 test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({

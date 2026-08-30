@@ -78,6 +78,17 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.safeParse({ ...cdn, config: { ...cdn.config, edgeBandwidthMbps: 0 } }).success).toBe(false)
   })
 
+  it('validates Search Index refresh, shard, and merge configuration', () => {
+    const search = createNode('search-index', 'search', { x: 100, y: 50 })
+    if (search.type !== 'search-index') throw new Error('Expected a Search Index node.')
+    search.config.shardCount = 12
+    search.config.replicaRefreshDelayMs = 250
+    expect(scenarioSchema.shape.nodes.element.parse(search)).toEqual(search)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...search, config: { ...search.config, shardCount: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...search, config: { ...search.config, refreshIntervalMs: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...search, config: { ...search.config, mergeTimePerCandidateMs: -1 } }).success).toBe(false)
+  })
+
   it('validates fault-specific factor bounds', () => {
     const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
     expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)
