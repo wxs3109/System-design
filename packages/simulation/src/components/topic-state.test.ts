@@ -107,6 +107,34 @@ describe('TopicState', () => {
     state.publish('message', 1, 1)
     expect(() => state.acknowledge('email', [0], 2)).toThrow('undelivered')
     expect(() => state.deliver('missing', 1, 2)).toThrow('Unknown subscription')
+    state.snapshot(2)
     expect(() => state.snapshot(1)).toThrow('monotonic')
+  })
+
+  it('does not advance virtual time or expire messages when an operation is invalid', () => {
+    const invalidPublish = createState(10)
+    invalidPublish.publish('message:1', 1, 0)
+    expect(() => invalidPublish.publish('message:2', -1, 10)).toThrow('bytes')
+    expect(invalidPublish.snapshot(1)).toMatchObject({ retainedMessages: 1, expiredMessages: 0 })
+
+    const invalidDelivery = createState(10)
+    invalidDelivery.publish('message:1', 1, 0)
+    expect(() => invalidDelivery.deliver('missing', 1, 10)).toThrow('Unknown subscription')
+    expect(invalidDelivery.snapshot(1)).toMatchObject({ retainedMessages: 1, expiredMessages: 0 })
+
+    const invalidAcknowledgement = createState(10)
+    invalidAcknowledgement.publish('message:1', 1, 0)
+    expect(() => invalidAcknowledgement.acknowledge('email', [0, 0], 10)).toThrow('unique')
+    expect(invalidAcknowledgement.snapshot(1)).toMatchObject({ retainedMessages: 1, expiredMessages: 0 })
+
+    const undeliveredAcknowledgement = createState(10)
+    undeliveredAcknowledgement.publish('message:1', 1, 0)
+    expect(() => undeliveredAcknowledgement.acknowledge('email', [0], 5)).toThrow('undelivered')
+    expect(undeliveredAcknowledgement.snapshot(1)).toMatchObject({ retainedMessages: 1, expiredMessages: 0 })
+
+    const unknownRelease = createState(10)
+    unknownRelease.publish('message:1', 1, 0)
+    expect(() => unknownRelease.release('email', [99], 10)).toThrow('unknown message')
+    expect(unknownRelease.snapshot(1)).toMatchObject({ retainedMessages: 1, expiredMessages: 0 })
   })
 })

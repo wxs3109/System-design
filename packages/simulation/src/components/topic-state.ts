@@ -82,9 +82,10 @@ export class TopicState {
   }
 
   publish(key: string, bytes: number, nowMs: number): TopicPublishResult {
-    const expired = this.expire(nowMs)
+    assertVirtualTime(nowMs, this.lastTimeMs)
     if (key.trim().length === 0) throw new Error('Message key must not be empty.')
     if (!Number.isInteger(bytes) || bytes < 0) throw new Error('bytes must be a non-negative integer.')
+    const expired = this.expire(nowMs)
     while (this.messages.size >= this.config.maxRetainedMessages) {
       const oldest = this.messages.values().next().value as TopicMessage | undefined
       if (!oldest) break
@@ -100,9 +101,10 @@ export class TopicState {
   }
 
   deliver(subscriptionId: string, batchSize: number, nowMs: number): TopicDeliveryResult {
-    const expired = this.expire(nowMs)
+    assertVirtualTime(nowMs, this.lastTimeMs)
     if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error('batchSize must be a positive integer.')
     const subscription = this.subscription(subscriptionId)
+    const expired = this.expire(nowMs)
     const deliveries: TopicDelivery[] = []
     for (const [messageId, state] of subscription.messages) {
       if (deliveries.length >= batchSize) break
@@ -118,10 +120,12 @@ export class TopicState {
   }
 
   acknowledge(subscriptionId: string, messageIds: readonly number[], nowMs: number): TopicAcknowledgeResult {
-    const expired = this.expire(nowMs)
+    assertVirtualTime(nowMs, this.lastTimeMs)
     const subscription = this.subscription(subscriptionId)
     const uniqueIds = new Set(messageIds)
     if (uniqueIds.size !== messageIds.length) throw new Error('Acknowledgement message IDs must be unique.')
+    this.validateSettlement(subscriptionId, subscription, uniqueIds, nowMs, 'acknowledge')
+    const expired = this.expire(nowMs)
     const expiredIds = new Set(expired.filter((delivery) => delivery.subscriptionId === subscriptionId).map((delivery) => delivery.message.id))
     const acknowledged: TopicMessage[] = []
     for (const messageId of uniqueIds) {
@@ -141,10 +145,13 @@ export class TopicState {
   }
 
   release(subscriptionId: string, messageIds: readonly number[], nowMs: number) {
-    const expired = this.expire(nowMs)
+    assertVirtualTime(nowMs, this.lastTimeMs)
     const subscription = this.subscription(subscriptionId)
+    const uniqueIds = new Set(messageIds)
+    this.validateSettlement(subscriptionId, subscription, uniqueIds, nowMs, 'release')
+    const expired = this.expire(nowMs)
     const expiredIds = new Set(expired.filter((delivery) => delivery.subscriptionId === subscriptionId).map((delivery) => delivery.message.id))
-    for (const messageId of new Set(messageIds)) {
+    for (const messageId of uniqueIds) {
       if (expiredIds.has(messageId)) continue
       const state = subscription.messages.get(messageId)
       if (!state) {
@@ -211,6 +218,19 @@ export class TopicState {
     if (cause === 'time-retention') this.timeExpiredMessages += 1
     else this.capacityExpiredMessages += 1
     return expired
+  }
+
+  private validateSettlement(subscriptionId: string, subscription: SubscriptionState, messageIds: ReadonlySet<number>, nowMs: number, operation: 'acknowledge' | 'release') {
+    for (const messageId of messageIds) {
+      if (!Number.isInteger(messageId) || messageId < 0 || messageId >= this.nextMessageId) {
+        throw new Error(`Cannot ${operation} unknown message ${messageId} for subscription ${subscriptionId}.`)
+      }
+      const state = subscription.messages.get(messageId)
+      const message = this.messages.get(messageId)
+      if (state && state.deliveredAtMs === undefined && message && message.expiresAtMs > nowMs) {
+        throw new Error(`Cannot ${operation} undelivered message ${messageId} for subscription ${subscriptionId}.`)
+      }
+    }
   }
 
   private advance(nowMs: number) {
