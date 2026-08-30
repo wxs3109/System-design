@@ -36,6 +36,11 @@ const BANNED = [
   [/\bKillings\b/, 'Killings', 'Bans / takedowns'],
 ]
 
+// Working trees on Windows are commonly CRLF, so normalize before matching.
+// Without this, every line carries a trailing \r and `(.*)$` swallows it,
+// which silently breaks heading slugs and end-of-line patterns.
+const readLines = (abs) => fs.readFileSync(abs, 'utf8').split(/\r?\n/)
+
 const errors = []
 const add = (file, line, kind, msg) => errors.push({ file, line, kind, msg })
 
@@ -44,7 +49,7 @@ const slugCache = new Map()
 const headingSlugs = (abs) => {
   if (slugCache.has(abs)) return slugCache.get(abs)
   const set = new Set()
-  for (const l of fs.readFileSync(abs, 'utf8').split('\n')) {
+  for (const l of readLines(abs)) {
     const h = /^#{1,6}\s+(.*)$/.exec(l)
     if (!h) continue
     set.add(
@@ -60,7 +65,7 @@ const headingSlugs = (abs) => {
 for (const abs of walk(ROOT)) {
   const rel = path.relative(ROOT, abs).split(path.sep).join('/')
   const dir = path.dirname(abs)
-  const lines = fs.readFileSync(abs, 'utf8').split('\n')
+  const lines = readLines(abs)
 
   let inFence = false
   let inFrontMatter = false
