@@ -8,23 +8,26 @@ The case directory maintains one case per location and does not split folders ba
 
 ## Case Map
 
-| Case | Core business closed loop | Key reused basic capabilities |
-|---|---|---|
-| [URL Shortener](01-url-shortener/) | Create a short link and complete the jump | API Gateway, Cache, Rate Limiter, Metrics |
-| [Pastebin](02-pastebin/) | Create, share and read text | API Gateway, Object Storage, Cache, cleanup tasks |
-| [News Feed](03-news-feed/) | Post, follow and read the timeline | API Gateway, Cache, Queue, Object Storage, Notification |
-| [Chat System](04-chat-system/) | Establish a connection, send messages and synchronize across devices | API Gateway, Connection Gateway, Queue, Notification |
-| [Video Streaming](05-video-streaming/) | Upload, transcode, distribute and play videos | API Gateway, Object Storage, Scheduler, CDN, Cache |
-| [Maps & Navigation](06-maps-navigation/) | Map tiles, location search and route planning | API Gateway, CDN, Cache, stream processing |
-| [File Sync](07-file-sync/) | Multi-device synchronization, sharing and conflict handling | API Gateway, Object Storage, Notification, Scheduler |
-| [Ticket Booking](08-ticket-booking/) | Search, lock, pay and issue tickets | API Gateway, Cache, Queue, Scheduler, Payment |
-| [Payment Processing](09-payment-processing/) | Payment, refund, accounting and Reconciliation (difference checking and repair) | API Gateway, Queue, Scheduler, Notification, Metrics |
-| [Ride Dispatch](10-ride-dispatch/) | Location reporting, ride calling, matching, itinerary and pricing | API Gateway, Location Ingestion, Notification, Payment |
-| [Search / Autocomplete](11-search-and-autocomplete/) | Ingest documents, build indexes, and complete search and completion | API Gateway, Event Stream, Scheduler, Cache, Index Storage |
-| [Collaborative Editor](12-collaborative-editor/) | Multi-person real-time editing, offline modification and version recovery | API Gateway, Connection Gateway, Operation Log, Object Storage |
-| [Ads / Clickstream Analytics](13-ads-clickstream-analytics/) | Receive events, real-time aggregation, query reports and billing verification | Event Ingestion, Event Stream, Stream Processing, Batch Processing |
-| [E-commerce Order System](14-ecommerce-order-system/) | Browsing, ordering, inventory reservation, payment and fulfillment | API Gateway, Cache, Queue, Scheduler, Payment, Notification |
-| [Recommendation System](15-recommendation-system/) | Generate candidates, sort, online services and continuously improve through feedback and experiments | API Gateway, Feature Store, Event Stream, Stream / Batch Processing, Cache |
+| State | Case | Core business closed loop | Key reused basic capabilities |
+|---|---|---|---|
+| 📋 | [URL Shortener](01-url-shortener/) | Create a short link and complete the jump | API Gateway, Cache, Rate Limiter, Metrics |
+| 📋 | [Pastebin](02-pastebin/) | Create, share and read text | API Gateway, Object Storage, Cache, cleanup tasks |
+| ✅ | [News Feed](03-news-feed/) | Post, follow and read the timeline | API Gateway, Cache, Queue, Object Storage, Notification |
+| 📋 | [Chat System](04-chat-system/) | Establish a connection, send messages and synchronize across devices | API Gateway, Connection Gateway, Queue, Notification |
+| 🚧 | [Video Streaming](05-video-streaming/) | Upload, transcode, distribute and play videos | API Gateway, Object Storage, Scheduler, CDN, Cache |
+| 📋 | [Maps & Navigation](06-maps-navigation/) | Map tiles, location search and route planning | API Gateway, CDN, Cache, stream processing |
+| 📋 | [File Sync](07-file-sync/) | Multi-device synchronization, sharing and conflict handling | API Gateway, Object Storage, Notification, Scheduler |
+| 📋 | [Ticket Booking](08-ticket-booking/) | Search, lock, pay and issue tickets | API Gateway, Cache, Queue, Scheduler, Payment |
+| 📋 | [Payment Processing](09-payment-processing/) | Payment, refund, accounting and Reconciliation (difference checking and repair) | API Gateway, Queue, Scheduler, Notification, Metrics |
+| 📋 | [Ride Dispatch](10-ride-dispatch/) | Location reporting, ride calling, matching, itinerary and pricing | API Gateway, Location Ingestion, Notification, Payment |
+| 📋 | [Search / Autocomplete](11-search-and-autocomplete/) | Ingest documents, build indexes, and complete search and completion | API Gateway, Event Stream, Scheduler, Cache, Index Storage |
+| 📋 | [Collaborative Editor](12-collaborative-editor/) | Multi-person real-time editing, offline modification and version recovery | API Gateway, Connection Gateway, Operation Log, Object Storage |
+| 📋 | [Ads / Clickstream Analytics](13-ads-clickstream-analytics/) | Receive events, real-time aggregation, query reports and billing verification | Event Ingestion, Event Stream, Stream Processing, Batch Processing |
+| 📋 | [E-commerce Order System](14-ecommerce-order-system/) | Browsing, ordering, inventory reservation, payment and fulfillment | API Gateway, Cache, Queue, Scheduler, Payment, Notification |
+| 📋 | [Recommendation System](15-recommendation-system/) | Generate candidates, sort, online services and continuously improve through feedback and experiments | API Gateway, Feature Store, Event Stream, Stream / Batch Processing, Cache |
+
+✅ full reading path &nbsp;·&nbsp; 🚧 partial content &nbsp;·&nbsp; 📋 skeleton only.
+Markers are derived from the tree by `node .tools/case-status.mjs`; do not edit them by hand.
 
 The "Case Portrait" at the beginning of each case's README uses the same fields to help with horizontal comparison. `Primary Archetype` indicates the leading problem, but does not mean that the case can only be classified into one type.
 

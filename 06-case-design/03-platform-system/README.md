@@ -12,16 +12,19 @@ A platform system does not only complete one user scenario, nor does it only pro
 
 ## Current case
 
-| Case | Core object of unified hosting | Main in-depth points |
-|---|---|---|
-| [Multi-tenant data platform](01-multi-tenant-data-platform/) | Tenant, Capacity, Workspace, Item, Workload, Shared Data Storage | User isolation, unified Item model, multiple Workloads, computing units and data pipelines |
-| [Declarative Resource Control Platform](02-declarative-control-platform/) | Resource, Spec, Status, Controller, Node, Workload | Desired / Observed State, Watch, Reconciliation, Admission, Placement, Extended Resource Contract |
-| [Serverless / Developer Platform](03-serverless-developer-platform/) | Project, Application, Build, Artifact, Deployment, Revision, Route, Invocation | Build / Deploy / Runtime, version traffic, Rollback, Sandbox, Cold Start, Scale-to-zero, metering |
+| State | Case | Core object of unified hosting | Main in-depth points |
+|---|---|---|---|
+| ✅ | [Multi-tenant data platform](01-multi-tenant-data-platform/) | Tenant, Capacity, Workspace, Item, Workload, Shared Data Storage | User isolation, unified Item model, multiple Workloads, computing units and data pipelines |
+| 📋 | [Declarative Resource Control Platform](02-declarative-control-platform/) | Resource, Spec, Status, Controller, Node, Workload | Desired / Observed State, Watch, Reconciliation, Admission, Placement, Extended Resource Contract |
+| 📋 | [Serverless / Developer Platform](03-serverless-developer-platform/) | Project, Application, Build, Artifact, Deployment, Revision, Route, Invocation | Build / Deploy / Runtime, version traffic, Rollback, Sandbox, Cold Start, Scale-to-zero, metering |
+
+✅ full reading path &nbsp;·&nbsp; 🚧 partial content &nbsp;·&nbsp; 📋 skeleton only.
+Markers are derived from the tree by `node .tools/case-status.mjs`; do not edit them by hand.
 
 The three cases cover data assets and computing capacity, declarative resource convergence, application delivery and runtime respectively. They can share control planes, scheduling, quotas, and multi-tenancy mechanisms, but have different primary platform contracts for training:
 
 | Platform type | What users submit | What the platform promises | Core feedback loop |
-|---|---|---|---|
+|---|---|---|---|---|
 | Multi-tenant data platform | Data assets, queries or data Workloads | Store, process and govern data under unified Tenant / Workspace / Capacity | Operation / Job and data state convergence |
 | Declarative resource control platform | Resource Spec (desired state) | Continuously converge the Observed State to the Desired State | Watch → Reconcile → Status |
 | Serverless / Developer Platform | Source code or Artifact, deployment and routing configuration | Build, publish, run, scale up and down, and route traffic to Revision | Build / Deploy / Runtime and Traffic Rollout |

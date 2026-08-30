@@ -32,7 +32,35 @@ This set of notes is used for system design interview preparation. In the first 
 
 ## Suggested order of cases
 
-Load Balancer → API Gateway → Cache → Rate Limiter → Object Storage → Message Queue / Event Stream → Job Scheduler → URL Shortener → News Feed → Chat → Video Streaming → Maps & Navigation → Booking → Payment。
+The order below is the intended learning sequence. Most of it is not written yet,
+so each entry carries its current state — follow the sequence, but expect to stop
+at the first 📋.
+
+| State | Meaning |
+|---|---|
+| ✅ | Full reading path: `README` → progressive mainline → review and practice |
+| 🚧 | Real design content, but the reading path is incomplete |
+| 📋 | Skeleton only: scope and required questions are fixed, the design is not written |
+
+1. ✅ [Load Balancer](06-case-design/01-common-basic-system/01-load-balancer/)
+2. 🚧 [API Gateway](06-case-design/01-common-basic-system/02-api-gateway/) — six topic documents, no mainline or review
+3. ✅ [Distributed Cache](06-case-design/01-common-basic-system/03-distributed-cache/)
+4. ✅ [Rate Limiter](06-case-design/01-common-basic-system/04-rate-limiter/)
+5. ✅ [Object Storage](06-case-design/01-common-basic-system/05-object-storage/)
+6. 🚧 [Message Queue / Event Stream](06-case-design/01-common-basic-system/11-message-queue-event-stream/) — contract comparison written, design not started
+7. ✅ [Job Scheduler](06-case-design/01-common-basic-system/06-job-scheduler/)
+8. 📋 [URL Shortener](06-case-design/02-specific-application-system/01-url-shortener/)
+9. ✅ [News Feed](06-case-design/02-specific-application-system/03-news-feed/) — nine progressive versions
+10. 📋 [Chat System](06-case-design/02-specific-application-system/04-chat-system/)
+11. 🚧 [Video Streaming](06-case-design/02-specific-application-system/05-video-streaming/)
+12. 📋 [Maps & Navigation](06-case-design/02-specific-application-system/06-maps-navigation/)
+13. 📋 [Ticket Booking](06-case-design/02-specific-application-system/08-ticket-booking/)
+14. 📋 [Payment Processing](06-case-design/02-specific-application-system/09-payment-processing/)
+
+Also complete outside this sequence: ✅ [Multi-tenant Data Platform](06-case-design/03-platform-system/01-multi-tenant-data-platform/).
+
+Counts are derived from the tree by `node .tools/case-status.mjs`; run it after
+adding a case rather than editing the markers by hand.
 
 ## Subsequent iterations
 

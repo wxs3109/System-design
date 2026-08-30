@@ -4,19 +4,22 @@ This part treats common basic components as complete system design issues. They 
 
 ## Case Map
 
-| Case | Externally provided capabilities | Main in-depth points | Common users |
-|---|---|---|---|
-| [Load Balancer](01-load-balancer/) | Distribute requests to healthy instances | L4/L7, Health Check, Algorithm, Session and Failover | All online services |
-| [API Gateway](02-api-gateway/) | Provides a unified policy entrance for business APIs | Routing, authentication, Rate Limiting, Control Plane, timeout and Canary Release | Almost all external business APIs |
-| [Distributed Cache](03-distributed-cache/) | Provides low-latency temporary data access | Sharding, replication, eviction, consistency and hotspots | Feed, search, items, sessions |
-| [Rate Limiter](04-rate-limiter/) | Limit request rate by rules | Algorithm, distributed counting, rule publishing and failure strategy | API Gateway, login, payment |
-| [Object Storage](05-object-storage/) | Persistently save and read large-scale objects | Metadata, object data, replication, erasure coding and life cycle | Video, network disk, backup |
-| [Job Scheduler](06-job-scheduler/) | Execute tasks under specified time and constraints | Lease, Retry, DAG, fairness and scheduling accuracy | Transcoding, billing, cleanup, workflow |
-| [Notification System](07-notification-system/) | Reliable delivery of notifications through multiple channels | Preferences, priorities, vendors, retries and unsubscribes | Social, transactional, security alerts |
-| [Search Autocomplete](08-search-autocomplete/) | Return low-latency Top-K suggestions based on prefix | Trie, offline build, incremental update and personalization | Search, e-commerce, map |
-| [Web Crawler](09-web-crawler/) | Discover, schedule and crawl web content | URL Frontier, courtesy strategy, deduplication and incremental crawling | Search, archiving, data platform |
-| [Metrics Monitoring](10-metrics-monitoring/) | Collect, query indicators and trigger alarms | Time series storage, High Cardinality, Downsampling (downsampling) and alarm calculation | All production systems |
-| [Message Queue / Event Stream](11-message-queue-event-stream/) | Reliable delivery of tasks, broadcasting events to subscribers, or retaining replayable partition logs | Contract boundaries of Work Queue, Pub/Sub, Partitioned Log; Ack, subscription progress, Ordering, Replay and Backpressure | Asynchronous tasks, notifications, Feeds, payments, searches, flow analysis |
+| State | Case | Externally provided capabilities | Main in-depth points | Common users |
+|---|---|---|---|---|
+| ✅ | [Load Balancer](01-load-balancer/) | Distribute requests to healthy instances | L4/L7, Health Check, Algorithm, Session and Failover | All online services |
+| 🚧 | [API Gateway](02-api-gateway/) | Provides a unified policy entrance for business APIs | Routing, authentication, Rate Limiting, Control Plane, timeout and Canary Release | Almost all external business APIs |
+| ✅ | [Distributed Cache](03-distributed-cache/) | Provides low-latency temporary data access | Sharding, replication, eviction, consistency and hotspots | Feed, search, items, sessions |
+| ✅ | [Rate Limiter](04-rate-limiter/) | Limit request rate by rules | Algorithm, distributed counting, rule publishing and failure strategy | API Gateway, login, payment |
+| ✅ | [Object Storage](05-object-storage/) | Persistently save and read large-scale objects | Metadata, object data, replication, erasure coding and life cycle | Video, network disk, backup |
+| ✅ | [Job Scheduler](06-job-scheduler/) | Execute tasks under specified time and constraints | Lease, Retry, DAG, fairness and scheduling accuracy | Transcoding, billing, cleanup, workflow |
+| 📋 | [Notification System](07-notification-system/) | Reliable delivery of notifications through multiple channels | Preferences, priorities, vendors, retries and unsubscribes | Social, transactional, security alerts |
+| 📋 | [Search Autocomplete](08-search-autocomplete/) | Return low-latency Top-K suggestions based on prefix | Trie, offline build, incremental update and personalization | Search, e-commerce, map |
+| 📋 | [Web Crawler](09-web-crawler/) | Discover, schedule and crawl web content | URL Frontier, courtesy strategy, deduplication and incremental crawling | Search, archiving, data platform |
+| 📋 | [Metrics Monitoring](10-metrics-monitoring/) | Collect, query indicators and trigger alarms | Time series storage, High Cardinality, Downsampling (downsampling) and alarm calculation | All production systems |
+| 🚧 | [Message Queue / Event Stream](11-message-queue-event-stream/) | Reliable delivery of tasks, broadcasting events to subscribers, or retaining replayable partition logs | Contract boundaries of Work Queue, Pub/Sub, Partitioned Log; Ack, subscription progress, Ordering, Replay and Backpressure | Asynchronous tasks, notifications, Feeds, payments, searches, flow analysis |
+
+✅ full reading path &nbsp;·&nbsp; 🚧 partial content &nbsp;·&nbsp; 📋 skeleton only.
+Markers are derived from the tree by `node .tools/case-status.mjs`; do not edit them by hand.
 
 ## Learning requirements
 
