@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
-import { ComponentRegistry, PolicyRegistry, componentRegistry, policyRegistry } from './index'
+import { ComponentRegistry, PolicyRegistry, RolePresetRegistry, componentRegistry, policyRegistry, rolePresetRegistry } from './index'
 
 describe('component registry', () => {
   it('creates and describes all built-in nodes from manifests', () => {
@@ -69,6 +69,41 @@ describe('component registry', () => {
     expect(componentRegistry.canConnect(producer, consumer, 'publish', 'consume')).toMatchObject({ valid: true, sourceSemantic: 'publish', targetSemantic: 'consume' })
     expect(componentRegistry.canConnect(producer, consumer, 'publish', 'in')).toMatchObject({ valid: false })
     expect(componentRegistry.canConnect(producer, consumer, 'missing', 'consume')).toMatchObject({ valid: false })
+  })
+})
+
+describe('role preset registry', () => {
+  it('resolves every built-in preset to an executable base behavior', () => {
+    const nodes = rolePresetRegistry.list().map((preset) => rolePresetRegistry.createNode(preset.id, preset.version, `${preset.id}-node`, { x: 0, y: 0 }))
+    expect(nodes.map((node) => node.rolePreset?.id)).toEqual(['client', 'api-gateway', 'worker', 'sql-store', 'nosql-store'])
+    expect(nodes.map((node) => node.type)).toEqual(['traffic', 'load-balancer', 'service', 'database', 'database'])
+    for (const node of nodes) expect(() => componentRegistry.validateNode(node)).not.toThrow()
+  })
+
+  it('rejects duplicate IDs, invalid overrides, unknown versions, and mismatched references', () => {
+    const components = new ComponentRegistry(componentRegistry.list())
+    const registry = new RolePresetRegistry(components)
+    const preset = { id: 'test-worker', version: 1, label: 'Test worker', description: 'Test preset.', iconToken: 'server', behavior: { type: 'service', version: 1 }, configOverrides: { replicas: 2 } }
+    registry.register(preset)
+    expect(() => registry.register(preset)).toThrow('already registered')
+    expect(() => registry.register({ ...preset, id: 'invalid', configOverrides: { replicas: 0 } })).toThrow()
+    expect(() => registry.get('test-worker', 2)).toThrow('Unknown role preset')
+    const node = registry.createNode('test-worker', 1, 'worker', { x: 0, y: 0 })
+    expect(() => registry.validateReference({ ...node, type: 'queue' })).toThrow('requires service@1')
+    expect(registry.validateReference({ ...node, rolePreset: { id: 'removed-preset', version: 1 } })).toMatchObject({ type: 'service' })
+    expect(() => registry.validateReference({ ...node, rolePreset: { id: 'removed-preset', version: 1 } }, true)).toThrow('Unknown role preset')
+  })
+
+  it('round-trips preset identity while preserving resolved execution without the preset catalog', () => {
+    const worker = rolePresetRegistry.createNode('worker', 1, 'worker', { x: 10, y: 20 })
+    const project = {
+      schemaVersion: 2 as const, id: 'preset-project', name: 'Preset project', activeExperimentId: 'experiment',
+      topology: { nodes: [worker], edges: [], groups: [], policies: [] },
+      experiments: [{ id: 'experiment', name: 'Experiment', workloads: [], faults: [], simulation: { durationSeconds: 1, sampleIntervalMs: 100, maxRequests: 10, traceLimit: 10, maxHops: 10 }, seed: 'seed' }],
+    }
+    const roundTripped = JSON.parse(JSON.stringify(project))
+    expect(componentRegistry.validateProject(roundTripped, rolePresetRegistry).topology.nodes[0]).toEqual(worker)
+    expect(componentRegistry.validateProject(roundTripped).topology.nodes[0]).toEqual(worker)
   })
 })
 

@@ -41,6 +41,17 @@ describe('ProjectFile v2', () => {
     expect(project.topology.edges[0]).toMatchObject({ routingMode: 'weighted-one', sourceSemantic: 'request', targetSemantic: 'request' })
   })
 
+  it('round-trips optional role preset metadata without changing behavior identity', () => {
+    const project = migrateScenarioV1ToProjectV2(scenarioV1())
+    const service = project.topology.nodes.find((node) => node.id === 'service')!
+    service.rolePreset = { id: 'worker', version: 1 }
+    const parsed = parseProjectFile(JSON.parse(JSON.stringify(project)))
+    expect(parsed.topology.nodes.find((node) => node.id === 'service')).toMatchObject({ type: 'service', componentVersion: 1, rolePreset: { id: 'worker', version: 1 } })
+    const executable = projectToScenario(parsed).nodes.find((node) => node.id === 'service')!
+    expect(executable).toMatchObject({ type: 'service' })
+    expect(executable).not.toHaveProperty('rolePreset')
+  })
+
   it('preserves explicit component behavior versions in the executable scenario', () => {
     const project = migrateScenarioV1ToProjectV2(scenarioV1())
     const database = {

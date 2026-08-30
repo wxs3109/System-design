@@ -203,6 +203,31 @@ test('builds and configures Phase 1 data components from the shared palette', as
   ]))
 })
 
+test('creates role presets while disclosing and exporting their resolved behaviors', async ({ page }) => {
+  await page.goto('/')
+
+  await expect(page.getByText('Behaviors', { exact: true })).toBeVisible()
+  await expect(page.getByText('Role presets', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /Worker Uses Service behavior/ }).click()
+
+  const worker = page.locator('.react-flow__node').filter({ hasText: 'Worker' })
+  await expect(worker).toContainText('Uses Service behavior')
+  await worker.dispatchEvent('click')
+  await expect(page.locator('.preset-disclosure')).toContainText('Worker is a role preset using Service behavior')
+  await page.getByLabel('Replicas').fill('6')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const download = await downloadPromise
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.topology.nodes[0]).toMatchObject({
+    type: 'service', componentVersion: 1, rolePreset: { id: 'worker', version: 1 }, config: { replicas: 6 },
+  })
+})
+
 test('schedules and edits a typed fault on the virtual-time timeline', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Load example' }).click()

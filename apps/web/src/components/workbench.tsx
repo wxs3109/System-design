@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type OnConnect } from '@xyflow/react'
-import { builtInComponentTypes, componentRegistry, policyRegistry, type ConfigField } from '@system-design/components'
+import { builtInComponentTypes, componentRegistry, policyRegistry, rolePresetRegistry, type ConfigField, type RolePresetManifest } from '@system-design/components'
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
@@ -45,6 +45,20 @@ function PaletteItem({ type, onAdd }: { type: ComponentType; onAdd: () => void }
     >
       <span><Icon size={17} aria-hidden="true" /></span>
       <span><strong>{definition.label}</strong><small>{definition.description}</small></span>
+      <Plus size={15} aria-hidden="true" />
+    </button>
+  )
+}
+
+function RolePresetItem({ preset, onAdd }: { preset: RolePresetManifest; onAdd: () => void }) {
+  const behavior = componentRegistry.get(preset.behavior.type, preset.behavior.version)
+  const Icon = componentIcons[preset.iconToken] ?? componentIcons[behavior.iconToken]!
+  return (
+    <button type="button" className="palette-item palette-item--preset" draggable onClick={onAdd}
+      onDragStart={(event) => { event.dataTransfer.setData('application/system-design-role-preset', `${preset.id}@${preset.version}`); event.dataTransfer.effectAllowed = 'move' }}
+      style={{ '--node-color': behavior.color } as React.CSSProperties} title={`${preset.description} Uses ${behavior.label} behavior.`}>
+      <span><Icon size={17} aria-hidden="true" /></span>
+      <span><strong>{preset.label}</strong><small>Uses {behavior.label} behavior</small></span>
       <Plus size={15} aria-hidden="true" />
     </button>
   )
@@ -149,10 +163,12 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
     return <div className="empty-properties"><MousePointer2 size={22} /><p>Select a component to configure its runtime behavior.</p></div>
   }
   const manifest = componentRegistry.get(node.type, node.componentVersion)
+  const preset = node.rolePreset ? rolePresetRegistry.find(node.rolePreset.id, node.rolePreset.version) : undefined
   const setConfig = (key: string, value: number | string) => updateNode({ config: { [key]: value } })
   return (
     <div className="properties-form">
       <div className="section-heading"><div><span>Selected component</span><strong>{manifest.label}</strong></div><button type="button" className="icon-button danger" onClick={deleteNode} aria-label="Delete selected component"><Trash2 size={16} /></button></div>
+      {preset ? <p className="preset-disclosure"><strong>{preset.label}</strong> is a role preset using <strong>{manifest.label}</strong> behavior. Editing these fields changes the resolved behavior directly.</p> : null}
       <label className="field"><span>Name</span><input value={node.name} onChange={(event) => updateNode({ name: event.target.value })} /></label>
       {node.type === 'traffic' && workload ? <>
         <Field label="Requests / second" value={workload.requestsPerSecond} min={0.1} step={10} onChange={(value) => updateWorkload({ requestsPerSecond: value })} />
@@ -231,7 +247,7 @@ function WorkbenchInner() {
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setProject, restoreProject, addComponent, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const { setProject, restoreProject, addComponent, addRolePreset, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
   const canUndo = useCanUndo()
   const canRedo = useCanRedo()
   const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
@@ -266,7 +282,7 @@ function WorkbenchInner() {
     void (async () => {
       try {
         const saved = await getLocalHistoryRepository().loadActiveProject()
-        if (active && saved) restoreProject(componentRegistry.validateProject(saved.project))
+        if (active && saved) restoreProject(saved.project)
       } catch (cause) {
         if (active) setError(cause instanceof Error ? `Could not restore local project: ${cause.message}` : 'Could not restore local project.')
       } finally {
@@ -291,14 +307,26 @@ function WorkbenchInner() {
     const position = rect ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: (400 - viewport.x) / viewport.zoom, y: (240 - viewport.y) / viewport.zoom }
     addComponent(type, position)
   }, [addComponent, reactFlow])
+  const addPresetAtCenter = useCallback((presetId: string, version: number) => {
+    const viewport = reactFlow.getViewport()
+    const element = document.querySelector('.canvas-stage')
+    const rect = element?.getBoundingClientRect()
+    const position = rect ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: (400 - viewport.x) / viewport.zoom, y: (240 - viewport.y) / viewport.zoom }
+    addRolePreset(presetId, version, position)
+  }, [addRolePreset, reactFlow])
 
   const onConnect: OnConnect = useCallback((connection) => connect(connection), [connect])
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     const type = event.dataTransfer.getData('application/system-design-component') as ComponentType
-    if (!orderedTypes.includes(type)) return
-    addComponent(type, reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY }))
-  }, [addComponent, reactFlow])
+    const presetReference = event.dataTransfer.getData('application/system-design-role-preset')
+    const position = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    if (orderedTypes.includes(type)) addComponent(type, position)
+    else if (presetReference) {
+      const [presetId, version] = presetReference.split('@')
+      if (presetId && Number.isInteger(Number(version))) addRolePreset(presetId, Number(version), position)
+    }
+  }, [addComponent, addRolePreset, reactFlow])
 
   const showTraceNode = useCallback((nodeId: string) => {
     const node = project.topology.nodes.find((candidate) => candidate.id === nodeId)
@@ -310,7 +338,7 @@ function WorkbenchInner() {
   const run = async () => {
     setRunning(true); setError(null); setResult(null); setProgress(null)
     try {
-      const projectSnapshot = componentRegistry.validateProject(structuredClone(project))
+      const projectSnapshot = componentRegistry.validateProject(structuredClone(project), rolePresetRegistry)
       const validation = validateScenarioForSimulation(projectSnapshot)
       if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
       clientRef.current ??= new SimulationWorkerClient()
@@ -345,7 +373,7 @@ function WorkbenchInner() {
   const importProject = async (file: File | undefined) => {
     if (!file) return
     try {
-      const imported = componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())))
+      const imported = componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())), rolePresetRegistry)
       setProject(imported)
       await getLocalHistoryRepository().saveProjectRevision(imported, 'import')
       await refreshHistory(imported.id)
@@ -356,7 +384,7 @@ function WorkbenchInner() {
     try {
       const saved = await getLocalHistoryRepository().loadProjectRevision(revisionId)
       if (!saved) throw new Error('The selected revision no longer exists.')
-      restoreProject(componentRegistry.validateProject(saved.project))
+      restoreProject(saved.project)
       await getLocalHistoryRepository().saveProjectRevision(saved.project, 'restore')
       await refreshHistory(saved.projectId)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore project revision.') }
@@ -366,7 +394,7 @@ function WorkbenchInner() {
     try {
       const snapshot = savedRun.projectSnapshot ?? (await getLocalHistoryRepository().loadProjectRevision(savedRun.projectRevisionId))?.project
       if (!snapshot) throw new Error('The project snapshot for this run no longer exists.')
-      restoreProject(componentRegistry.validateProject(snapshot))
+      restoreProject(snapshot)
       setResult(structuredClone(savedRun.result))
       setHistoryOpen(false)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore simulation run.') }
@@ -396,8 +424,10 @@ function WorkbenchInner() {
       </header>
 
       <aside className="palette">
-        <div className="panel-header"><span>Components</span><small>Drag or click to add</small></div>
+        <div className="panel-header"><span>Behaviors</span><small>New runtime semantics</small></div>
         <div className="palette-list">{orderedTypes.map((type) => <PaletteItem key={type} type={type} onAdd={() => addAtCenter(type)} />)}</div>
+        <div className="panel-header palette-section-heading"><span>Role presets</span><small>Reuse behaviors</small></div>
+        <div className="palette-list">{rolePresetRegistry.list().map((preset) => <RolePresetItem key={`${preset.id}@${preset.version}`} preset={preset} onAdd={() => addPresetAtCenter(preset.id, preset.version)} />)}</div>
         <div className="palette-help"><strong>Build from scratch</strong><p>Components are executable behaviors, not decorative icons. Connect output ports to input ports.</p></div>
       </aside>
 

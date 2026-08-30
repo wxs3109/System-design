@@ -216,7 +216,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 组件覆盖与两类合同规划已完成；下一步是 P2.1 角色预设 Registry。
+当前进度：P2.0 组件覆盖规划与 P2.1 角色预设 Registry 已完成；下一步是 P2.2 的 Scheduler、CDN 和 Search Index 行为组件。
 
 - 区分具有独立运行语义的行为组件与复用行为的角色预设。
 - 用通用行为补齐 Scheduler、CDN、Search、Topic、Realtime、Workflow 和 Global Routing。

@@ -42,13 +42,15 @@ Status: planning complete. This settlement changes scope and documentation only;
 
 Deliverables:
 
-- [ ] versioned `RolePresetManifest` and registry;
-- [ ] optional preset ID/version on project nodes without changing resolved behavior identity;
-- [ ] generic creation path for validated config overrides and existing policy recipes;
-- [ ] separate “Behaviors” and “Role presets” palette sections;
-- [ ] initial truthful presets: Client, API Gateway (routing boundary), Worker, SQL Store, and NoSQL Store;
-- [ ] visible base-behavior disclosure in palette, node details, and properties;
-- [ ] migration, JSON round-trip, equivalence, and browser tests.
+- [x] versioned `RolePresetManifest` and registry;
+- [x] optional preset ID/version on project nodes without changing resolved behavior identity;
+- [x] generic creation path for validated configuration overrides;
+- [x] separate “Behaviors” and “Role presets” palette sections;
+- [x] initial truthful presets: Client, API Gateway (routing boundary), Worker, SQL Store, and NoSQL Store;
+- [x] visible base-behavior disclosure in palette, node details, and properties;
+- [x] migration, JSON round-trip, equivalence, and browser tests.
+
+Status: complete. Presets resolve to ordinary behavior nodes, unknown removed presets degrade to their stored base behavior, known mismatches fail validation, and the complete `pnpm check` gate covers creation, editing, export, compatibility, and disclosure. Policy recipes remain deferred until a preset needs one; they must reuse the existing Policy Registry rather than extend preset runtime semantics.
 
 Exit criteria: deleting all preset manifests leaves exported nodes executable as their resolved base behaviors, and adding a preset requires no editor or runtime case branch.
 

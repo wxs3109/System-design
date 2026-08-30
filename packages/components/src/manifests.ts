@@ -18,7 +18,7 @@ import {
   type ComponentType,
   type Position,
 } from '@system-design/model'
-import { ComponentRegistry, PolicyRegistry, type BuiltInComponentNode, type ComponentManifest, type PolicyManifest } from './registry'
+import { ComponentRegistry, PolicyRegistry, RolePresetRegistry, type BuiltInComponentNode, type ComponentManifest, type PolicyManifest, type RolePresetManifest } from './registry'
 
 const requestInput = { id: 'in', label: 'Request', direction: 'input', semantic: 'request', multiple: true } as const
 const requestOutput = { id: 'out', label: 'Request', direction: 'output', semantic: 'request', multiple: true } as const
@@ -175,6 +175,16 @@ export const builtInComponentManifests = [
 
 export const componentRegistry = new ComponentRegistry(builtInComponentManifests)
 
+export const builtInRolePresetManifests = [
+  { id: 'client', version: 1, label: 'Client', description: 'A named request source using the Traffic Generator behavior.', iconToken: 'globe', behavior: { type: 'traffic', version: 1 }, configOverrides: {} },
+  { id: 'api-gateway', version: 1, label: 'API Gateway', description: 'A routing boundary using the Load Balancer behavior.', iconToken: 'git-fork', behavior: { type: 'load-balancer', version: 1 }, configOverrides: { algorithm: 'weighted', capacity: 2_000, routingTimeMs: 1, maxQueueSize: 10_000 } },
+  { id: 'worker', version: 1, label: 'Worker', description: 'A background processor using the Service behavior.', iconToken: 'server', behavior: { type: 'service', version: 1 }, configOverrides: { replicas: 4, concurrencyPerReplica: 1, serviceTimeMs: 50, jitterMs: 5, maxQueueSize: 1_000, errorRate: 0 } },
+  { id: 'sql-store', version: 1, label: 'SQL Store', description: 'A relational storage role using the Database behavior.', iconToken: 'database', behavior: { type: 'database', version: 2 }, configOverrides: { shardCount: 1, replicasPerShard: 1, readPreference: 'primary', writeRatio: 0.5 } },
+  { id: 'nosql-store', version: 1, label: 'NoSQL Store', description: 'A horizontally partitioned role using the Database behavior.', iconToken: 'database', behavior: { type: 'database', version: 2 }, configOverrides: { shardCount: 8, replicasPerShard: 2, readPreference: 'replica-preferred', writeRatio: 0.2 } },
+] as const satisfies readonly RolePresetManifest[]
+
+export const rolePresetRegistry = new RolePresetRegistry(componentRegistry, builtInRolePresetManifests)
+
 export const builtInPolicyManifests = [
   {
     type: 'timeout', version: 1, label: 'Timeout', description: 'Fails an outbound attempt after a deterministic virtual-time deadline.', targets: ['edge'],
@@ -227,6 +237,10 @@ export const builtInComponentTypes = componentRegistry.list().map((manifest) => 
 export const createRegisteredNode = (type: ComponentType, id: string, position: Position, workloadId = `${id}-workload`): BuiltInComponentNode => {
   const node = componentRegistry.createNode(type, id, position, workloadId)
   return node as BuiltInComponentNode
+}
+
+export const createRolePresetNode = (presetId: string, version: number, id: string, position: Position, workloadId = `${id}-workload`): BuiltInComponentNode => {
+  return rolePresetRegistry.createNode(presetId, version, id, position, workloadId) as BuiltInComponentNode
 }
 
 export const asLegacyNode = ({ componentVersion, ...node }: BuiltInComponentNode, workloadId = `${node.id}-workload`): ComponentNode => {

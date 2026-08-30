@@ -30,6 +30,7 @@ export const projectComponentNodeSchema = z.object({
   componentVersion: z.number().int().positive(),
   position: positionSchema,
   disabled: z.boolean().optional(),
+  rolePreset: z.object({ id: projectIdSchema, version: z.number().int().positive() }).optional(),
   config: z.record(z.string(), z.unknown()).default({}),
 })
 
@@ -241,7 +242,7 @@ export const projectToScenario = (input: ProjectFileV2, experimentId = input.act
     name: project.name,
     seed: experiment.seed,
     nodes: project.topology.nodes.map((projectNode) => {
-      const { componentVersion, ...node } = projectNode
+      const { componentVersion, rolePreset: _rolePreset, ...node } = projectNode
       const versioned = componentVersion > 1 ? { ...node, componentVersion } : node
       return node.type === 'traffic'
         ? { ...versioned, type: 'traffic' as const, config: { workloadId: experiment.workloads.find((workload) => workload.sourceNodeId === node.id)?.id ?? `${node.id}-workload` } }

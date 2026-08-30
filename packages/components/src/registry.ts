@@ -65,7 +65,18 @@ export interface RegistryNode {
   componentVersion: number
   position: Position
   disabled?: boolean
+  rolePreset?: { id: string; version: number }
   config: Record<string, unknown>
+}
+
+export interface RolePresetManifest {
+  id: string
+  version: number
+  label: string
+  description: string
+  iconToken: string
+  behavior: { type: string; version: number }
+  configOverrides: Record<string, unknown>
 }
 
 const manifestKey = (type: string, version: number) => `${type}@${version}`
@@ -115,12 +126,12 @@ export class ComponentRegistry {
     return { ...node, config: manifest.configSchema.parse(node.config) }
   }
 
-  validateProject(project: ProjectFileV2): ProjectFileV2 {
+  validateProject(project: ProjectFileV2, presets?: RolePresetRegistry): ProjectFileV2 {
     return {
       ...project,
       topology: {
         ...project.topology,
-        nodes: project.topology.nodes.map((node) => this.validateNode(node)),
+        nodes: project.topology.nodes.map((node) => this.validateNode(presets?.validateReference(node) ?? node)),
       },
     }
   }
@@ -146,6 +157,55 @@ export class ComponentRegistry {
     const pair = outputs.flatMap((output) => inputs.map((input) => ({ output, input }))).find(({ output, input }) => arePortSemanticsCompatible(output.semantic, input.semantic))
     if (!pair) return { valid: false as const, reason: 'The selected ports use incompatible semantics.' }
     return { valid: true as const, sourceSemantic: pair.output.semantic, targetSemantic: pair.input.semantic }
+  }
+}
+
+export class RolePresetRegistry {
+  private readonly presets = new Map<string, RolePresetManifest>()
+
+  constructor(private readonly components: ComponentRegistry, presets: readonly RolePresetManifest[] = []) {
+    presets.forEach((preset) => this.register(preset))
+  }
+
+  register(preset: RolePresetManifest) {
+    if (!preset.id.trim() || !Number.isInteger(preset.version) || preset.version < 1) throw new Error(`Invalid role preset: ${preset.id}.`)
+    const key = manifestKey(preset.id, preset.version)
+    if (this.presets.has(key)) throw new Error(`Role preset ${key} is already registered.`)
+    const behavior = this.components.get(preset.behavior.type, preset.behavior.version)
+    behavior.configSchema.parse({ ...behavior.createDefaultConfig({ nodeId: 'preset-validation', workloadId: 'preset-validation-workload' }), ...preset.configOverrides })
+    this.presets.set(key, preset)
+    return this
+  }
+
+  get(id: string, version: number): RolePresetManifest {
+    const preset = this.presets.get(manifestKey(id, version))
+    if (!preset) throw new Error(`Unknown role preset: ${manifestKey(id, version)}`)
+    return preset
+  }
+
+  find(id: string, version: number): RolePresetManifest | undefined { return this.presets.get(manifestKey(id, version)) }
+
+  list(): RolePresetManifest[] { return [...this.presets.values()] }
+
+  createNode(id: string, version: number, nodeId: string, position: Position, workloadId = `${nodeId}-workload`): RegistryNode {
+    const preset = this.get(id, version)
+    const behavior = this.components.get(preset.behavior.type, preset.behavior.version)
+    const defaults = behavior.createDefaultConfig({ nodeId, workloadId })
+    return {
+      id: nodeId, name: preset.label, type: preset.behavior.type, componentVersion: preset.behavior.version, position,
+      rolePreset: { id: preset.id, version: preset.version }, config: behavior.configSchema.parse({ ...defaults, ...preset.configOverrides }),
+    }
+  }
+
+  validateReference(node: ProjectComponentNode, requireKnown = false): ProjectComponentNode {
+    if (!node.rolePreset) return node
+    const preset = this.find(node.rolePreset.id, node.rolePreset.version)
+    if (!preset) {
+      if (requireKnown) throw new Error(`Unknown role preset: ${manifestKey(node.rolePreset.id, node.rolePreset.version)}`)
+      return node
+    }
+    if (node.type !== preset.behavior.type || node.componentVersion !== preset.behavior.version) throw new Error(`Role preset ${preset.id}@${preset.version} requires ${preset.behavior.type}@${preset.behavior.version}.`)
+    return node
   }
 }
 
