@@ -198,6 +198,163 @@ test('identifies an imported ProjectFile v3 with business contracts', async ({ p
   await expect(page.getByText('6 components')).toBeVisible()
 })
 
+test('edits business definitions in one ProjectFile with inline validation, undo and reload persistence', async ({ page }) => {
+  await page.goto('/')
+  const fixture = createOrderSystemContractFixture()
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'business-aware-editor.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)),
+  })
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  const explorer = page.getByRole('navigation', { name: 'Project definitions' })
+  await expect(explorer).toBeVisible()
+  await expect(explorer.getByText('Orders API')).toBeVisible()
+
+  await explorer.getByRole('button', { name: /Orders API/ }).click()
+  const editor = page.getByLabel('Definition editor')
+  await expect(editor.getByLabel('Operation ID')).toHaveValue('create-order')
+  await expect(page.getByTestId('rf__node-orders-service')).toHaveClass(/is-definition-binding/)
+  await editor.getByLabel('Handler time (ms)').fill('17')
+  await expect(editor.getByText('Saved to project · undo available')).toBeVisible()
+
+  await editor.getByLabel('Owning service').selectOption('fulfillment-worker')
+  await expect(editor.getByRole('alert')).toContainText('API operation is owned by node fulfillment-worker, not orders-service')
+  await editor.getByLabel('Owning service').selectOption('orders-service')
+  await expect(editor.getByText('Saved to project · undo available')).toBeVisible()
+
+  await page.keyboard.press('Control+z')
+  await expect(editor.getByLabel('Handler time (ms)')).toHaveValue('5')
+  await page.keyboard.press('Control+Shift+z')
+  await expect(editor.getByLabel('Handler time (ms)')).toHaveValue('17')
+  await page.waitForTimeout(500)
+  const historyButton = page.getByRole('button', { name: 'History' })
+  await historyButton.click()
+  await expect(page.getByRole('dialog', { name: 'Local project history' }).getByText(/^autosave ·/).first()).toBeVisible()
+  await historyButton.click()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const download = await downloadPromise
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.definitions.apis[0].operations[0].handlerTimeMs).toBe(17)
+
+  await page.reload()
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  await page.getByRole('navigation', { name: 'Project definitions' }).getByRole('button', { name: /Orders API/ }).click()
+  await expect(page.getByLabel('Definition editor').getByLabel('Handler time (ms)')).toHaveValue('17')
+
+  const reloadedDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const reloadedStream = await (await reloadedDownloadPromise).createReadStream()
+  const reloadedChunks: Buffer[] = []
+  for await (const chunk of reloadedStream) reloadedChunks.push(Buffer.from(chunk))
+  expect(JSON.parse(Buffer.concat(reloadedChunks).toString())).toEqual(exported)
+})
+
+test('navigates definitions by keyboard and edits data, event, interaction and workload contracts', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'business-aware-models.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(createOrderSystemContractFixture())),
+  })
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  const explorer = page.getByRole('navigation', { name: 'Project definitions' })
+  const first = explorer.locator('.definition-item').first()
+  await first.focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(explorer.locator('.definition-item').nth(1)).toBeFocused()
+
+  await explorer.getByRole('button', { name: /Orders relational model/ }).click()
+  const editor = page.getByLabel('Definition editor')
+  await expect(editor.getByRole('strong').filter({ hasText: /^Columns$/ })).toBeVisible()
+  await editor.getByLabel('Estimated rows').fill('12000000')
+  await editor.getByLabel('Key columns').fill('missing-column')
+  await expect(editor.getByRole('alert')).toContainText('Unknown table column: missing-column')
+  await editor.getByLabel('Key columns').fill('customer-id')
+  await expect(editor.getByText('Saved to project · undo available')).toBeVisible()
+
+  await explorer.getByRole('button', { name: /Order documents/ }).click()
+  await expect(editor.getByText('Secondary indexes')).toBeVisible()
+  await editor.getByLabel('Estimated documents').fill('11000000')
+
+  await explorer.getByRole('button', { name: /Order key value/ }).click()
+  await expect(editor.getByText('Key distribution')).toBeVisible()
+  await editor.getByLabel('Estimated value bytes').fill('768')
+  await editor.getByLabel('Key-space size').fill('20000000')
+
+  await explorer.getByRole('button', { name: /^OrderCreated / }).click()
+  await editor.getByLabel('Estimated payload bytes').fill('768')
+  await editor.getByLabel('Delivery').selectOption('at-most-once')
+  await expect(page.getByTestId('rf__node-fulfillment-worker')).toHaveClass(/is-definition-binding/)
+
+  await explorer.getByRole('button', { name: /Order cache key/ }).click()
+  await editor.getByLabel('TTL seconds').fill('600')
+
+  await explorer.getByRole('button', { name: /Create order flow/ }).click()
+  const writeAction = editor.locator('details.definition-card').nth(1)
+  await expect(writeAction.getByLabel('Action ID')).toHaveValue('write-order')
+  await writeAction.locator('label').filter({ hasText: /^Operation/ }).getByRole('combobox').selectOption('scan')
+  await writeAction.getByLabel('Estimated rows').fill('25')
+  await expect(page.getByTestId('rf__node-orders-db')).toHaveClass(/is-definition-binding/)
+
+  await explorer.getByRole('button', { name: /Order operations/ }).click()
+  await expect(editor.getByText('Arrival phases')).toBeVisible()
+  await editor.getByLabel('Requests / second').first().fill('30')
+  await editor.getByLabel('Weight').fill('2')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const stream = await (await downloadPromise).createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.definitions.dataModels[0].tables[0]).toMatchObject({ estimatedRows: 12000000, indexes: [expect.objectContaining({ columnIds: ['customer-id'] })] })
+  expect(exported.definitions.dataModels[1].collections[0].estimatedDocuments).toBe(11000000)
+  expect(exported.definitions.dataModels[2].namespaces[0]).toMatchObject({ estimatedValueBytes: 768, keyDistribution: expect.objectContaining({ keySpaceSize: 20000000 }) })
+  expect(exported.definitions.events[0]).toMatchObject({ estimatedPayloadBytes: 768, delivery: 'at-most-once' })
+  expect(exported.definitions.cacheKeys[0].ttlSeconds).toBe(600)
+  expect(exported.definitions.interactions[0].actions[1]).toMatchObject({ operation: 'scan', estimatedRows: 25 })
+  expect(exported.experiments[0].operationWorkloads[0]).toMatchObject({ phases: [expect.objectContaining({ requestsPerSecond: 30 }), expect.anything()], operationMix: [expect.objectContaining({ weight: 2 })] })
+})
+
+test('imports and exports OpenAPI and DBML through validated server adapters', async ({ page }) => {
+  const fixture = createOrderSystemContractFixture()
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'business-aware-formats.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) })
+  await page.getByRole('button', { name: 'Definitions' }).click()
+
+  await page.getByRole('button', { name: 'OpenAPI' }).click()
+  const openApiDialog = page.getByRole('dialog', { name: 'OpenAPI 3.1 adapter' })
+  await openApiDialog.getByRole('tab', { name: 'Export' }).click()
+  const openApiDownload = page.waitForEvent('download')
+  await openApiDialog.getByRole('button', { name: 'Export file' }).click()
+  const openApiStream = await (await openApiDownload).createReadStream()
+  const openApiChunks: Buffer[] = []
+  for await (const chunk of openApiStream) openApiChunks.push(Buffer.from(chunk))
+  const openApi = JSON.parse(Buffer.concat(openApiChunks).toString())
+  expect(openApi.openapi).toBe('3.1.0')
+  expect(openApi.paths['/orders'].post.operationId).toBe('create-order')
+  await openApiDialog.getByRole('button', { name: 'Close format dialog' }).click()
+
+  await page.getByRole('navigation', { name: 'Project definitions' }).getByRole('button', { name: /Orders relational model/ }).click()
+  await page.getByRole('button', { name: 'DBML' }).click()
+  const dbmlDialog = page.getByRole('dialog', { name: 'DBML adapter' })
+  await dbmlDialog.getByRole('tab', { name: 'Export' }).click()
+  const dbmlDownload = page.waitForEvent('download')
+  await dbmlDialog.getByRole('button', { name: 'Export file' }).click()
+  const dbmlStream = await (await dbmlDownload).createReadStream()
+  const dbmlChunks: Buffer[] = []
+  for await (const chunk of dbmlStream) dbmlChunks.push(Buffer.from(chunk))
+  expect(Buffer.concat(dbmlChunks).toString()).toContain('Table orders')
+  await dbmlDialog.getByRole('button', { name: 'Close format dialog' }).click()
+
+  await page.getByRole('button', { name: 'DBML' }).click()
+  await page.getByRole('dialog', { name: 'DBML adapter' }).getByLabel('Paste DBML').fill('Table inventory {\n id uuid [pk, not null]\n sku varchar(64) [not null]\n}')
+  await page.getByRole('dialog', { name: 'DBML adapter' }).getByRole('button', { name: 'Validate and import' }).click()
+  await expect(page.getByRole('navigation', { name: 'Project definitions' }).getByRole('button', { name: /Imported relational model/ })).toBeVisible()
+})
+
 test('attaches and configures manifest-driven reliability policies', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Load example' }).click()

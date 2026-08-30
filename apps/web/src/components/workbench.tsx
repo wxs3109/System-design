@@ -6,7 +6,7 @@ import { builtInComponentTypes, componentCatalog, componentPresetRegistry, compo
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, History, Layers3, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, DatabaseZap, Download, FlaskConical, History, Layers3, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ComponentNode, componentIcons } from './component-node'
@@ -17,6 +17,9 @@ import { MetricChart } from './metric-chart'
 import { RunComparisonPanel } from './run-comparison-panel'
 import { TraceExplorer } from './trace-explorer'
 import { WorkbenchShell } from './workbench-shell'
+import { DefinitionEditor, DefinitionsExplorer, useSelectedDefinitionBindings } from './definition-editor'
+import type { DefinitionSelection } from './definition-editor-model'
+import { FormatDialog } from './format-dialog'
 import { createAsyncExample, createDataPlatformExample, createDirectExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
@@ -288,15 +291,26 @@ function WorkbenchInner() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>('service')
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
+  const [workspaceView, setWorkspaceView] = useState<'topology' | 'definitions'>('topology')
+  const [selectedDefinition, setSelectedDefinition] = useState<DefinitionSelection | null>(null)
+  const [formatDialog, setFormatDialog] = useState<'openapi' | 'dbml' | null>(null)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
   const inspectorPanelRef = useRef<ImperativePanelHandle>(null)
   const resultsPanelRef = useRef<ImperativePanelHandle>(null)
   const [panelVisibility, setPanelVisibility] = useState(defaultPanelVisibility)
+  const definitionBindings = useSelectedDefinitionBindings(workspaceView === 'definitions' ? selectedDefinition : null)
   const topologyNodes = project.topology.nodes
-  const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(affected.nodes.has(node.id) ? { className: 'is-fault-target' } : {}) })), [affected.nodes, topologyNodes, selectedNodeId])
-  const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(affected.edges.has(edge.id) ? { className: 'is-fault-target' } : {}) })), [affected.edges, project, selectedEdgeId])
+  const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => {
+    const classes = [affected.nodes.has(node.id) ? 'is-fault-target' : '', definitionBindings.nodeIds.has(node.id) ? 'is-definition-binding' : ''].filter(Boolean).join(' ')
+    return { ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(classes ? { className: classes } : {}) }
+  }), [affected.nodes, definitionBindings.nodeIds, topologyNodes, selectedNodeId])
+  const edges = useMemo(() => projectToEdges(project).map((edge) => {
+    const definitionEdge = definitionBindings.nodeIds.has(edge.source) && definitionBindings.nodeIds.has(edge.target)
+    const classes = [affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : ''].filter(Boolean).join(' ')
+    return { ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(classes ? { className: classes } : {}) }
+  }), [affected.edges, definitionBindings.nodeIds, project, selectedEdgeId])
 
   const refreshHistory = useCallback(async (projectId: string) => {
     const repository = getLocalHistoryRepository()
@@ -337,6 +351,18 @@ function WorkbenchInner() {
     if (!visibility.inspector) inspectorPanelRef.current?.collapse()
     if (!visibility.results) resultsPanelRef.current?.collapse()
   }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || running) return
+      const key = event.key.toLowerCase()
+      if (key === 'z' && event.shiftKey && canRedo) { event.preventDefault(); redoProject() }
+      else if (key === 'z' && canUndo) { event.preventDefault(); undoProject() }
+      else if (key === 'y' && canRedo) { event.preventDefault(); redoProject() }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [canRedo, canUndo, running])
 
   const addCatalogAtCenter = useCallback((selection: CatalogSelection) => {
     const viewport = reactFlow.getViewport()
@@ -439,7 +465,7 @@ function WorkbenchInner() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore simulation run.') }
   }
 
-  const palettePanel = (
+  const componentPalette = (
       <aside className="palette">
         <div className="panel-header"><span>Components</span><small>Choose category → variant</small></div>
         <div className="palette-list">{componentCatalog.listCategories().map((category) => <CategoryItem key={category.id} category={category} expanded={expandedCategory === category.id}
@@ -447,10 +473,13 @@ function WorkbenchInner() {
         <div className="palette-help"><strong>Executable building blocks</strong><p>Choose a category, then an implemented behavior variant. Templates only provide starting values.</p></div>
       </aside>
   )
+  const palettePanel = workspaceView === 'definitions'
+    ? <DefinitionsExplorer project={project} selection={selectedDefinition} onSelect={(selection) => { setSelectedDefinition(selection); if (!panelVisibility.inspector) setPanelVisible('inspector', inspectorPanelRef, true) }} onError={setError} />
+    : componentPalette
 
   const canvasPanel = (
       <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
-        <ReactFlow
+        <ReactFlow className={workspaceView === 'definitions' ? 'is-definitions-mode' : ''}
           nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
           onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onEdgeClick={(_, edge) => selectEdge(edge.id)} onPaneClick={() => { selectNode(null); selectEdge(null); selectFault(null) }}
           deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
@@ -460,6 +489,7 @@ function WorkbenchInner() {
           <Controls position="bottom-left" showInteractive={false} />
           <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
           {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
+          {workspaceView === 'definitions' ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>Showing bindings for <strong>{definitionBindings.resource.name}</strong></> : 'Select a definition to show topology bindings'}</span></div></Panel> : null}
           <Panel position="top-left"><div className="canvas-toolbar"><button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button type="button" onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button type="button" onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button type="button" onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
         </ReactFlow>
         {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
@@ -468,10 +498,8 @@ function WorkbenchInner() {
 
   const inspectorPanel = (
       <aside className="inspector">
-        <div className="inspector-tabs"><span className="active">Properties</span><button type="button" className="panel-close" aria-label="Hide properties panel" title="Hide properties panel" onClick={() => setPanelVisible('inspector', inspectorPanelRef, false)}><X size={13} /></button></div>
-        <PropertiesPanel node={selectedNode} edge={selectedEdge} />
-        <RegionSection />
-        <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
+        <div className="inspector-tabs"><span className="active">{workspaceView === 'definitions' ? 'Definition editor' : 'Properties'}</span><button type="button" className="panel-close" aria-label={workspaceView === 'definitions' ? 'Hide definition editor' : 'Hide properties panel'} title={workspaceView === 'definitions' ? 'Hide definition editor' : 'Hide properties panel'} onClick={() => setPanelVisible('inspector', inspectorPanelRef, false)}><X size={13} /></button></div>
+        {workspaceView === 'definitions' ? <DefinitionEditor selection={selectedDefinition} onSelectionChange={setSelectedDefinition} /> : <><PropertiesPanel node={selectedNode} edge={selectedEdge} /><RegionSection /><div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div></>}
       </aside>
   )
 
@@ -485,6 +513,8 @@ function WorkbenchInner() {
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>System Design Simulator</strong><span>Build · Run · Break · Measure</span></div></div>
         <div className="topbar-center"><span className="status-dot" /> Local simulation <span className="separator" /><span className={`modeling-mode modeling-mode--${project.modelingMode}`} aria-label={`Project modeling mode: ${project.modelingMode === 'business-aware' ? 'Business-aware' : 'Capacity-only'}`}>{project.modelingMode === 'business-aware' ? 'Business-aware' : 'Capacity-only'}</span><span className="separator" /> <strong>{project.topology.nodes.length}</strong> components <span className="separator" /> <strong>{project.topology.edges.length}</strong> links</div>
         <div className="top-actions">
+          <div className="workspace-switch" role="group" aria-label="Workbench view"><button type="button" aria-pressed={workspaceView === 'topology'} onClick={() => setWorkspaceView('topology')}><Layers3 size={14} /> Topology</button><button type="button" aria-pressed={workspaceView === 'definitions'} onClick={() => { setWorkspaceView('definitions'); if (!panelVisibility.inspector) setPanelVisible('inspector', inspectorPanelRef, true) }}><Blocks size={14} /> Definitions</button></div>
+          {workspaceView === 'definitions' ? <><button type="button" className="button subtle" onClick={() => setFormatDialog('openapi')}><Braces size={14} /> OpenAPI</button><button type="button" className="button subtle" onClick={() => setFormatDialog('dbml')}><DatabaseZap size={14} /> DBML</button></> : null}
           <button type="button" className="button subtle icon-only theme-toggle" aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}><span className="theme-icon theme-icon--light"><Moon size={15} /></span><span className="theme-icon theme-icon--dark"><Sun size={15} /></span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={`${panelVisibility.faults ? 'Hide' : 'Show'} fault laboratory`} title={`${panelVisibility.faults ? 'Hide' : 'Show'} fault laboratory`} aria-pressed={panelVisibility.faults} onClick={() => setPanelVisible('faults', faultsPanelRef, !panelVisibility.faults)}><FlaskConical size={15} /><span>Fault lab</span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={`${panelVisibility.results ? 'Hide' : 'Show'} simulation output`} title={`${panelVisibility.results ? 'Hide' : 'Show'} simulation output`} aria-pressed={panelVisibility.results} onClick={() => setPanelVisible('results', resultsPanelRef, !panelVisibility.results)}><PanelBottom size={15} /><span>Output</span></button>
@@ -511,6 +541,7 @@ function WorkbenchInner() {
         inspector={inspectorPanel} results={resultsPanel}
         faultsRef={faultsPanelRef} inspectorRef={inspectorPanelRef} resultsRef={resultsPanelRef}
       />
+      {formatDialog ? <FormatDialog kind={formatDialog} selection={selectedDefinition} onClose={() => setFormatDialog(null)} onSelectionChange={setSelectedDefinition} /> : null}
     </main>
   )
 }

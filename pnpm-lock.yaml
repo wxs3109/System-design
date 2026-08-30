@@ -13,6 +13,9 @@ importers:
       '@system-design/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@system-design/formats':
+        specifier: workspace:*
+        version: link:../../packages/formats
       '@system-design/model':
         specifier: workspace:*
         version: link:../../packages/model
@@ -85,7 +88,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1))
+        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))
 
   packages/components:
     dependencies:
@@ -101,7 +104,26 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1))
+        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))
+
+  packages/formats:
+    dependencies:
+      '@dbml/core':
+        specifier: 10.1.1
+        version: 10.1.1
+      '@scalar/openapi-parser':
+        specifier: 0.28.16
+        version: 0.28.16
+      '@system-design/model':
+        specifier: workspace:*
+        version: link:../model
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))
 
   packages/model:
     dependencies:
@@ -117,7 +139,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1))
+        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))
 
   packages/simulation:
     dependencies:
@@ -148,7 +170,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1))
+        version: 4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))
 
 packages:
 
@@ -218,6 +240,14 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha1-Einu8x2FFW1w+j9M2Fk3bQ6vaGM=}
     engines: {node: '>=6.9.0'}
+
+  '@dbml/core@10.1.1':
+    resolution: {integrity: sha1-x3Px9ySXeXKrqypqcfYWr0EJooc=}
+    engines: {node: '>=16'}
+
+  '@dbml/parse@10.1.1':
+    resolution: {integrity: sha1-/NmwqpRna4Q0Q8tfG7R92XcDPK4=}
+    engines: {node: '>=18'}
 
   '@egjs/hammerjs@2.0.17':
     resolution: {integrity: sha1-XcAq91pqBuTC2wICyuOMkmOJUSQ=}
@@ -668,6 +698,26 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha1-kn3S+um8M2FAOsLHoAwy3c6a1+g=}
 
+  '@scalar/helpers@0.11.1':
+    resolution: {integrity: sha1-NapQjFdlPYEokfuwXfUA5YBYbmY=}
+    engines: {node: '>=22'}
+
+  '@scalar/json-magic@0.13.2':
+    resolution: {integrity: sha1-BK3pvF7rqpTtjulTC7mYFbnhvlM=}
+    engines: {node: '>=22'}
+
+  '@scalar/openapi-parser@0.28.16':
+    resolution: {integrity: sha1-3cvGT7Y6X6KBfH6USTd8zRn6wLk=}
+    engines: {node: '>=22'}
+
+  '@scalar/openapi-types@0.9.5':
+    resolution: {integrity: sha1-bV/AZ4EwXbcVOVi/BKJhxuLfyAk=}
+    engines: {node: '>=22'}
+
+  '@scalar/openapi-upgrader@0.2.15':
+    resolution: {integrity: sha1-NWl7A6N3IwqWHILZloitLxWC/EQ=}
+    engines: {node: '>=22'}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha1-p5tV26+GBIEvUtFAssmrQbwVC7g=}
 
@@ -961,12 +1011,35 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  ajv-draft-04@1.0.0:
+    resolution: {integrity: sha1-O2R2GyaLoLnmaPC0G6U/zgrXf8g=}
+    peerDependencies:
+      ajv: ^8.5.0
+    peerDependenciesMeta:
+      ajv:
+        optional: true
+
+  ajv-formats@3.0.1:
+    resolution: {integrity: sha1-PV3HYryhdnnDwup+kK1rdTIwlXg=}
+    peerDependencies:
+      ajv: ^8.0.0
+    peerDependenciesMeta:
+      ajv:
+        optional: true
+
   ajv@6.15.0:
     resolution: {integrity: sha1-B+mCx0YmFnqnoklcU4F4ktcTlJI=}
+
+  ajv@8.20.0:
+    resolution: {integrity: sha1-MEs2Nq3Yi6fZNnYN1Q7OAG3qlfk=}
 
   ansi-styles@4.3.0:
     resolution: {integrity: sha1-7dgDYornHATIWuegkG7a00tkiTc=}
     engines: {node: '>=8'}
+
+  antlr4@4.13.2:
+    resolution: {integrity: sha1-DQhK0OMmIEgqnDoOJHDALnLkAG0=}
+    engines: {node: '>=16'}
 
   argparse@2.0.1:
     resolution: {integrity: sha1-JG9Q88p4oyQPbJl+ipvR6sSeSzg=}
@@ -1428,6 +1501,9 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha1-PYpcZog6FqMMqGQ+hR8Zuqd5eRc=}
 
+  fast-uri@3.1.6:
+    resolution: {integrity: sha1-v90wjvdj+DX+0Fnzxskl9wjjPjo=}
+
   fastq@1.20.1:
     resolution: {integrity: sha1-ynUKENySW8ixiDn9ID4+9LPO1nU=}
 
@@ -1746,6 +1822,9 @@ packages:
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha1-afaofZUTq4u4/mO9sJecRI5oRmA=}
 
+  json-schema-traverse@1.0.0:
+    resolution: {integrity: sha1-rnvLNlard6c7pcSb9lTzjmtoYOI=}
+
   json-stable-stringify-without-jsonify@1.0.1:
     resolution: {integrity: sha1-nbe1lJatPzz+8wp1FC0tkwrXJlE=}
 
@@ -1764,6 +1843,10 @@ packages:
   jsonfile@6.2.1:
     resolution: {integrity: sha1-tuMXF/Isw3MwsIHOAFHtXeU68vY=}
 
+  jsonpointer@5.0.1:
+    resolution: {integrity: sha1-IRDgrwkA/TdGe1kH7NE6eIShtVk=}
+    engines: {node: '>=0.10.0'}
+
   jsx-ast-utils@3.3.5:
     resolution: {integrity: sha1-R2a9BajioRryIr7NGeFVdeUqhTo=}
     engines: {node: '>=4.0'}
@@ -1780,6 +1863,10 @@ packages:
   language-tags@1.0.9:
     resolution: {integrity: sha1-H/3NDsD6+0sb5/ixHzBq0PnAh3c=}
     engines: {node: '>=0.10'}
+
+  leven@4.1.0:
+    resolution: {integrity: sha1-HjcVDhcR0YuxTjgKXHeZlSNacQ4=}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   levn@0.4.1:
     resolution: {integrity: sha1-rkViwAdHO5MqYgDUAyaN0v/8at4=}
@@ -1863,6 +1950,9 @@ packages:
     resolution: {integrity: sha1-VTIeswn+u8WcSAHZMackUqaB0oY=}
     engines: {node: '>=10'}
 
+  lodash-es@4.18.1:
+    resolution: {integrity: sha1-uWLuuA2dmDqQC/NClh+3QYyhCx0=}
+
   lodash.merge@4.6.2:
     resolution: {integrity: sha1-VYqlO0O2YeGSWgr9+japoQhf5Xo=}
 
@@ -1883,6 +1973,10 @@ packages:
 
   lunr@2.3.9:
     resolution: {integrity: sha1-GLEjFCgyM33W6WTfGlp3B7JdNeE=}
+
+  luxon@3.7.2:
+    resolution: {integrity: sha1-1pfkj0eFU8yhh6D4Q2r/Ro47oLo=}
+    engines: {node: '>=12'}
 
   magic-string@0.30.21:
     resolution: {integrity: sha1-VnY+wJoPqAkd8nh5/ZTRkHjADZE=}
@@ -2030,6 +2124,9 @@ packages:
     resolution: {integrity: sha1-aR0nCeeMefrjoVZiJFLQB2LKqqI=}
     engines: {node: '>=6'}
 
+  parsimmon@1.18.1:
+    resolution: {integrity: sha1-2N2cKHRWR9AvxlZvIXaQiX7tdwk=}
+
   path-exists@4.0.0:
     resolution: {integrity: sha1-UTvb4tO5XXdi6METfvoZXGxhtbM=}
     engines: {node: '>=8'}
@@ -2068,6 +2165,10 @@ packages:
     resolution: {integrity: sha1-hEe2dV6K7IWjy3IHyCPj7S/GZwA=}
     engines: {node: '>=20'}
     hasBin: true
+
+  pluralize@8.0.0:
+    resolution: {integrity: sha1-Gm+hajjRKhkB4DIPoBcFHFOc47E=}
+    engines: {node: '>=4'}
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha1-k+NYK8DlQmWG2dB7ee5A/IQd5K4=}
@@ -2136,6 +2237,10 @@ packages:
   regexp.prototype.flags@1.5.4:
     resolution: {integrity: sha1-GtbGLUSiWQB+VbOXDgD3Ru+8qhk=}
     engines: {node: '>= 0.4'}
+
+  require-from-string@2.0.2:
+    resolution: {integrity: sha1-iaf92TgmEmcxjq/hT5wy5ZjDaQk=}
+    engines: {node: '>=0.10.0'}
 
   resolve-from@4.0.0:
     resolution: {integrity: sha1-SrzYUq0y3Xuqv+m0DgCjbbXzkuY=}
@@ -2607,6 +2712,11 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha1-27fa+b/YusmrRev2ArjLrQ1dCP0=}
 
+  yaml@2.9.0:
+    resolution: {integrity: sha1-eCdK/ZNZih391hMN9qVm3vy/mqQ=}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yocto-queue@0.1.0:
     resolution: {integrity: sha1-ApTrPe4FAo0x7hpfosVWpqrxChs=}
     engines: {node: '>=10'}
@@ -2762,6 +2872,22 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@dbml/core@10.1.1':
+    dependencies:
+      '@dbml/parse': 10.1.1
+      antlr4: 4.13.2
+      lodash: 4.18.1
+      lodash-es: 4.18.1
+      luxon: 3.7.2
+      parsimmon: 1.18.1
+      pluralize: 8.0.0
+
+  '@dbml/parse@10.1.1':
+    dependencies:
+      lodash-es: 4.18.1
+      luxon: 3.7.2
+      pathe: 2.0.3
 
   '@egjs/hammerjs@2.0.17':
     dependencies:
@@ -3090,6 +3216,33 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
+  '@scalar/helpers@0.11.1': {}
+
+  '@scalar/json-magic@0.13.2':
+    dependencies:
+      '@scalar/helpers': 0.11.1
+      pathe: 2.0.3
+      yaml: 2.9.0
+
+  '@scalar/openapi-parser@0.28.16':
+    dependencies:
+      '@scalar/helpers': 0.11.1
+      '@scalar/json-magic': 0.13.2
+      '@scalar/openapi-types': 0.9.5
+      '@scalar/openapi-upgrader': 0.2.15
+      ajv: 8.20.0
+      ajv-draft-04: 1.0.0(ajv@8.20.0)
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      jsonpointer: 5.0.1
+      leven: 4.1.0
+      yaml: 2.9.0
+
+  '@scalar/openapi-types@0.9.5': {}
+
+  '@scalar/openapi-upgrader@0.2.15':
+    dependencies:
+      '@scalar/openapi-types': 0.9.5
+
   '@standard-schema/spec@1.1.0': {}
 
   '@swc/helpers@0.5.23':
@@ -3321,13 +3474,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.1
 
-  '@vitest/mocker@4.1.11(vite@8.2.2(@types/node@22.20.1))':
+  '@vitest/mocker@4.1.11(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.2.2(@types/node@22.20.1)
+      vite: 8.2.2(@types/node@22.20.1)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -3384,6 +3537,14 @@ snapshots:
 
   acorn@8.18.0: {}
 
+  ajv-draft-04@1.0.0(ajv@8.20.0):
+    optionalDependencies:
+      ajv: 8.20.0
+
+  ajv-formats@3.0.1(ajv@8.20.0):
+    optionalDependencies:
+      ajv: 8.20.0
+
   ajv@6.15.0:
     dependencies:
       fast-deep-equal: 3.1.3
@@ -3391,9 +3552,18 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.2
 
+  ajv@8.20.0:
+    dependencies:
+      fast-deep-equal: 3.1.3
+      fast-uri: 3.1.6
+      json-schema-traverse: 1.0.0
+      require-from-string: 2.0.2
+
   ansi-styles@4.3.0:
     dependencies:
       color-convert: 2.0.1
+
+  antlr4@4.13.2: {}
 
   argparse@2.0.1: {}
 
@@ -4014,6 +4184,8 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
+  fast-uri@3.1.6: {}
+
   fastq@1.20.1:
     dependencies:
       reusify: 1.1.0
@@ -4343,6 +4515,8 @@ snapshots:
 
   json-schema-traverse@0.4.1: {}
 
+  json-schema-traverse@1.0.0: {}
+
   json-stable-stringify-without-jsonify@1.0.1: {}
 
   json5@1.0.2:
@@ -4358,6 +4532,8 @@ snapshots:
       universalify: 2.0.1
     optionalDependencies:
       graceful-fs: 4.2.11
+
+  jsonpointer@5.0.1: {}
 
   jsx-ast-utils@3.3.5:
     dependencies:
@@ -4377,6 +4553,8 @@ snapshots:
   language-tags@1.0.9:
     dependencies:
       language-subtag-registry: 0.3.23
+
+  leven@4.1.0: {}
 
   levn@0.4.1:
     dependencies:
@@ -4436,6 +4614,8 @@ snapshots:
     dependencies:
       p-locate: 5.0.0
 
+  lodash-es@4.18.1: {}
+
   lodash.merge@4.6.2: {}
 
   lodash@4.18.1: {}
@@ -4453,6 +4633,8 @@ snapshots:
       react: 19.2.8
 
   lunr@2.3.9: {}
+
+  luxon@3.7.2: {}
 
   magic-string@0.30.21:
     dependencies:
@@ -4607,6 +4789,8 @@ snapshots:
     dependencies:
       callsites: 3.1.0
 
+  parsimmon@1.18.1: {}
+
   path-exists@4.0.0: {}
 
   path-is-absolute@1.0.1: {}
@@ -4630,6 +4814,8 @@ snapshots:
       playwright-core: 1.62.1
     optionalDependencies:
       fsevents: 2.3.2
+
+  pluralize@8.0.0: {}
 
   possible-typed-array-names@1.1.0: {}
 
@@ -4702,6 +4888,8 @@ snapshots:
       get-proto: 1.0.1
       gopd: 1.2.0
       set-function-name: 2.0.2
+
+  require-from-string@2.0.2: {}
 
   resolve-from@4.0.0: {}
 
@@ -5149,7 +5337,7 @@ snapshots:
       '@egjs/hammerjs': 2.0.17
       component-emitter: 1.3.1
 
-  vite@8.2.2(@types/node@22.20.1):
+  vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -5159,11 +5347,12 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.20.1
       fsevents: 2.3.3
+      yaml: 2.9.0
 
-  vitest@4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)):
+  vitest@4.1.11(@types/node@22.20.1)(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@8.2.2(@types/node@22.20.1))
+      '@vitest/mocker': 4.1.11(vite@8.2.2(@types/node@22.20.1)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -5180,7 +5369,7 @@ snapshots:
       tinyexec: 1.3.0
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.1
-      vite: 8.2.2(@types/node@22.20.1)
+      vite: 8.2.2(@types/node@22.20.1)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1
@@ -5253,6 +5442,8 @@ snapshots:
       cssfilter: 0.0.10
 
   yallist@3.1.1: {}
+
+  yaml@2.9.0: {}
 
   yocto-queue@0.1.0: {}
 

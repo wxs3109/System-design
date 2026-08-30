@@ -112,19 +112,21 @@ Exit criteria: a v3 fixture can express an API operation, its service owner, a r
 
 Deliverables:
 
-- [ ] a project-level Definitions explorer for APIs, data models, events, and interactions;
-- [ ] Service editing for operations, request/response schemas, handler estimates, SLOs, and ownership;
-- [ ] Database editing that changes with the selected Relational, Document, or Key-Value variant;
-- [ ] table/collection fields, keys, indexes, cardinality, and size editors with inline reference errors;
-- [ ] event schema, producer, consumer, key, and delivery-assumption editing;
-- [ ] an operation-focused overlay on the existing topology for binding typed calls, reads, writes, cache actions, and publishes without creating a second disconnected diagram;
-- [ ] workload mix editing against named operations;
-- [ ] OpenAPI and DBML import/export plus JSON Schema editing through selected mature libraries;
-- [ ] autosave, undo/redo, keyboard navigation, and large-form performance coverage.
+- [x] a project-level Definitions explorer for APIs, data models, events, cache keys, interactions, and operation workloads;
+- [x] Service editing for operations, request/response schemas, handler estimates, SLOs, and ownership;
+- [x] Database editing that changes with the selected Relational, Document, or Key-Value variant;
+- [x] table/collection fields, keys, indexes, cardinality, and size editors with inline reference errors;
+- [x] event schema, producer, consumer, key, and delivery-assumption editing;
+- [x] an operation-focused overlay on the existing topology for binding typed calls, reads, writes, cache actions, and publishes without creating a second disconnected diagram;
+- [x] workload mix editing against named operations, including arrival, key, payload, and value-size distributions;
+- [x] OpenAPI and DBML import/export plus JSON Schema editing through selected mature libraries;
+- [x] autosave, undo/redo, keyboard navigation, and large-form performance coverage.
 
 The settlement starts with a time-boxed dependency spike. Selection gates include OpenAPI 3.1 and JSON Schema 2020-12 correctness, editable arrays/unions/references, browser and Worker compatibility, maintained licensing, bundle cost, accessibility, and round-trip fidelity. Candidates include Swagger Parser or Redocly CLI for OpenAPI, JSON Forms or RJSF for schema-driven forms, and `@dbml/core` for DBML conversion. Node-only tools may be used in an import/export boundary but cannot be assumed to run in the browser. Failed candidates are recorded; a thin adapter prevents library types from becoming the project model.
 
 Exit criteria: using only the generic UI, a user can create and edit the complete P2.2 fixture, see contract errors before running, export it, reload it, and obtain a structurally identical project. Presets remain nested under their variant chooser.
+
+Status: complete. Definitions and topology are two views over the same `ProjectFile v3`; invalid drafts stay local with field paths while valid edits enter the shared undo/autosave/export history. The existing topology becomes the interaction binding overlay rather than a second diagram. OpenAPI 3.1 uses Scalar validation and DBML uses `@dbml/core` in Node-only routes documented in [the dependency spike](./p2.3-dependency-spike.md), keeping parser implementations out of the browser and simulation Worker.
 
 ### P2.4 — Operation-aware compiler and runtime
 

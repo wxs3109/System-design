@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createEmptyProject, projectFileV3Schema, type SimulationResult } from '@system-design/model'
+import { createEmptyProject, createOrderSystemContractFixture, projectFileV3Schema, type SimulationResult } from '@system-design/model'
 import { redoProject, undoProject, useWorkbenchStore } from './store'
 
 const emptyResult: SimulationResult = {
@@ -13,6 +13,33 @@ afterEach(() => {
 })
 
 describe('validated project undo and redo', () => {
+  it('commits valid definition edits into project history and rejects invalid references without changing state', () => {
+    const project = createOrderSystemContractFixture()
+    useWorkbenchStore.getState().restoreProject(project)
+    const edited = structuredClone(project)
+    edited.definitions.apis[0]!.operations[0]!.handlerTimeMs = 12
+
+    expect(useWorkbenchStore.getState().commitProjectEdit(edited)).toEqual({ success: true })
+    expect(useWorkbenchStore.getState().project.definitions.apis[0]!.operations[0]!.handlerTimeMs).toBe(12)
+    expect(useWorkbenchStore.temporal.getState().pastStates).toHaveLength(1)
+
+    const invalid = structuredClone(useWorkbenchStore.getState().project)
+    invalid.definitions.apis[0]!.ownerNodeId = 'missing-service'
+    const before = structuredClone(useWorkbenchStore.getState().project)
+    const result = useWorkbenchStore.getState().commitProjectEdit(invalid)
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.issues).toContainEqual(expect.objectContaining({
+      path: ['definitions', 'apis', 0, 'ownerNodeId'],
+      message: 'Unknown topology node: missing-service',
+    }))
+    expect(useWorkbenchStore.getState().project).toEqual(before)
+
+    undoProject()
+    expect(useWorkbenchStore.getState().project).toEqual(project)
+    redoProject()
+    expect(useWorkbenchStore.getState().project.definitions.apis[0]!.operations[0]!.handlerTimeMs).toBe(12)
+  })
+
   it('restores the exact project revision and clears stale results', () => {
     const project = createEmptyProject('history-project')
     useWorkbenchStore.getState().restoreProject(project)
@@ -68,6 +95,17 @@ describe('validated project undo and redo', () => {
     useWorkbenchStore.getState().deleteSelectedNode()
     expect(useWorkbenchStore.getState().project.topology.groups[0]?.nodeIds).toEqual([])
     expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+  })
+
+  it('rejects deleting a topology node that is still owned or used by a business definition', () => {
+    const project = createOrderSystemContractFixture()
+    useWorkbenchStore.getState().restoreProject(project)
+    useWorkbenchStore.getState().selectNode('orders-service')
+    useWorkbenchStore.getState().deleteSelectedNode()
+
+    expect(useWorkbenchStore.getState().project).toEqual(project)
+    expect(useWorkbenchStore.getState().error).toMatch(/Unknown topology node: orders-service/)
+    expect(useWorkbenchStore.getState().selectedNodeId).toBe('orders-service')
   })
 
   it('adds a role preset as a resolved behavior with stable preset identity', () => {

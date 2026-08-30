@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@system-design/components": "workspace:*",
+    "@system-design/formats": "workspace:*",
     "@system-design/model": "workspace:*",
     "@system-design/simulation": "workspace:*",
     "@xyflow/react": "^12.11.3",

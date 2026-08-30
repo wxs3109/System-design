@@ -1,0 +1,20 @@
+{
+  "name": "@system-design/formats",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dbml/core": "10.1.1",
+    "@scalar/openapi-parser": "0.28.16",
+    "@system-design/model": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

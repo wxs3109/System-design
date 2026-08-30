@@ -8,6 +8,8 @@ import { temporal } from 'zundo'
 
 export type ProjectNode = ProjectFile['topology']['nodes'][number]
 export type WorkbenchNode = Node<ProjectNode, 'component'>
+export interface ProjectEditIssue { path: Array<string | number>; message: string }
+export type ProjectEditResult = { success: true } | { success: false; issues: ProjectEditIssue[] }
 
 interface WorkbenchState {
   project: ProjectFile
@@ -19,6 +21,7 @@ interface WorkbenchState {
   error: string | null
   setProject: (project: ProjectFile | unknown) => void
   restoreProject: (project: ProjectFile | unknown) => void
+  commitProjectEdit: (project: ProjectFile | unknown) => ProjectEditResult
   addComponent: (type: ComponentType, position: { x: number; y: number }) => void
   addCatalogComponent: (categoryId: string, type: ComponentType, position: { x: number; y: number }, preset?: { id: string; version: number }) => void
   /** Compatibility command for existing callers and ProjectFile v2 preset provenance. */
@@ -109,6 +112,25 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
     set({ project, selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null })
     history.clear()
     history.resume()
+  },
+  commitProjectEdit: (input) => {
+    const parsed = projectFileV3Schema.safeParse(input)
+    if (!parsed.success) {
+      return {
+        success: false,
+        issues: parsed.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), message: issue.message })),
+      }
+    }
+    try {
+      const project = componentRegistry.validateProject(parsed.data, componentPresetRegistry)
+      set({ project, result: null, error: null })
+      return { success: true }
+    } catch (cause) {
+      return {
+        success: false,
+        issues: [{ path: [], message: cause instanceof Error ? cause.message : 'The project edit is invalid.' }],
+      }
+    }
   },
   addComponent: (type, position) => set((state) => {
     const id = `${type}-${Date.now()}-${nextNodeNumber++}`
@@ -328,8 +350,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
     set((state) => {
       const retainedEdges = state.project.topology.edges.filter((edge) => edge.source !== id && edge.target !== id)
       const retainedEdgeIds = new Set(retainedEdges.map((edge) => edge.id))
-      return {
-        project: {
+      const candidate: ProjectFile = {
           ...state.project, topology: {
             ...state.project.topology,
             nodes: state.project.topology.nodes.filter((node) => node.id !== id),
@@ -340,7 +361,11 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
               : policy.target.kind !== 'edge' || retainedEdgeIds.has(policy.target.id)),
           },
           experiments: state.project.experiments.map((experiment) => ({ ...experiment, workloads: experiment.workloads.filter((workload) => workload.sourceNodeId !== id), faults: experiment.faults.filter((fault) => !faultTargetsRemovedNode(fault, new Set([id])) && !faultTargetsRemovedEdge(fault, new Set(state.project.topology.edges.filter((edge) => edge.source === id || edge.target === id).map((edge) => edge.id)))) })),
-        },
+      }
+      const parsed = projectFileV3Schema.safeParse(candidate)
+      if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'This component is still referenced by a business definition.' }
+      return {
+        project: parsed.data,
         selectedNodeId: null, selectedEdgeId: null, result: null, error: null,
       }
     })
