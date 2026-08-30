@@ -40,6 +40,8 @@ export interface RequestState {
   eventId?: string
   schedulerNodeId?: string
   schedulerRunId?: number
+  cdnOutcome?: 'hit' | 'miss'
+  cdnPop?: number
 }
 
 export interface RequestGroup {

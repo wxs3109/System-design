@@ -14,6 +14,7 @@ export const componentTypeSchema = z.enum([
   'service',
   'queue',
   'cache',
+  'cdn',
   'stream',
   'object-storage',
   'database',
@@ -102,6 +103,26 @@ export const cacheConfigSchema = z.object({
   maxQueueSize: z.number().int().min(0).max(10_000_000).default(10_000),
 })
 
+export const cdnConfigSchema = z.object({
+  popCount: positiveIntegerSchema.max(1_000).default(4),
+  popSelection: z.enum(['consistent-hash', 'round-robin']).default('consistent-hash'),
+  capacityEntriesPerPop: positiveIntegerSchema.max(10_000_000).default(10_000),
+  ttlMs: positiveSchema.max(86_400_000).default(300_000),
+  evictionPolicy: z.enum(['lru', 'fifo']).default('lru'),
+  keySpaceSize: positiveIntegerSchema.max(1_000_000_000).default(100_000),
+  hotKeyProbability: probabilitySchema.default(0),
+  maxConcurrentRequests: positiveIntegerSchema.max(1_000_000).default(10_000),
+  lookupTimeMs: positiveSchema.default(0.5),
+  edgeLatencyMs: nonNegativeSchema.default(10),
+  edgeBandwidthMbps: positiveSchema.default(1_000),
+  originRoundTripMs: nonNegativeSchema.default(80),
+  originBandwidthMbps: positiveSchema.default(500),
+  defaultObjectSizeBytes: positiveIntegerSchema.max(1_000_000_000_000).default(1_048_576),
+  jitterMs: nonNegativeSchema.default(1),
+  errorRate: probabilitySchema.default(0),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(100_000),
+})
+
 export const streamConfigSchema = z.object({
   partitions: positiveIntegerSchema.max(100_000).default(12),
   producerCapacity: positiveIntegerSchema.max(1_000_000).default(1_000),
@@ -185,6 +206,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('cache'),
     config: cacheConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('cdn'),
+    config: cdnConfigSchema,
   }),
   z.object({
     ...commonNodeFields,
@@ -352,6 +378,7 @@ export const scenarioSchema = z.object({
 export type Position = z.infer<typeof positionSchema>
 export type ComponentNode = z.infer<typeof componentNodeSchema>
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>
+export type CdnConfig = z.infer<typeof cdnConfigSchema>
 export type Connection = z.infer<typeof connectionSchema>
 export type Workload = z.infer<typeof workloadSchema>
 export type Fault = z.infer<typeof faultSchema>

@@ -1,7 +1,7 @@
 import type { ComponentNode, ComponentType } from '@system-design/model'
 import { estimateDataAccessCost } from './operation-cost'
 
-export interface RequestPayload { bytes: number; operation?: 'read' | 'write'; operationAction?: import('../compiler/operation-plan').CompiledOperationAction }
+export interface RequestPayload { bytes: number; operation?: 'read' | 'write'; operationAction?: import('../compiler/operation-plan').CompiledOperationAction; cdnOutcome?: 'hit' | 'miss' }
 export interface NodeBehavior<TNode extends ComponentNode = ComponentNode> {
   type: TNode['type']
   capacity(node: TNode): number
@@ -40,6 +40,15 @@ const behaviors = [
   defineBehavior<Extract<ComponentNode, { type: 'cache' }>>({
     type: 'cache', capacity: (node) => node.config.maxConcurrentRequests, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node) => node.config.operationTimeMs, jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
+  }),
+  defineBehavior<Extract<ComponentNode, { type: 'cdn' }>>({
+    type: 'cdn', capacity: (node) => node.config.maxConcurrentRequests, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node, request) => {
+      const edgeTransfer = (request.bytes * 8) / (node.config.edgeBandwidthMbps * 1_000)
+      const originTransfer = request.cdnOutcome === 'miss' ? node.config.originRoundTripMs + (request.bytes * 8) / (node.config.originBandwidthMbps * 1_000) : 0
+      return node.config.lookupTimeMs + node.config.edgeLatencyMs + edgeTransfer + originTransfer
+    },
+    jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
   }),
   defineBehavior<Extract<ComponentNode, { type: 'stream' }>>({
     type: 'stream', capacity: (node) => node.config.producerCapacity, maximumWaiting: (node) => node.config.maxDepth,

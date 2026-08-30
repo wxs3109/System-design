@@ -20,7 +20,7 @@ import { WorkbenchShell } from './workbench-shell'
 import { DefinitionEditor, DefinitionsExplorer, useSelectedDefinitionBindings } from './definition-editor'
 import type { DefinitionSelection } from './definition-editor-model'
 import { FormatDialog } from './format-dialog'
-import { createAsyncExample, createDataPlatformExample, createDirectExample, createOrderSystemExample, createScheduledBatchExample } from '@/lib/examples'
+import { createAsyncExample, createDataPlatformExample, createDirectExample, createOrderSystemExample, createScheduledBatchExample, createVideoDeliveryExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 
@@ -269,16 +269,16 @@ function ResultsPanel({ result, progress, running, nodes, onShowTraceNode, theme
 }
 
 const domainMetricLabels: Record<string, string> = {
-  cacheHitRate: 'hit', cacheOccupancy: 'occupancy', consumerLag: 'lag', partitionImbalance: 'partition skew',
+  cacheHitRate: 'hit', cdnHitRate: 'CDN hit', cacheOccupancy: 'occupancy', consumerLag: 'lag', partitionImbalance: 'partition skew',
   byteThroughputPerSecond: 'bytes/s', hottestShardShare: 'hot shard', maxReplicaLagMs: 'replica lag',
-  releasedRuns: 'released', skippedRuns: 'skipped', pendingRuns: 'pending',
+  cdnOriginFetches: 'origin fetches', popRequestImbalance: 'POP skew', releasedRuns: 'released', skippedRuns: 'skipped', pendingRuns: 'pending',
 }
 
 function formatDomainMetrics(details: SimulationResult['nodes'][number]['details']) {
   const preferred = Object.entries(details).filter(([key]) => key in domainMetricLabels).slice(0, 3)
   if (preferred.length === 0) return '—'
   return preferred.map(([key, value]) => {
-    const formatted = typeof value === 'number' && ['cacheHitRate', 'cacheOccupancy', 'partitionImbalance', 'hottestShardShare'].includes(key)
+    const formatted = typeof value === 'number' && ['cacheHitRate', 'cdnHitRate', 'cacheOccupancy', 'partitionImbalance', 'popRequestImbalance', 'hottestShardShare'].includes(key)
       ? `${(value * 100).toFixed(1)}%` : typeof value === 'number' ? value.toLocaleString() : String(value)
     return `${domainMetricLabels[key]} ${formatted}`
   }).join(' · ')
@@ -511,7 +511,7 @@ function WorkbenchInner() {
           <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
           {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
           {workspaceView === 'definitions' ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>Showing bindings for <strong>{definitionBindings.resource.name}</strong></> : 'Select a definition to show topology bindings'}</span></div></Panel> : null}
-          <Panel position="top-left"><div className="canvas-toolbar"><button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button type="button" onClick={() => { setProject(createOrderSystemExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Order system</strong><span>APIs → Cache → Relational data → Events</span></button><button type="button" onClick={() => { setProject(createScheduledBatchExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Scheduled batch</strong><span>Scheduler → Queue → Workers → Database</span></button><button type="button" onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button type="button" onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button type="button" onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
+          <Panel position="top-left"><div className="canvas-toolbar"><button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button type="button" onClick={() => { setProject(createOrderSystemExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Order system</strong><span>APIs → Cache → Relational data → Events</span></button><button type="button" onClick={() => { setProject(createScheduledBatchExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Scheduled batch</strong><span>Scheduler → Queue → Workers → Database</span></button><button type="button" onClick={() => { setProject(createVideoDeliveryExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Video delivery</strong><span>Viewers → CDN POPs → Edge cache / Origin</span></button><button type="button" onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button type="button" onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button type="button" onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
         </ReactFlow>
         {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
       </section>

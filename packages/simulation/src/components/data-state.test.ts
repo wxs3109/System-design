@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState, stablePartition } from './data-state'
+import { CdnState, ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState, stablePartition, stableRendezvousNode } from './data-state'
 
 describe('virtual-time cache state', () => {
   it('tracks key-aware hits, misses and TTL expiry without reading wall-clock time', () => {
@@ -53,6 +53,46 @@ describe('virtual-time cache state', () => {
     const cache = new VirtualCacheState({ capacityEntries: 1, ttlMs: 100, evictionPolicy: 'fifo' })
     cache.write('a', 20)
     expect(() => cache.read('a', 19)).toThrow(/monotonic/)
+  })
+})
+
+describe('CDN state', () => {
+  it('keeps independent POP caches and fills only the selected POP', () => {
+    const cdn = new CdnState({ popCount: 2, popSelection: 'round-robin', capacityEntries: 1, ttlMs: 1_000, evictionPolicy: 'lru' })
+    const first = cdn.read('video:1', 1_000, 0)
+    expect(first).toMatchObject({ pop: 0, outcome: 'miss' })
+    cdn.fill(first.pop, 'video:1', 1_000, 10)
+    expect(cdn.read('video:1', 1_000, 20)).toMatchObject({ pop: 1, outcome: 'miss' })
+    expect(cdn.read('video:1', 1_000, 30)).toMatchObject({ pop: 0, outcome: 'hit' })
+    cdn.recordDelivery(3_000)
+    expect(cdn.snapshot(30)).toMatchObject({ requests: 3, hits: 1, misses: 2, originFetches: 1, edgeBytes: 3_000, originBytes: 1_000 })
+  })
+
+  it('selects a stable POP for the same key under consistent hashing', () => {
+    const cdn = new CdnState({ popCount: 4, popSelection: 'consistent-hash', capacityEntries: 2, ttlMs: 100, evictionPolicy: 'fifo' })
+    const expected = stableRendezvousNode('asset:1', 4)
+    const first = cdn.read('asset:1', 10, 0)
+    cdn.fill(first.pop, 'asset:1', 10, 1)
+    expect(first.pop).toBe(expected)
+    expect(cdn.read('asset:1', 10, 2)).toMatchObject({ pop: expected, outcome: 'hit' })
+    expect(cdn.read('asset:1', 10, 101)).toMatchObject({ pop: expected, outcome: 'expired' })
+  })
+
+  it('uses consistent rendezvous hashing when a POP is added', () => {
+    for (let index = 0; index < 100; index += 1) {
+      const before = stableRendezvousNode(`asset:${index}`, 4)
+      const after = stableRendezvousNode(`asset:${index}`, 5)
+      expect(after === before || after === 4).toBe(true)
+    }
+  })
+
+  it('distributes rendezvous keys across a non-power-of-two POP count', () => {
+    const counts = Array.from({ length: 5 }, () => 0)
+    for (let index = 0; index < 10_000; index += 1) {
+      const pop = stableRendezvousNode(`asset:${index}`, counts.length)
+      counts[pop] = counts[pop]! + 1
+    }
+    expect(Math.max(...counts) / Math.min(...counts)).toBeLessThan(1.2)
   })
 })
 

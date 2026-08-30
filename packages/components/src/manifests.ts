@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   backpressurePolicyConfigSchema,
   cacheConfigSchema,
+  cdnConfigSchema,
   circuitBreakerPolicyConfigSchema,
   databaseConfigSchema,
   databaseV1ConfigSchema,
@@ -27,6 +28,7 @@ const messageInput = { id: 'consume', label: 'Consume', direction: 'input', sema
 const messageOutput = { id: 'publish', label: 'Publish', direction: 'output', semantic: 'publish', multiple: true } as const
 const cacheHitOutput = { id: 'hit', label: 'Hit', direction: 'output', semantic: 'hit', multiple: true } as const
 const cacheMissOutput = { id: 'miss', label: 'Miss', direction: 'output', semantic: 'miss', multiple: true } as const
+const cdnMissOutput = { ...cacheMissOutput, required: true } as const
 
 export const builtInComponentCategoryManifests = [
   { id: 'traffic', label: 'Traffic', description: 'Request and workload sources.', iconToken: 'globe', color: '#8b5cf6', order: 10 },
@@ -136,6 +138,30 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
     ], ports: [requestInput, cacheHitOutput, cacheMissOutput], capabilities: ['storage', 'caching', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'cache-hit-rate', 'cache-evictions', 'cache-occupancy'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'cache-v1',
     describeConfig: (config) => `${config.capacityEntries} entries · ${config.ttlMs} ms TTL · ${String(config.evictionPolicy).toUpperCase()}`,
+  },
+  {
+    type: 'cdn', version: 1, label: 'CDN', description: 'Selects an edge POP, caches objects per POP, and pays explicit edge and origin transfer costs.', category: 'cache', iconToken: 'cloud', color: '#0d9488',
+    configSchema: cdnConfigSchema, createDefaultConfig: () => ({ popCount: 4, popSelection: 'consistent-hash', capacityEntriesPerPop: 10_000, ttlMs: 300_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 10_000, lookupTimeMs: 0.5, edgeLatencyMs: 10, edgeBandwidthMbps: 1_000, originRoundTripMs: 80, originBandwidthMbps: 500, defaultObjectSizeBytes: 1_048_576, jitterMs: 1, errorRate: 0, maxQueueSize: 100_000 }),
+    configFields: [
+      { kind: 'number', key: 'popCount', label: 'POP count', min: 1, step: 1 },
+      { kind: 'select', key: 'popSelection', label: 'POP selection', options: [{ value: 'consistent-hash', label: 'Consistent hash' }, { value: 'round-robin', label: 'Round robin' }] },
+      { kind: 'number', key: 'capacityEntriesPerPop', label: 'Entries / POP', min: 1, step: 1 },
+      { kind: 'number', key: 'ttlMs', label: 'Edge TTL (ms)', min: 0.001, step: 1_000 },
+      { kind: 'select', key: 'evictionPolicy', label: 'Eviction policy', options: [{ value: 'lru', label: 'LRU' }, { value: 'fifo', label: 'FIFO' }] },
+      { kind: 'number', key: 'keySpaceSize', label: 'Object key space', min: 1, step: 1 },
+      { kind: 'number', key: 'hotKeyProbability', label: 'Hot-key probability (0–1)', min: 0, max: 1, step: 0.05 },
+      { kind: 'number', key: 'maxConcurrentRequests', label: 'Concurrent requests', min: 1, step: 1 },
+      { kind: 'number', key: 'lookupTimeMs', label: 'Lookup time (ms)', min: 0.001, step: 0.1 },
+      { kind: 'number', key: 'edgeLatencyMs', label: 'Edge latency (ms)', min: 0, step: 1 },
+      { kind: 'number', key: 'edgeBandwidthMbps', label: 'Edge bandwidth (Mbps)', min: 0.001, step: 10 },
+      { kind: 'number', key: 'originRoundTripMs', label: 'Origin round trip (ms)', min: 0, step: 1 },
+      { kind: 'number', key: 'originBandwidthMbps', label: 'Origin bandwidth (Mbps)', min: 0.001, step: 10 },
+      { kind: 'number', key: 'defaultObjectSizeBytes', label: 'Object size (bytes)', min: 1, step: 1_024 },
+      { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 0.1 },
+      { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
+      { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
+    ], ports: [requestInput, cacheHitOutput, cdnMissOutput], capabilities: ['edge-delivery', 'pop-selection', 'caching', 'origin-fetch', 'byte-throughput'], emittedMetrics: ['cdn-hit-rate', 'origin-fetches', 'edge-bytes', 'origin-bytes', 'requests-per-pop'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'cdn-v1',
+    describeConfig: (config) => `${config.popCount} POPs · ${config.popSelection} · ${config.capacityEntriesPerPop} entries / POP`,
   },
   {
     type: 'stream', version: 1, label: 'Stream', description: 'Partitions messages and tracks acknowledged delivery independently for each consumer group.', category: 'messaging', iconToken: 'radio-tower', color: '#f97316',

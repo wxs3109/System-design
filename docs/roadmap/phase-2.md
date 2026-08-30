@@ -170,7 +170,7 @@ Status: complete. The normal order-system v3 project now contains three named op
 Wave one:
 
 - [x] Scheduler with periodic/batch releases, jitter, missed-run policy, and concurrency limits;
-- [ ] CDN with POP selection, edge cache/origin fetch, bandwidth, and hit/miss behavior;
+- [x] CDN with POP selection, edge cache/origin fetch, bandwidth, and hit/miss behavior;
 - [ ] Search Index with indexing delay, refresh visibility, shard/replica query fan-out, and merge cost.
 
 Wave two:
@@ -182,7 +182,9 @@ Wave two:
 
 Exit criteria: every variant owns distinct tested runtime semantics, changes measured results under parameter changes, integrates with the v3 contracts where relevant, and is reused by at least two representative systems.
 
-P2.6a status: complete. Scheduler is an Automation source variant rather than a Service preset. It releases anonymous topology requests or an attached v3 operation mix on its own periodic/batch clock. Seeded bounded jitter, skip/catch-up behavior, concurrency and pending limits produce scheduler events and node metrics. Focused tests reuse it for a direct scheduled service, a Queue/Worker/Database batch pipeline, and a scheduled v3 report operation. CDN is the next independent settlement.
+P2.6a status: complete. Scheduler is an Automation source variant rather than a Service preset. It releases anonymous topology requests or an attached v3 operation mix on its own periodic/batch clock. Seeded bounded jitter, skip/catch-up behavior, concurrency and pending limits produce scheduler events and node metrics. Focused tests reuse it for a direct scheduled service, a Queue/Worker/Database batch pipeline, and a scheduled v3 report operation.
+
+P2.6b status: complete. CDN is a Cache-category behavior variant rather than a preset. It deterministically selects an edge POP by rendezvous hash or round robin, keeps independent bounded TTL caches per POP, routes hits to the edge response path, routes misses to the explicit origin path, and fills only after a successful origin dependency. Edge delivery and origin transfer time use the configured object bytes and bandwidth; POP distribution, cache outcomes, origin fetches, byte counters, evictions, expirations, and hit rate are emitted as runtime evidence. Video delivery and cloud-drive-shaped object delivery reuse the same behavior; Search Index is the next independent settlement.
 
 ### P2.7 — SDK extraction
 
@@ -258,4 +260,4 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 ## 8. Immediate execution order
 
-Implement P2.6b CDN next, then P2.6c Search Index, and commit each behavior independently. Each must add distinct executable semantics and result-changing tests; do not freeze a public SDK until these later behavior variants have exposed the extension points it actually needs.
+Implement P2.6c Search Index next and commit it as an independent behavior settlement. It must add distinct executable semantics and result-changing tests; do not freeze a public SDK until these later behavior variants have exposed the extension points it actually needs.

@@ -179,6 +179,24 @@ test('loads a scheduled batch pipeline and exposes executable Scheduler metrics'
   await expect(results.getByText('Reporting database', { exact: true })).toBeVisible()
 })
 
+test('loads video delivery and exposes executable CDN controls and metrics', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Video delivery/ }).click()
+  await expect(page.getByText('4 components')).toBeVisible()
+  await page.getByTestId('rf__node-video-cdn').dispatchEvent('click')
+  await expect(page.getByLabel('POP count')).toHaveValue('4')
+  await expect(page.getByLabel('POP selection')).toHaveValue('consistent-hash')
+  await expect(page.getByLabel('Edge bandwidth (Mbps)')).toHaveValue('1000')
+  await expect(page.getByLabel('Origin round trip (ms)')).toHaveValue('80')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  const row = page.getByRole('row').filter({ hasText: 'Edge CDN' })
+  await expect(row.getByText(/CDN hit/)).toBeVisible()
+  await expect(row.getByText(/origin fetches/)).toBeVisible()
+})
+
 test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({

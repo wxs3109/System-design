@@ -1,11 +1,30 @@
-export const stablePartition = (key: string, partitionCount: number): number => {
-  if (!Number.isInteger(partitionCount) || partitionCount < 1) throw new Error('partitionCount must be a positive integer.')
+const stableHash = (key: string): number => {
   let hash = 0x811c9dc5
   for (let index = 0; index < key.length; index += 1) {
     hash ^= key.charCodeAt(index)
     hash = Math.imul(hash, 0x01000193)
   }
-  return (hash >>> 0) % partitionCount
+  return hash >>> 0
+}
+
+export const stablePartition = (key: string, partitionCount: number): number => {
+  if (!Number.isInteger(partitionCount) || partitionCount < 1) throw new Error('partitionCount must be a positive integer.')
+  return stableHash(key) % partitionCount
+}
+
+/** Rendezvous hashing keeps an existing key on its POP unless a newly added POP wins. */
+export const stableRendezvousNode = (key: string, nodeCount: number): number => {
+  if (!Number.isInteger(nodeCount) || nodeCount < 1) throw new Error('nodeCount must be a positive integer.')
+  let selected = 0
+  let bestScore = -1
+  for (let node = 0; node < nodeCount; node += 1) {
+    // Prefix the node identity. With FNV-1a, appending a small integer suffix
+    // strongly correlates adjacent node scores and can badly skew non-power-
+    // of-two node counts. Prefixing keeps rendezvous scores well distributed.
+    const score = stableHash(`${node}\0${key}`)
+    if (score > bestScore) { selected = node; bestScore = score }
+  }
+  return selected
 }
 
 const assertVirtualTime = (nowMs: number, previousMs: number) => {
@@ -140,6 +159,84 @@ export class VirtualCacheState {
       }
     }
     return expiredKeys
+  }
+}
+
+export interface CdnStateConfig extends CacheStateConfig {
+  popCount: number
+  popSelection: 'consistent-hash' | 'round-robin'
+}
+
+export interface CdnReadResult {
+  pop: number
+  outcome: CacheReadResult['outcome']
+  ageMs?: number
+}
+
+export class CdnState {
+  private readonly pops: VirtualCacheState[]
+  private readonly requestsByPop: number[]
+  private roundRobinCursor = 0
+  private requests = 0
+  private hits = 0
+  private misses = 0
+  private originFetches = 0
+  private edgeBytes = 0
+  private originBytes = 0
+
+  constructor(readonly config: CdnStateConfig) {
+    if (!Number.isInteger(config.popCount) || config.popCount < 1) throw new Error('popCount must be a positive integer.')
+    this.pops = Array.from({ length: config.popCount }, () => new VirtualCacheState(config))
+    this.requestsByPop = Array.from({ length: config.popCount }, () => 0)
+  }
+
+  read(key: string, bytes: number, nowMs: number): CdnReadResult {
+    if (!Number.isInteger(bytes) || bytes < 0) throw new Error('bytes must be a non-negative integer.')
+    const pop = this.selectPop(key)
+    const result = this.pops[pop]!.read(key, nowMs)
+    this.requests += 1
+    this.requestsByPop[pop] = this.requestsByPop[pop]! + 1
+    if (result.outcome === 'hit') this.hits += 1
+    else this.misses += 1
+    return { pop, outcome: result.outcome, ...('ageMs' in result ? { ageMs: result.ageMs } : {}) }
+  }
+
+  fill(pop: number, key: string, bytes: number, nowMs: number) {
+    if (!this.pops[pop]) throw new Error(`Unknown CDN POP: ${pop}.`)
+    const write = this.pops[pop]!.write(key, nowMs)
+    this.originFetches += 1
+    this.originBytes += bytes
+    return write
+  }
+
+  recordDelivery(bytes: number) {
+    if (!Number.isInteger(bytes) || bytes < 0) throw new Error('bytes must be a non-negative integer.')
+    this.edgeBytes += bytes
+  }
+
+  expire(nowMs: number): Array<{ pop: number; key: string }> {
+    return this.pops.flatMap((cache, pop) => cache.expire(nowMs).map((key) => ({ pop, key })))
+  }
+
+  snapshot(nowMs: number) {
+    const snapshots = this.pops.map((cache) => cache.snapshot(nowMs))
+    const maximum = Math.max(...this.requestsByPop)
+    const minimum = Math.min(...this.requestsByPop)
+    return {
+      requests: this.requests, hits: this.hits, misses: this.misses, hitRate: this.requests === 0 ? 0 : this.hits / this.requests,
+      originFetches: this.originFetches, edgeBytes: this.edgeBytes, originBytes: this.originBytes, requestsByPop: [...this.requestsByPop],
+      popRequestImbalance: this.requests === 0 ? 0 : (maximum - minimum) / this.requests,
+      evictions: snapshots.reduce((sum, snapshot) => sum + snapshot.evictions, 0),
+      expirations: snapshots.reduce((sum, snapshot) => sum + snapshot.expirations, 0),
+      entries: snapshots.reduce((sum, snapshot) => sum + snapshot.entries, 0),
+    }
+  }
+
+  private selectPop(key: string) {
+    if (this.config.popSelection === 'consistent-hash') return stableRendezvousNode(key, this.config.popCount)
+    const pop = this.roundRobinCursor
+    this.roundRobinCursor = (this.roundRobinCursor + 1) % this.config.popCount
+    return pop
   }
 }
 

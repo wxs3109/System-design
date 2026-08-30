@@ -1,6 +1,6 @@
 import type { ComponentNode, EventStatus, RuntimeEventType } from '@system-design/model'
 import type { CompiledOperationAction } from '../compiler/operation-plan'
-import { ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState } from './data-state'
+import { CdnState, ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState } from './data-state'
 
 export interface StatefulRequest {
   id: number
@@ -12,6 +12,8 @@ export interface StatefulRequest {
   hotKeyProbabilityOverride?: number
   operationAction?: CompiledOperationAction
   payloadBytes?: number
+  cdnOutcome?: 'hit' | 'miss'
+  cdnPop?: number
 }
 
 export interface ComponentDomainEvent {
@@ -27,7 +29,7 @@ export interface ComponentStateSnapshot {
 }
 
 export interface ComponentStateDecision {
-  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort'>>
+  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'bytes'>>
   events?: ComponentDomainEvent[]
 }
 
@@ -102,6 +104,65 @@ export class CacheRuntime implements ComponentStateRuntime {
     return {
       metrics: { cacheHitRate: value.hitRate, cacheHits: value.hits, cacheMisses: value.misses, cacheEvictions: value.evictions, cacheExpirations: value.expirations, cacheEntries: value.entries, cacheOccupancy: value.occupancy },
       events: expiredKeys.map((key) => ({ type: 'cache-expired', status: 'ok', attributes: { key } })),
+    }
+  }
+}
+
+export class CdnRuntime implements ComponentStateRuntime {
+  private readonly cdn
+  private readonly pending = new Map<string, { key: string; pop: number; outcome: 'hit' | 'miss'; bytes: number }>()
+
+  constructor(private readonly node: Extract<ComponentNode, { type: 'cdn' }>) {
+    this.cdn = new CdnState({
+      popCount: node.config.popCount, popSelection: node.config.popSelection, capacityEntries: node.config.capacityEntriesPerPop,
+      ttlMs: node.config.ttlMs, evictionPolicy: node.config.evictionPolicy,
+    })
+  }
+
+  begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision {
+    const key = generatedKey(request, this.node.config.keySpaceSize, request.hotKeyProbabilityOverride ?? this.node.config.hotKeyProbability, random)
+    const bytes = request.payloadBytes ?? this.node.config.defaultObjectSizeBytes
+    const read = this.cdn.read(key, bytes, nowMs)
+    const outcome = read.outcome === 'hit' ? 'hit' as const : 'miss' as const
+    this.pending.set(token(request), { key, pop: read.pop, outcome, bytes })
+    const attributes = { key, pop: read.pop, selection: this.node.config.popSelection, ...(read.ageMs === undefined ? {} : { ageMs: read.ageMs }) }
+    return {
+      patch: { key, operation: 'read', outgoingPort: outcome, cdnOutcome: outcome, cdnPop: read.pop, bytes },
+      events: [
+        { type: 'cdn-pop-selected', status: 'ok', attributes },
+        { type: outcome === 'hit' ? 'cdn-cache-hit' : 'cdn-cache-miss', status: 'ok', bytes, attributes },
+      ],
+    }
+  }
+
+  complete(request: StatefulRequest, success: boolean): ComponentDomainEvent[] {
+    if (!success) this.pending.delete(token(request))
+    return []
+  }
+
+  dependencyComplete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[] {
+    const pending = this.pending.get(token(request))
+    this.pending.delete(token(request))
+    if (!success || !pending) return []
+    this.cdn.recordDelivery(pending.bytes)
+    if (pending.outcome !== 'miss') return []
+    const write = this.cdn.fill(pending.pop, pending.key, pending.bytes, nowMs)
+    return [
+      { type: 'cdn-origin-fetch', status: 'ok', bytes: pending.bytes, attributes: { key: pending.key, pop: pending.pop, originFetch: true } },
+      ...(write.evictedKey === undefined ? [] : [{ type: 'cache-evicted' as const, status: 'ok' as const, attributes: { key: write.evictedKey, pop: pending.pop } }]),
+    ]
+  }
+
+  snapshot(nowMs: number): ComponentStateSnapshot {
+    const expired = this.cdn.expire(nowMs)
+    const value = this.cdn.snapshot(nowMs)
+    return {
+      metrics: {
+        cdnRequests: value.requests, cdnHits: value.hits, cdnMisses: value.misses, cdnHitRate: value.hitRate, cdnOriginFetches: value.originFetches,
+        cdnBytesServed: value.edgeBytes, cdnOriginBytes: value.originBytes, cdnEvictions: value.evictions, cdnExpirations: value.expirations, cdnEntries: value.entries,
+        popRequestImbalance: value.popRequestImbalance, ...indexedMetrics('requestsByPop', value.requestsByPop),
+      },
+      events: expired.map(({ pop, key }) => ({ type: 'cache-expired', status: 'ok', attributes: { key, pop } })),
     }
   }
 }
@@ -214,6 +275,7 @@ const indexedMetrics = (prefix: string, values: readonly number[]) => Object.fro
 export const createComponentStateRuntime = (node: ComponentNode): ComponentStateRuntime | undefined => {
   switch (node.type) {
     case 'cache': return new CacheRuntime(node)
+    case 'cdn': return new CdnRuntime(node)
     case 'stream': return new StreamRuntime(node)
     case 'object-storage': return new ObjectStorageRuntime(node)
     case 'database': return node.componentVersion === 2 ? new DatabaseRuntime(node) : undefined

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createEmptyProject } from '@system-design/model'
 import { createRegisteredNode } from '@system-design/components'
 import { compileSimulationInput } from './compiler'
+import { validateScenarioForSimulation } from './validation'
 
 describe('generic project compiler', () => {
   it('combines one topology with the selected experiment', () => {
@@ -50,5 +51,24 @@ describe('generic project compiler', () => {
     project.topology.policies = []
     project.experiments[0]!.faults = [{ id: 'down', type: 'node-down', target: { kind: 'node', id: 'scheduler' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }]
     expect(() => compileSimulationInput(project)).toThrow('Scheduler does not support node-down faults')
+  })
+
+  it('rejects a CDN without an explicit origin miss path', () => {
+    const project = createEmptyProject('cdn-origin-path')
+    project.topology.nodes = [createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }, 'load'), createRegisteredNode('cdn', 'cdn', { x: 100, y: 0 })]
+    project.topology.edges = [{ id: 'entry', source: 'traffic', target: 'cdn', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' }]
+    project.experiments[0]!.workloads = [{ id: 'load', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 100 }]
+    expect(validateScenarioForSimulation(project).errors).toContain('CDN CDN requires a connected miss path to an origin.')
+  })
+
+  it('warns when a CDN hit path is not connected', () => {
+    const project = createEmptyProject('cdn-hit-path')
+    project.topology.nodes = [createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }, 'load'), createRegisteredNode('cdn', 'cdn', { x: 100, y: 0 }), createRegisteredNode('object-storage', 'origin', { x: 200, y: 0 })]
+    project.topology.edges = [
+      { id: 'entry', source: 'traffic', target: 'cdn', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'origin', source: 'cdn', target: 'origin', sourcePort: 'miss', targetPort: 'in', weight: 1, sourceSemantic: 'miss', targetSemantic: 'request', routingMode: 'weighted-one' },
+    ]
+    project.experiments[0]!.workloads = [{ id: 'load', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 100 }]
+    expect(validateScenarioForSimulation(project).warnings).toContain('CDN CDN has no connected hit path; cached responses terminate at the CDN node.')
   })
 })

@@ -68,6 +68,16 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.safeParse({ ...scheduler, config: { ...scheduler.config, concurrencyLimit: 0 } }).success).toBe(false)
   })
 
+  it('validates CDN POP, cache, and bandwidth configuration', () => {
+    const cdn = createNode('cdn', 'cdn', { x: 100, y: 50 })
+    if (cdn.type !== 'cdn') throw new Error('Expected a CDN node.')
+    cdn.config.popCount = 8
+    cdn.config.popSelection = 'round-robin'
+    expect(scenarioSchema.shape.nodes.element.parse(cdn)).toEqual(cdn)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...cdn, config: { ...cdn.config, popCount: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...cdn, config: { ...cdn.config, edgeBandwidthMbps: 0 } }).success).toBe(false)
+  })
+
   it('validates fault-specific factor bounds', () => {
     const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
     expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)

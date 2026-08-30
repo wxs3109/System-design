@@ -31,6 +31,11 @@ export const validateScenarioForSimulation = (input: unknown): ScenarioValidatio
     if (!enabledNodes.has(phase.sourceNodeId)) errors.push(`Operation workload ${phase.workloadId} points to a disabled or missing source.`)
   }
   for (const scheduler of schedulers) if ((outgoing.get(scheduler.id)?.length ?? 0) === 0) errors.push(`Scheduler ${scheduler.name} is not connected.`)
+  for (const cdn of [...enabledNodes.values()].filter((node) => node.type === 'cdn')) {
+    const edges = outgoing.get(cdn.id) ?? []
+    if (!edges.some((edge) => edge.sourcePort === 'miss')) errors.push(`CDN ${cdn.name} requires a connected miss path to an origin.`)
+    if (!edges.some((edge) => edge.sourcePort === 'hit')) warnings.push(`CDN ${cdn.name} has no connected hit path; cached responses terminate at the CDN node.`)
+  }
   const reachable = new Set<string>()
   const visit = (nodeId: string) => { if (reachable.has(nodeId)) return; reachable.add(nodeId); for (const edge of outgoing.get(nodeId) ?? []) visit(edge.target) }
   for (const workload of scenario.workloads) visit(workload.sourceNodeId)

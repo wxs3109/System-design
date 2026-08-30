@@ -8,7 +8,7 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'stream', 'object-storage', 'database',
+      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'stream', 'object-storage', 'database',
     ])
   })
 
@@ -54,6 +54,16 @@ describe('component registry', () => {
     expect(database.componentVersion).toBe(2)
     expect(database.config).toMatchObject({ shardCount: 1, replicasPerShard: 0, readPreference: 'primary' })
     expect(componentRegistry.get('database', 1).runtimeBehavior).toBe('database-v1')
+  })
+
+  it('declares CDN as a Cache-category executable variant instead of a preset', () => {
+    const cdn = componentRegistry.createNode('cdn', 'cdn', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('cdn')
+    expect(cdn.config).toMatchObject({ popCount: 4, popSelection: 'consistent-hash', capacityEntriesPerPop: 10_000 })
+    expect(manifest.category).toBe('cache')
+    expect(manifest.ports.map((port) => port.id)).toEqual(['in', 'hit', 'miss'])
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['pop-selection', 'origin-fetch', 'byte-throughput']))
+    expect(componentCatalog.listPresets('cdn')).toEqual([])
   })
 
   it('advertises executable network fault modes', () => {
@@ -142,6 +152,7 @@ describe('component creation hierarchy', () => {
     ])
     expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['database'])
     expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler'])
+    expect(componentCatalog.listVariants('cache').map((variant) => variant.type)).toEqual(['cache', 'cdn'])
     expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream'])
     expect(componentCatalog.listPresets('service', 1).map((preset) => preset.id)).toEqual(['worker'])
     expect(componentCatalog.listPresets('database', 2)).toEqual([])

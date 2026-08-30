@@ -100,5 +100,59 @@ export const createScheduledBatchExample = (): ProjectFile => {
   return project
 }
 
+export const createVideoDeliveryExample = (): ProjectFile => {
+  const project = createEmptyProject('video-delivery')
+  project.name = 'Video delivery'
+  const viewers = createRegisteredNode('traffic', 'video-viewers', { x: 60, y: 180 }, 'video-views')
+  const cdn = createRegisteredNode('cdn', 'video-cdn', { x: 360, y: 180 })
+  const cachedResponse = createRegisteredNode('service', 'edge-response', { x: 680, y: 60 })
+  const origin = createRegisteredNode('object-storage', 'video-origin', { x: 680, y: 300 })
+  viewers.name = 'Video viewers'
+  cdn.name = 'Edge CDN'
+  cachedResponse.name = 'Cached response'
+  origin.name = 'Video origin'
+  cdn.config = { ...cdn.config, popCount: 4, popSelection: 'consistent-hash', capacityEntriesPerPop: 16, ttlMs: 60_000, keySpaceSize: 8, hotKeyProbability: 0.4, maxConcurrentRequests: 1_000, lookupTimeMs: 0.1, edgeLatencyMs: 8, edgeBandwidthMbps: 1_000, originRoundTripMs: 80, originBandwidthMbps: 200, defaultObjectSizeBytes: 1_048_576, jitterMs: 0, errorRate: 0, maxQueueSize: 10_000 }
+  cachedResponse.config = { ...cachedResponse.config, serviceTimeMs: 0.1, jitterMs: 0, errorRate: 0 }
+  origin.config = { ...origin.config, defaultObjectSizeBytes: 1_048_576, baseLatencyMs: 10, jitterMs: 0, readThroughputMbps: 500, errorRate: 0 }
+  project.topology.nodes = [viewers, cdn, cachedResponse, origin]
+  project.topology.edges = [
+    connection('viewer-to-cdn', 'video-viewers', 'video-cdn'),
+    { ...connection('cdn-cache-hit', 'video-cdn', 'edge-response'), sourcePort: 'hit', sourceSemantic: 'hit' },
+    { ...connection('cdn-origin-fetch', 'video-cdn', 'video-origin'), sourcePort: 'miss', sourceSemantic: 'miss' },
+  ]
+  const experiment = project.experiments[0]!
+  experiment.seed = 'video-delivery'
+  experiment.simulation = { durationSeconds: 5, sampleIntervalMs: 500, maxRequests: 1_000, traceLimit: 100, maxHops: 10 }
+  experiment.workloads = [{ id: 'video-views', name: 'Video requests', sourceNodeId: 'video-viewers', requestsPerSecond: 30, startAtSeconds: 0, durationSeconds: 4, pattern: 'constant', requestBytes: 256 }]
+  return project
+}
+
+export const createCloudDriveDeliveryExample = (): ProjectFile => {
+  const project = createEmptyProject('cloud-drive-delivery')
+  project.name = 'Cloud drive delivery'
+  const downloads = createRegisteredNode('traffic', 'drive-downloads', { x: 60, y: 180 }, 'file-downloads')
+  const cdn = createRegisteredNode('cdn', 'download-cdn', { x: 360, y: 180 })
+  const cachedResponse = createRegisteredNode('service', 'download-edge-response', { x: 680, y: 60 })
+  const origin = createRegisteredNode('object-storage', 'drive-origin', { x: 680, y: 300 })
+  downloads.name = 'File downloads'
+  cdn.name = 'Download CDN'
+  cachedResponse.name = 'Cached file response'
+  origin.name = 'Drive object store'
+  cdn.config = { ...cdn.config, popCount: 6, popSelection: 'round-robin', capacityEntriesPerPop: 32, ttlMs: 300_000, keySpaceSize: 24, hotKeyProbability: 0.2, maxConcurrentRequests: 1_000, lookupTimeMs: 0.2, edgeLatencyMs: 12, edgeBandwidthMbps: 500, originRoundTripMs: 100, originBandwidthMbps: 100, defaultObjectSizeBytes: 8_388_608, jitterMs: 0, errorRate: 0, maxQueueSize: 10_000 }
+  cachedResponse.config = { ...cachedResponse.config, serviceTimeMs: 0.2, jitterMs: 0, errorRate: 0 }
+  origin.config = { ...origin.config, defaultObjectSizeBytes: 8_388_608, baseLatencyMs: 15, jitterMs: 0, readThroughputMbps: 250, errorRate: 0 }
+  project.topology.nodes = [downloads, cdn, cachedResponse, origin]
+  project.topology.edges = [
+    connection('downloads-to-cdn', 'drive-downloads', 'download-cdn'),
+    { ...connection('download-cache-hit', 'download-cdn', 'download-edge-response'), sourcePort: 'hit', sourceSemantic: 'hit' },
+    { ...connection('download-origin-fetch', 'download-cdn', 'drive-origin'), sourcePort: 'miss', sourceSemantic: 'miss' },
+  ]
+  const experiment = project.experiments[0]!
+  experiment.seed = 'cloud-drive-delivery'
+  experiment.simulation = { durationSeconds: 6, sampleIntervalMs: 500, maxRequests: 1_000, traceLimit: 100, maxHops: 10 }
+  experiment.workloads = [{ id: 'file-downloads', name: 'File downloads', sourceNodeId: 'drive-downloads', requestsPerSecond: 20, startAtSeconds: 0, durationSeconds: 5, pattern: 'poisson', requestBytes: 512 }]
+  return project
+}
+
 /** A normal ProjectFile v3 fixture: the editor and runtime contain no order-specific branches. */
 export const createOrderSystemExample = (): ProjectFile => createOrderSystemContractFixture()

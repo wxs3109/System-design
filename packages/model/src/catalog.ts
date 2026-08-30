@@ -39,6 +39,10 @@ export const componentCatalog = {
     type: 'cache', label: 'Cache', description: 'Stores key-aware entries with bounded capacity, TTL and deterministic eviction.',
     category: 'cache', color: '#14b8a6', acceptsInput: true, emitsOutput: true,
   },
+  cdn: {
+    type: 'cdn', label: 'CDN', description: 'Selects edge POPs and caches origin objects with bandwidth-aware delivery.',
+    category: 'cache', color: '#0d9488', acceptsInput: true, emitsOutput: true,
+  },
   stream: {
     type: 'stream', label: 'Stream', description: 'Partitions published messages and tracks consumer-group delivery lag.',
     category: 'messaging', color: '#f97316', acceptsInput: true, emitsOutput: true,
@@ -63,6 +67,7 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
     case 'service': return { id, name, position, type, config: { replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 } }
     case 'queue': return { id, name, position, type, config: { consumers: 4, deliveryTimeMs: 10, jitterMs: 2, maxDepth: 10_000, errorRate: 0 } }
     case 'cache': return { id, name, position, type, config: { capacityEntries: 10_000, ttlMs: 60_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 1_000, operationTimeMs: 1, jitterMs: 0.2, errorRate: 0, maxQueueSize: 10_000 } }
+    case 'cdn': return { id, name, position, type, config: { popCount: 4, popSelection: 'consistent-hash', capacityEntriesPerPop: 10_000, ttlMs: 300_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 10_000, lookupTimeMs: 0.5, edgeLatencyMs: 10, edgeBandwidthMbps: 1_000, originRoundTripMs: 80, originBandwidthMbps: 500, defaultObjectSizeBytes: 1_048_576, jitterMs: 1, errorRate: 0, maxQueueSize: 100_000 } }
     case 'stream': return { id, name, position, type, config: { partitions: 12, producerCapacity: 1_000, consumerGroups: 1, consumersPerGroup: 4, batchSize: 100, acknowledgement: 'explicit', publishTimeMs: 2, consumeTimeMs: 10, jitterMs: 1, maxDepth: 1_000_000, errorRate: 0 } }
     case 'object-storage': return { id, name, position, type, config: { maxConcurrentRequests: 1_000, defaultObjectSizeBytes: 1_048_576, readRatio: 0.8, baseLatencyMs: 20, jitterMs: 3, readThroughputMbps: 1_000, writeThroughputMbps: 500, errorRate: 0.001, maxQueueSize: 100_000 } }
     case 'database': return { id, name, position, type, config: { maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000, shardCount: 1, replicasPerShard: 0, readPreference: 'primary', replicationDelayMs: 100, writeRatio: 0.2, keySpaceSize: 1_000_000, hotKeyProbability: 0 } }
