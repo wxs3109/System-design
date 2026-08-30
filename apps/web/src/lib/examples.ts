@@ -1,7 +1,10 @@
 import { createRegisteredNode } from '@system-design/components'
 import { createEmptyProject, type ProjectFileV2 } from '@system-design/model'
 
-const connection = (id: string, source: string, target: string) => ({ id, source, target, sourcePort: 'out' as const, targetPort: 'in' as const, weight: 1 })
+const connection = (id: string, source: string, target: string) => ({
+  id, source, target, sourcePort: 'out', targetPort: 'in', weight: 1,
+  sourceSemantic: 'request' as const, targetSemantic: 'request' as const, routingMode: 'weighted-one' as const,
+})
 
 export const createDirectExample = (): ProjectFileV2 => {
   const project = createEmptyProject('direct-service')

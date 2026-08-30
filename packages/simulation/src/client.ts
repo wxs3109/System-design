@@ -1,4 +1,4 @@
-import type { Scenario, SimulationResult } from '@system-design/model'
+import type { ProjectFileV2, Scenario, SimulationProgress, SimulationResult } from '@system-design/model'
 import type { SimulationWorkerRequest, SimulationWorkerResponse } from './protocol'
 
 export interface WorkerLike {
@@ -18,6 +18,7 @@ interface ActiveRun {
   worker: WorkerLike
   reject: (error: Error) => void
   removeAbortListener?: () => void
+  onProgress?: (progress: SimulationProgress) => void
 }
 
 export class SimulationWorkerClient {
@@ -28,7 +29,7 @@ export class SimulationWorkerClient {
 
   get activeRunId() { return this.active?.id ?? null }
 
-  run(scenario: Scenario, options: { signal?: AbortSignal; runId?: string } = {}): Promise<SimulationResult> {
+  run(scenario: Scenario | ProjectFileV2, options: { signal?: AbortSignal; runId?: string; onProgress?: (progress: SimulationProgress) => void } = {}): Promise<SimulationResult> {
     if (this.disposed) return Promise.reject(new Error('Simulation worker client is disposed.'))
     if (this.active) this.cancelActive()
     if (options.signal?.aborted) return Promise.reject(abortError())
@@ -48,7 +49,12 @@ export class SimulationWorkerClient {
       }
       worker.onmessage = (event) => {
         const message = event.data
-        if (message.id !== id || !cleanup()) return
+        if (message.id !== id || this.active?.id !== id || this.active.worker !== worker) return
+        if (message.type === 'progress') {
+          this.active.onProgress?.(message.progress)
+          return
+        }
+        if (!cleanup()) return
         if (message.type === 'result') resolve({ ...message.result, runId: id })
         else {
           const error = new Error(message.error.message)
@@ -65,7 +71,7 @@ export class SimulationWorkerClient {
         ? () => options.signal?.removeEventListener('abort', onAbort)
         : undefined
       options.signal?.addEventListener('abort', onAbort, { once: true })
-      this.active = { id, worker, reject, ...(removeAbortListener ? { removeAbortListener } : {}) }
+      this.active = { id, worker, reject, ...(removeAbortListener ? { removeAbortListener } : {}), ...(options.onProgress ? { onProgress: options.onProgress } : {}) }
       try {
         worker.postMessage({ type: 'run', id, scenario })
       } catch (cause) {

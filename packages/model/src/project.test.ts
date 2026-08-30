@@ -38,6 +38,23 @@ describe('ProjectFile v2', () => {
     const project = migrateScenarioV1ToProjectV2(scenarioV1())
     expect(parseProjectFile(JSON.parse(JSON.stringify(project)))).toEqual(project)
     expect(projectFileV2Schema.parse(project)).toEqual(project)
+    expect(project.topology.edges[0]).toMatchObject({ routingMode: 'weighted-one', sourceSemantic: 'request', targetSemantic: 'request' })
+  })
+
+  it.each(['weighted-one', 'fan-out', 'async-publish'] as const)('round-trips %s routing', (routingMode) => {
+    const project = migrateScenarioV1ToProjectV2(scenarioV1())
+    project.topology.edges[0]!.routingMode = routingMode
+    if (routingMode === 'async-publish') {
+      project.topology.edges[0]!.sourceSemantic = 'publish'
+      project.topology.edges[0]!.targetSemantic = 'consume'
+    }
+    expect(projectFileV2Schema.parse(JSON.parse(JSON.stringify(project))).topology.edges[0]!.routingMode).toBe(routingMode)
+  })
+
+  it('rejects asynchronous routing without publish and consume semantics', () => {
+    const project = migrateScenarioV1ToProjectV2(scenarioV1())
+    project.topology.edges[0]!.routingMode = 'async-publish'
+    expect(projectFileV2Schema.safeParse(project).success).toBe(false)
   })
 
   it('rejects unsupported versions with an actionable error', () => {

@@ -17,7 +17,7 @@ class FakeWorker implements WorkerLike {
 const result = (): SimulationResult => ({
   runId: 'worker-placeholder', scenarioId: 'test', seed: 'seed', simulatedDurationMs: 1, wallClockDurationMs: 1,
   summary: { generatedRequests: 0, completedRequests: 0, failedRequests: 0, throughputPerSecond: 0, errorRate: 0, latencyP50Ms: 0, latencyP95Ms: 0, latencyP99Ms: 0 },
-  nodes: [], timeSeries: [], traces: [], warnings: [],
+  nodes: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
 })
 
 describe('SimulationWorkerClient', () => {
@@ -69,6 +69,18 @@ describe('SimulationWorkerClient', () => {
     await expect(client.run(createEmptyScenario(), { runId: 'start-error' })).rejects.toThrow('clone failed')
     expect(worker.terminated).toBe(true)
     expect(client.activeRunId).toBeNull()
+  })
+
+  it('delivers progress batches without settling the active run', async () => {
+    const worker = new FakeWorker()
+    const batches: string[] = []
+    const client = new SimulationWorkerClient(() => worker)
+    const pending = client.run(createEmptyScenario(), { runId: 'progress', onProgress: (progress) => batches.push(progress.runId) })
+    worker.send({ type: 'progress', id: 'progress', progress: { runId: 'progress', simulatedTimeMs: 1, simulatedDurationMs: 2, generatedRequests: 1, completedRequests: 0, failedRequests: 0, events: [] } })
+    expect(batches).toEqual(['progress'])
+    expect(client.activeRunId).toBe('progress')
+    worker.send({ type: 'result', id: 'progress', result: result() })
+    await expect(pending).resolves.toMatchObject({ runId: 'progress' })
   })
 
   it('disposes the active session and rejects future runs', async () => {

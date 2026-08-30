@@ -204,7 +204,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 1 Implementation Plan](docs/roadmap/phase-1.md)。
 
-当前进度：P1.0 基础加固已完成；P1.1 类型化执行与遥测待开始。
+当前进度：P1.0 基础加固与 P1.1 类型化执行、事件遥测已完成；下一步是 P1.2 可靠性策略与 Load Balancer。
 
 - 增加负载均衡、缓存、消息流、对象存储、分片与副本。
 - 增加超时、重试、熔断、背压和流量控制策略。
@@ -246,7 +246,9 @@ Phase 0 的首条通用纵切已经可运行：默认是空白画布，可以自
 
 Phase 1 的 P1.0 已完成：ProjectFile v2 将拓扑和实验分开，旧 Scenario v1 可确定性迁移；组件面板、配置表单和画布节点由 Component Registry manifest 驱动；Policy Registry 合同已建立；仿真已拆为编译、运行、组件行为、故障和遥测边界；每次运行具有 run ID，取消会终止 Worker，旧结果不会覆盖新运行。
 
-当前仍是早期平台。下一步是 P1.1 的类型化端口、显式路由、统一运行事件、span trace 和指标归约，不能退回文档站或案例专用 Demo。
+Phase 1 的 P1.1 已完成：画布按 manifest 渲染类型化端口，连线支持 weighted one-of、fan-out 与 async publish；ProjectFile v2 由通用 compiler 编译；仿真只以有序 runtime event stream 作为结果真相，summary、节点指标、时间序列、trace 与 span 均由 reducer 重建；Worker 会批量发送进度和事件，固定项目、实验、种子与 run ID 可以确定性重放。
+
+当前仍是早期平台。下一步是 P1.2 的 Load Balancer、超时与重试、熔断、令牌桶限流、背压和死信行为，不能退回文档站或案例专用 Demo。
 
 本地运行：
 

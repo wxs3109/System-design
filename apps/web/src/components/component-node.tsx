@@ -10,14 +10,15 @@ export const componentIcons: Record<string, LucideIcon> = { globe: Globe2, activ
 export function ComponentNode({ data, selected }: NodeProps<WorkbenchNode>) {
   const manifest = componentRegistry.get(data.type, data.componentVersion)
   const Icon = componentIcons[manifest.iconToken] ?? Server
-  const acceptsInput = manifest.ports.some((port) => port.direction === 'input')
-  const emitsOutput = manifest.ports.some((port) => port.direction === 'output')
+  const inputs = manifest.ports.filter((port) => port.direction === 'input')
+  const outputs = manifest.ports.filter((port) => port.direction === 'output')
+  const portTitle = (port: (typeof manifest.ports)[number]) => `${port.label} · ${port.semantic}`
   return (
     <div className={`component-node${selected ? ' is-selected' : ''}`} style={{ '--node-color': manifest.color } as React.CSSProperties}>
-      {acceptsInput ? <Handle id="in" type="target" position={Position.Left} /> : null}
+      {inputs.map((port, index) => <Handle key={port.id} id={port.id} type="target" position={Position.Left} title={portTitle(port)} aria-label={`${port.label} input port`} style={{ top: `${((index + 1) / (inputs.length + 1)) * 100}%` }} />)}
       <div className="component-node__icon"><Icon size={18} aria-hidden="true" /></div>
       <div className="component-node__copy"><strong>{data.name}</strong><span>{manifest.label}</span><small>{componentRegistry.describeNode(data)}</small></div>
-      {emitsOutput ? <Handle id="out" type="source" position={Position.Right} /> : null}
+      {outputs.map((port, index) => <Handle key={port.id} id={port.id} type="source" position={Position.Right} title={portTitle(port)} aria-label={`${port.label} output port`} style={{ top: `${((index + 1) / (outputs.length + 1)) * 100}%` }} />)}
     </div>
   )
 }

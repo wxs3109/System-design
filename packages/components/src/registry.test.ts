@@ -16,7 +16,7 @@ describe('component registry', () => {
       type: 'test-sink', version: 1, label: 'Test sink', description: 'Test-only terminal.', category: 'data', iconToken: 'test', color: '#000000',
       configSchema: z.object({ latencyMs: z.number().nonnegative() }), createDefaultConfig: () => ({ latencyMs: 5 }),
       configFields: [{ kind: 'number', key: 'latencyMs', label: 'Latency', min: 0 }],
-      ports: [{ id: 'in', label: 'Input', direction: 'input', protocol: 'request' }], capabilities: ['sink'],
+      ports: [{ id: 'in', label: 'Input', direction: 'input', semantic: 'request' }], capabilities: ['sink'],
       emittedMetrics: ['latency'], supportedFaults: [], runtimeBehavior: 'test-sink-v1', describeConfig: (config) => `${config.latencyMs} ms`,
     })
     const node = registry.createNode('test-sink', 'sink', { x: 0, y: 0 })
@@ -27,6 +27,14 @@ describe('component registry', () => {
   it('rejects direct self-connections through registry semantics', () => {
     const service = componentRegistry.createNode('service', 'same', { x: 0, y: 0 })
     expect(componentRegistry.canConnect(service, service)).toMatchObject({ valid: false })
+  })
+
+  it('resolves selected typed ports and accepts publish to consume only', () => {
+    const producer = componentRegistry.createNode('service', 'producer', { x: 0, y: 0 })
+    const consumer = componentRegistry.createNode('queue', 'consumer', { x: 100, y: 0 })
+    expect(componentRegistry.canConnect(producer, consumer, 'publish', 'consume')).toMatchObject({ valid: true, sourceSemantic: 'publish', targetSemantic: 'consume' })
+    expect(componentRegistry.canConnect(producer, consumer, 'publish', 'in')).toMatchObject({ valid: false })
+    expect(componentRegistry.canConnect(producer, consumer, 'missing', 'consume')).toMatchObject({ valid: false })
   })
 })
 

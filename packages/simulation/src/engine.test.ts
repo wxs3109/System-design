@@ -31,9 +31,9 @@ describe('discrete event simulation', () => {
   })
 
   it('is deterministic for the same scenario and seed', async () => {
-    const first = await runSimulation(directScenario())
-    const second = await runSimulation(directScenario())
-    expect({ ...first, runId: '', wallClockDurationMs: 0 }).toEqual({ ...second, runId: '', wallClockDurationMs: 0 })
+    const first = await runSimulation(directScenario(), 'deterministic-run')
+    const second = await runSimulation(directScenario(), 'deterministic-run')
+    expect({ ...first, wallClockDurationMs: 0 }).toEqual({ ...second, wallClockDurationMs: 0 })
   })
 
   it('exposes queueing when a resource is saturated', async () => {

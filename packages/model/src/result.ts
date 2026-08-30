@@ -1,4 +1,5 @@
 import type { ComponentType } from './schema'
+import type { RuntimeEvent, TraceSpan } from './events'
 
 export interface SummaryMetrics {
   generatedRequests: number
@@ -49,5 +50,7 @@ export interface SimulationResult {
   nodes: NodeMetrics[]
   timeSeries: TimeSeriesPoint[]
   traces: TraceStep[]
+  events: RuntimeEvent[]
+  spans: TraceSpan[]
   warnings: string[]
 }

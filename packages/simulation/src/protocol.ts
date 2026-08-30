@@ -1,9 +1,9 @@
-import type { Scenario, SimulationResult } from '@system-design/model'
+import type { ProjectFileV2, Scenario, SimulationProgress, SimulationResult } from '@system-design/model'
 
 export interface RunSimulationMessage {
   type: 'run'
   id: string
-  scenario: Scenario
+  scenario: Scenario | ProjectFileV2
 }
 
 export interface CancelSimulationMessage {
@@ -29,4 +29,10 @@ export interface SimulationErrorMessage {
   }
 }
 
-export type SimulationWorkerResponse = SimulationSuccessMessage | SimulationErrorMessage
+export interface SimulationProgressMessage {
+  type: 'progress'
+  id: string
+  progress: SimulationProgress
+}
+
+export type SimulationWorkerResponse = SimulationSuccessMessage | SimulationErrorMessage | SimulationProgressMessage

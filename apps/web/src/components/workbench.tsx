@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type OnConnect } from '@xyflow/react'
 import { builtInComponentTypes, componentRegistry, type ConfigField } from '@system-design/components'
-import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type SimulationResult } from '@system-design/model'
+import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
 import { ChevronDown, CircleAlert, Download, FlaskConical, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Square, Trash2, Upload } from 'lucide-react'
 import { ComponentNode, componentIcons } from './component-node'
 import { MetricChart } from './metric-chart'
 import { createAsyncExample, createDirectExample } from '@/lib/examples'
-import { getScenario, projectToEdges, projectToNodes, useWorkbenchStore, type ProjectNode } from '@/lib/store'
+import { projectToEdges, projectToNodes, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
@@ -49,11 +49,24 @@ function ConfigFieldControl({ field, value, onChange }: { field: ConfigField; va
   return <label className="field"><span>{field.label}</span><input value={String(value)} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
-function PropertiesPanel({ node }: { node: ProjectNode | undefined }) {
+function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: ProjectConnection | undefined }) {
   const updateNode = useWorkbenchStore((state) => state.updateSelectedNode)
   const deleteNode = useWorkbenchStore((state) => state.deleteSelectedNode)
+  const updateEdge = useWorkbenchStore((state) => state.updateSelectedEdge)
+  const deleteEdge = useWorkbenchStore((state) => state.deleteSelectedEdge)
   const workload = useWorkbenchStore((state) => node?.type === 'traffic' ? getActiveExperiment(state.project).workloads.find((item) => item.id === node.config.workloadId) : undefined)
   const updateWorkload = useWorkbenchStore((state) => state.updateWorkload)
+  if (edge) {
+    const asynchronous = edge.sourceSemantic === 'publish'
+    return (
+      <div className="properties-form">
+        <div className="section-heading"><div><span>Selected connection</span><strong>{edge.sourceSemantic} → {edge.targetSemantic}</strong></div><button className="icon-button danger" onClick={deleteEdge} aria-label="Delete selected connection"><Trash2 size={16} /></button></div>
+        <label className="field"><span>Routing mode</span><select value={edge.routingMode} disabled={asynchronous} onChange={(event) => updateEdge({ routingMode: event.target.value as 'weighted-one' | 'fan-out' })}>{asynchronous ? <option value="async-publish">Async publish</option> : <><option value="weighted-one">Weighted one-of</option><option value="fan-out">Fan-out</option></>}</select></label>
+        {edge.routingMode === 'weighted-one' ? <Field label="Routing weight" value={edge.weight} min={0.001} step={0.1} onChange={(weight) => updateEdge({ weight })} /> : null}
+        <p className="property-help">Routing is applied to every connection from the same output port.</p>
+      </div>
+    )
+  }
   if (!node) {
     return <div className="empty-properties"><MousePointer2 size={22} /><p>Select a component to configure its runtime behavior.</p></div>
   }
@@ -72,7 +85,13 @@ function PropertiesPanel({ node }: { node: ProjectNode | undefined }) {
   )
 }
 
-function ResultsPanel({ result }: { result: SimulationResult | null }) {
+function ResultsPanel({ result, progress, running }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean }) {
+  if (!result && running) {
+    const simulatedTimeMs = progress?.simulatedTimeMs ?? 0
+    const simulatedDurationMs = progress?.simulatedDurationMs ?? 1
+    const percentage = Math.min(100, Math.round((simulatedTimeMs / simulatedDurationMs) * 100))
+    return <div className="results-empty simulation-progress" role="status" aria-live="polite"><FlaskConical size={24} /><strong>{progress ? `Simulating virtual time · ${percentage}%` : 'Starting simulation worker…'}</strong><progress aria-label="Simulation progress" max={simulatedDurationMs} value={simulatedTimeMs} /><p>{progress ? `${progress.generatedRequests.toLocaleString()} generated · ${progress.completedRequests.toLocaleString()} completed · ${progress.failedRequests.toLocaleString()} failed` : 'Compiling the project and initializing its runtime.'}</p></div>
+  }
   if (!result) return <div className="results-empty"><FlaskConical size={24} /><strong>No simulation yet</strong><p>Build a connected topology, then run it. Metrics shown here are produced by the simulation worker.</p></div>
   return (
     <>
@@ -91,20 +110,22 @@ function ResultsPanel({ result }: { result: SimulationResult | null }) {
 
 function WorkbenchInner() {
   const project = useWorkbenchStore((state) => state.project)
-  const scenario = useMemo(() => getScenario(project), [project])
   const experiment = getActiveExperiment(project)
   const selectedNodeId = useWorkbenchStore((state) => state.selectedNodeId)
+  const selectedEdgeId = useWorkbenchStore((state) => state.selectedEdgeId)
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setProject, addComponent, onNodesChange, onEdgesChange, connect, selectNode, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const { setProject, addComponent, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
   const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
+  const selectedEdge = project.topology.edges.find((edge) => edge.id === selectedEdgeId)
   const reactFlow = useReactFlow<ReturnType<typeof projectToNodes>[number]>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const clientRef = useRef<SimulationWorkerClient | null>(null)
   const [exampleOpen, setExampleOpen] = useState(false)
+  const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const nodes = useMemo(() => projectToNodes(project).map((node) => ({ ...node, selected: node.id === selectedNodeId })), [project, selectedNodeId])
-  const edges = useMemo(() => projectToEdges(project), [project])
+  const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId })), [project, selectedEdgeId])
 
   useEffect(() => () => clientRef.current?.dispose(), [])
 
@@ -125,12 +146,12 @@ function WorkbenchInner() {
   }, [addComponent, reactFlow])
 
   const run = async () => {
-    setRunning(true); setError(null)
+    setRunning(true); setError(null); setResult(null); setProgress(null)
     try {
-      const validation = validateScenarioForSimulation(scenario)
+      const validation = validateScenarioForSimulation(project)
       if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
       clientRef.current ??= new SimulationWorkerClient()
-      setResult(await clientRef.current.run(scenario))
+      setResult(await clientRef.current.run(project, { onProgress: setProgress }))
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : 'Simulation failed.')
     } finally { setRunning(false) }
@@ -171,7 +192,7 @@ function WorkbenchInner() {
       <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
         <ReactFlow
           nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-          onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onPaneClick={() => selectNode(null)}
+          onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onEdgeClick={(_, edge) => selectEdge(edge.id)} onPaneClick={() => { selectNode(null); selectEdge(null) }}
           deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
@@ -186,11 +207,11 @@ function WorkbenchInner() {
 
       <aside className="inspector">
         <div className="inspector-tabs"><span className="active">Properties</span></div>
-        <PropertiesPanel node={selectedNode} />
+        <PropertiesPanel node={selectedNode} edge={selectedEdge} />
         <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
       </aside>
 
-      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div></div><ResultsPanel result={result} /></section>
+      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div></div><ResultsPanel result={result} progress={progress} running={running} /></section>
     </main>
   )
 }

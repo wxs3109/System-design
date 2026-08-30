@@ -1,6 +1,6 @@
 # Phase 1 Implementation Plan
 
-> Status: in progress — P1.0 complete
+> Status: in progress — P1.0 and P1.1 complete
 >
 > Objective: evolve the Phase 0 workbench from “a topology can run” into a reusable system-behavior and failure laboratory.
 
@@ -348,11 +348,13 @@ Exit criteria:
 
 Deliverables:
 
-- [ ] typed ports and explicit routing modes;
-- [ ] generic compiler from topology and experiment to runtime objects;
-- [ ] canonical runtime event stream;
-- [ ] span-based trace model and metric reducers;
-- [ ] batched progress and event messages from the Worker.
+- [x] typed ports and explicit routing modes;
+- [x] generic compiler from topology and experiment to runtime objects;
+- [x] canonical runtime event stream;
+- [x] span-based trace model and metric reducers;
+- [x] batched progress and event messages from the Worker.
+
+Status: complete. Verified by typed-port and compiler rejection tests, deterministic ProjectFile v2 replay, weighted one-of/fan-out/asynchronous routing experiments, event-to-result reducer equality, Worker progress ordering, production build, and browser end-to-end acceptance.
 
 Exit criteria:
 

@@ -10,8 +10,10 @@ import {
 } from '@system-design/model'
 import { ComponentRegistry, PolicyRegistry, type BuiltInComponentNode, type ComponentManifest } from './registry'
 
-const requestInput = { id: 'in', label: 'Input', direction: 'input', protocol: 'request', multiple: true } as const
-const requestOutput = { id: 'out', label: 'Output', direction: 'output', protocol: 'request', multiple: true } as const
+const requestInput = { id: 'in', label: 'Request', direction: 'input', semantic: 'request', multiple: true } as const
+const requestOutput = { id: 'out', label: 'Request', direction: 'output', semantic: 'request', multiple: true } as const
+const messageInput = { id: 'consume', label: 'Consume', direction: 'input', semantic: 'consume', multiple: true } as const
+const messageOutput = { id: 'publish', label: 'Publish', direction: 'output', semantic: 'publish', multiple: true } as const
 
 export const builtInComponentManifests = [
   {
@@ -43,7 +45,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, requestOutput], capabilities: ['compute'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'service-v1',
+    ], ports: [requestInput, messageInput, requestOutput, messageOutput], capabilities: ['compute', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'service-v1',
     describeConfig: (config) => `${config.replicas} × ${config.concurrencyPerReplica} concurrent`,
   },
   {
@@ -55,7 +57,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
       { kind: 'number', key: 'maxDepth', label: 'Max depth', min: 1, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, requestOutput], capabilities: ['buffering', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'queue-v1',
+    ], ports: [requestInput, messageInput, requestOutput, messageOutput], capabilities: ['buffering', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'queue-v1',
     describeConfig: (config) => `${config.consumers} consumers · ${config.maxDepth} max`,
   },
   {

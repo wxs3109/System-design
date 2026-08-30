@@ -1,14 +1,13 @@
 import type { z } from 'zod'
-import type { Fault, Position, ProjectComponentNode } from '@system-design/model'
+import type { Fault, PortSemantic, Position, ProjectComponentNode } from '@system-design/model'
 
-export type PortProtocol = 'request' | 'response' | 'message' | 'data'
 export type PortDirection = 'input' | 'output'
 
 export interface ComponentPort {
   id: string
   label: string
   direction: PortDirection
-  protocol: PortProtocol
+  semantic: PortSemantic
   required?: boolean
   multiple?: boolean
 }
@@ -116,19 +115,29 @@ export class ComponentRegistry {
     return manifest.describeConfig(manifest.configSchema.parse(node.config))
   }
 
-  canConnect(source: Pick<RegistryNode, 'id' | 'type' | 'componentVersion'> | undefined, target: Pick<RegistryNode, 'id' | 'type' | 'componentVersion'> | undefined) {
+  getPort(node: Pick<RegistryNode, 'type' | 'componentVersion'>, portId: string, direction?: PortDirection): ComponentPort | undefined {
+    return this.get(node.type, node.componentVersion).ports.find((port) => port.id === portId && (direction === undefined || port.direction === direction))
+  }
+
+  canConnect(source: Pick<RegistryNode, 'id' | 'type' | 'componentVersion'> | undefined, target: Pick<RegistryNode, 'id' | 'type' | 'componentVersion'> | undefined, sourcePortId?: string | null, targetPortId?: string | null): { valid: false; reason: string } | { valid: true; sourceSemantic: PortSemantic; targetSemantic: PortSemantic } {
     if (!source || !target) return { valid: false, reason: 'Both endpoints must exist.' }
     if (source.id === target.id) return { valid: false, reason: 'A node cannot connect directly to itself.' }
     const sourceManifest = this.get(source.type, source.componentVersion)
     const targetManifest = this.get(target.type, target.componentVersion)
-    const outputs = sourceManifest.ports.filter((port) => port.direction === 'output')
-    const inputs = targetManifest.ports.filter((port) => port.direction === 'input')
-    const compatible = outputs.some((output) => inputs.some((input) => output.protocol === input.protocol || (output.protocol === 'request' && input.protocol === 'request')))
-    if (outputs.length === 0) return { valid: false, reason: `${sourceManifest.label} has no output port.` }
-    if (inputs.length === 0) return { valid: false, reason: `${targetManifest.label} has no input port.` }
-    if (!compatible) return { valid: false, reason: 'The selected ports use incompatible protocols.' }
-    return { valid: true }
+    const outputs = sourceManifest.ports.filter((port) => port.direction === 'output' && (!sourcePortId || port.id === sourcePortId))
+    const inputs = targetManifest.ports.filter((port) => port.direction === 'input' && (!targetPortId || port.id === targetPortId))
+    if (outputs.length === 0) return { valid: false as const, reason: sourcePortId ? `${sourceManifest.label} has no output port named ${sourcePortId}.` : `${sourceManifest.label} has no output port.` }
+    if (inputs.length === 0) return { valid: false as const, reason: targetPortId ? `${targetManifest.label} has no input port named ${targetPortId}.` : `${targetManifest.label} has no input port.` }
+    const pair = outputs.flatMap((output) => inputs.map((input) => ({ output, input }))).find(({ output, input }) => arePortSemanticsCompatible(output.semantic, input.semantic))
+    if (!pair) return { valid: false as const, reason: 'The selected ports use incompatible semantics.' }
+    return { valid: true as const, sourceSemantic: pair.output.semantic, targetSemantic: pair.input.semantic }
   }
+}
+
+export const arePortSemanticsCompatible = (source: PortSemantic, target: PortSemantic): boolean => {
+  if (source === 'publish') return target === 'consume'
+  if (source === 'hit' || source === 'miss' || source === 'success' || source === 'failure') return target === 'request'
+  return source === target
 }
 
 export interface PolicyManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> {

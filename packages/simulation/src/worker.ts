@@ -14,7 +14,12 @@ scope.onmessage = async (event: MessageEvent<SimulationWorkerRequest>) => {
   }
 
   try {
-    const result = await runSimulation(message.scenario, message.id)
+    const result = await runSimulation(message.scenario, message.id, {
+      onProgress: (progress) => {
+        const response: SimulationWorkerResponse = { type: 'progress', id: message.id, progress }
+        scope.postMessage(response)
+      },
+    })
     if (cancelled.delete(message.id)) return
     const response: SimulationWorkerResponse = { type: 'result', id: message.id, result }
     scope.postMessage(response)

@@ -12,6 +12,17 @@ import {
 const projectIdSchema = z.string().trim().min(1).max(120)
 const projectNameSchema = z.string().trim().min(1).max(120)
 
+export const portSemanticSchema = z.enum(['request', 'response', 'publish', 'consume', 'hit', 'miss', 'success', 'failure'])
+export const routingModeSchema = z.enum(['weighted-one', 'fan-out', 'async-publish'])
+
+export const projectConnectionSchema = connectionSchema.omit({ sourcePort: true, targetPort: true }).extend({
+  sourcePort: projectIdSchema.default('out'),
+  targetPort: projectIdSchema.default('in'),
+  sourceSemantic: portSemanticSchema.default('request'),
+  targetSemantic: portSemanticSchema.default('request'),
+  routingMode: routingModeSchema.default('weighted-one'),
+})
+
 export const projectComponentNodeSchema = z.object({
   id: projectIdSchema,
   name: z.string().trim().min(1).max(80),
@@ -44,7 +55,7 @@ export const policyAttachmentSchema = z.object({
 
 export const topologySchema = z.object({
   nodes: z.array(projectComponentNodeSchema).max(10_000),
-  edges: z.array(connectionSchema).max(50_000),
+  edges: z.array(projectConnectionSchema).max(50_000),
   groups: z.array(topologyGroupSchema).max(10_000).default([]),
   policies: z.array(policyAttachmentSchema).max(50_000).default([]),
 })
@@ -89,6 +100,12 @@ export const projectFileV2Schema = z.object({
     if (!nodeIds.has(edge.source)) context.addIssue({ code: 'custom', path: ['topology', 'edges', index, 'source'], message: `Unknown source node: ${edge.source}` })
     if (!nodeIds.has(edge.target)) context.addIssue({ code: 'custom', path: ['topology', 'edges', index, 'target'], message: `Unknown target node: ${edge.target}` })
     if (edge.source === edge.target) context.addIssue({ code: 'custom', path: ['topology', 'edges', index], message: 'A node cannot connect directly to itself' })
+    if (edge.routingMode === 'async-publish' && (edge.sourceSemantic !== 'publish' || edge.targetSemantic !== 'consume')) {
+      context.addIssue({ code: 'custom', path: ['topology', 'edges', index], message: 'async-publish routing requires publish -> consume semantics' })
+    }
+    if (edge.routingMode !== 'async-publish' && edge.sourceSemantic === 'publish') {
+      context.addIssue({ code: 'custom', path: ['topology', 'edges', index, 'routingMode'], message: 'A publish port requires async-publish routing' })
+    }
   })
   project.topology.groups.forEach((group, index) => {
     if (groupIds.has(group.id)) addDuplicateIssue(context, ['topology', 'groups', index, 'id'], 'group', group.id)
@@ -134,6 +151,9 @@ export const projectFileV2Schema = z.object({
 })
 
 export type ProjectComponentNode = z.infer<typeof projectComponentNodeSchema>
+export type PortSemantic = z.infer<typeof portSemanticSchema>
+export type RoutingMode = z.infer<typeof routingModeSchema>
+export type ProjectConnection = z.infer<typeof projectConnectionSchema>
 export type TopologyGroup = z.infer<typeof topologyGroupSchema>
 export type PolicyAttachment = z.infer<typeof policyAttachmentSchema>
 export type Topology = z.infer<typeof topologySchema>
@@ -210,7 +230,7 @@ export const projectToScenario = (input: ProjectFileV2, experimentId = input.act
     nodes: project.topology.nodes.map(({ componentVersion: _componentVersion, ...node }) => node.type === 'traffic'
       ? { ...node, type: 'traffic', config: { workloadId: experiment.workloads.find((workload) => workload.sourceNodeId === node.id)?.id ?? `${node.id}-workload` } }
       : node),
-    edges: project.topology.edges,
+    edges: project.topology.edges.map(({ sourceSemantic: _sourceSemantic, targetSemantic: _targetSemantic, routingMode: _routingMode, ...edge }) => ({ ...edge, sourcePort: 'out' as const, targetPort: 'in' as const })),
     workloads: experiment.workloads,
     faults: experiment.faults,
     simulation: experiment.simulation,

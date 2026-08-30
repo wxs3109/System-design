@@ -97,6 +97,9 @@ importers:
 
   packages/simulation:
     dependencies:
+      '@system-design/components':
+        specifier: workspace:*
+        version: link:../components
       '@system-design/model':
         specifier: workspace:*
         version: link:../model
