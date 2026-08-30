@@ -1,0 +1,35 @@
+{
+  "name": "@system-design/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@system-design/model": "workspace:*",
+    "@system-design/simulation": "workspace:*",
+    "@xyflow/react": "^12.11.3",
+    "echarts": "^6.0.0",
+    "lucide-react": "^0.468.0",
+    "next": "^16.1.6",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "zustand": "^5.0.10"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.19.4",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

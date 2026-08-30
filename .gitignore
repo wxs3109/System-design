@@ -1,2 +1,24 @@
 # tool/debug artifacts
 *-debug.log
+
+# JavaScript / TypeScript
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
+.playwright-*.png
+
+# Local configuration
+.env
+.env.local
+.env.*.local
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.vscode/
