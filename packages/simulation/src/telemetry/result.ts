@@ -1,9 +1,13 @@
 import type { RuntimeEvent, Scenario, SimulationResult } from '@system-design/model'
+import type { RuntimeTelemetryAggregate } from './event-sink'
 import { reduceLegacyTraces, reduceNodeMetrics, reduceSpans, reduceSummary, reduceTimeSeries } from './reducers'
 import { round } from './math'
 
 export interface CompletedRuntime {
-  eventSink: { events: RuntimeEvent[] }
+  eventSink: {
+    events: RuntimeEvent[]
+    aggregateSnapshot?: () => RuntimeTelemetryAggregate
+  }
   warnings: string[]
   generated: number
   exceededHopLimit: boolean
@@ -11,7 +15,8 @@ export interface CompletedRuntime {
 
 export const buildSimulationResult = (simulation: CompletedRuntime, scenario: Scenario, runId: string, wallClockDurationMs: number): SimulationResult => {
   const events = simulation.eventSink.events.slice()
-  const summary = reduceSummary(events, scenario.simulation.durationSeconds)
+  const aggregate = simulation.eventSink.aggregateSnapshot?.()
+  const summary = reduceSummary(events, scenario.simulation.durationSeconds, aggregate)
   const warnings = [...simulation.warnings]
   if (simulation.generated >= scenario.simulation.maxRequests) warnings.push(`Generation stopped at the maxRequests limit (${scenario.simulation.maxRequests}).`)
   if (simulation.exceededHopLimit) warnings.push(`At least one request exceeded the max hop limit (${scenario.simulation.maxHops}).`)
@@ -20,7 +25,7 @@ export const buildSimulationResult = (simulation: CompletedRuntime, scenario: Sc
   const nodeNames = new Map(scenario.nodes.map((node) => [node.id, node.name]))
   return {
     runId, scenarioId: scenario.id, seed: scenario.seed, simulatedDurationMs: scenario.simulation.durationSeconds * 1_000, wallClockDurationMs: round(wallClockDurationMs),
-    summary, nodes: reduceNodeMetrics(events, scenario.nodes), timeSeries: reduceTimeSeries(events, scenario),
+    summary, nodes: reduceNodeMetrics(events, scenario.nodes, aggregate), timeSeries: reduceTimeSeries(events, scenario, aggregate),
     traces: reduceLegacyTraces(events, nodeNames, scenario.simulation.traceLimit), events, spans: reduceSpans(events), warnings,
   }
 }

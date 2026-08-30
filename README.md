@@ -205,7 +205,9 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 1 Implementation Plan](docs/roadmap/phase-1.md)。
 
-当前进度：P1.0 基础加固、P1.1 类型化执行与事件遥测、P1.2 可靠性策略与 Load Balancer、P1.3 数据与异步组件、P1.4 故障实验室、P1.5 请求链与同实验设计对比已完成；下一步是 P1.6 发布加固。
+仿真边界与结果解释：[Simulation Model Assumptions](docs/model-assumptions.md)。
+
+当前进度：Phase 1 已完成。P1.0 到 P1.6 已通过属性不变量、100 节点/10 万请求性能预算、键盘路径、模型边界文档和完整 CI 验收。
 
 - 增加负载均衡、缓存、消息流、对象存储、分片与副本。
 - 增加超时、重试、熔断、背压和流量控制策略。
@@ -257,7 +259,9 @@ Phase 1 的 P1.4 已完成：可在 `vis-timeline` 故障时间轴中创建、�
 
 Phase 1 的 P1.5 已完成：Trace Explorer 可按结果、延迟、组件与原因筛选请求，以 ECharts 瀑布展示父子依赖、排队、执行、重试、策略和故障标记，并可跳回画布；瓶颈说明只根据事件证据生成并链接到相关 trace；每次运行保存启动瞬间的不可变项目快照；运行对比会锁定 workload、fault、simulation config 与 seed，显示绝对值、差值、百分比及按虚拟时间对齐的曲线，不可比时明确说明原因。
 
-当前仍是早期平台。下一步是 P1.6 的属性不变量、性能预算、无障碍路径、模型假设文档和完整 CI 验收；不能退回文档站或案例专用 Demo。
+Phase 1 的 P1.6 已完成：项目迁移、序列化、固定种子重放、计数、队列、重试和 hop-limit 具有属性不变量；100 节点项目中的 10 万请求运行受 `<5s` CI 性能门禁约束；裁剪 request trace 不会改变 summary、节点指标或时间序列；Results 与 Fault Timeline 有原生键盘路径；模型假设和不支持语义已文档化，CI 统一运行完整 `pnpm check`。
+
+当前仍是早期平台。下一步是规划 Phase 2 的开放式组件 SDK、插件隔离与批量实验；不能退回文档站或案例专用 Demo。
 
 本地运行：
 

@@ -27,7 +27,7 @@ export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId 
   const lanes = useMemo(() => selectedTrace ? buildWaterfallLanes(selectedTrace, nodeNames) : [], [nodeNames, selectedTrace])
   const selectedLane = lanes.find((lane) => lane.span.spanId === selectedSpanId) ?? lanes[0]
   const markers = useMemo(() => selectedTrace ? buildTraceMarkers(selectedTrace, result.events, lanes) : [], [lanes, result.events, selectedTrace])
-  const reasons = useMemo(() => [...new Set(records.map((trace) => trace.reason).filter((reason) => reason !== 'none'))].sort(), [records])
+  const reasons = useMemo(() => [...new Set(records.flatMap((trace) => trace.reasonCodes))].sort(), [records])
   const traceDuration = Math.max(0.001, selectedTrace?.durationMs ?? 0.001)
   const selectSpan = (spanId: string) => setSelectedSpanId(spanId)
 

@@ -10,6 +10,7 @@ export interface TraceRecord {
   durationMs: number
   status: TraceStatus
   reason: ReasonCode
+  reasonCodes: ReasonCode[]
   terminalNodeId?: string
   componentIds: string[]
   spans: TraceSpan[]
@@ -79,6 +80,11 @@ export function buildTraceRecords(result: Pick<SimulationResult, 'events' | 'spa
     const failedSpan = [...spans].reverse().find((span) => span.status === 'error')
     const status: TraceStatus = terminal ? (terminal.type === 'request-failed' ? 'error' : 'ok') : failedSpan ? 'error' : 'ok'
     const reason = terminal ? terminal.reason : failedSpan?.reason ?? 'none'
+    const reasonCodes = [...new Set([
+      reason,
+      ...spans.map((span) => span.reason),
+      ...events.filter((event) => event.reason !== 'none').map((event) => event.reason),
+    ].filter((candidate) => candidate !== 'none'))]
     return [{
       traceId,
       requestId: terminal?.requestId ?? generated?.requestId ?? spans[0]!.requestId,
@@ -87,6 +93,7 @@ export function buildTraceRecords(result: Pick<SimulationResult, 'events' | 'spa
       durationMs: Math.max(0, endedAtMs - (Number.isFinite(startedAtMs) ? startedAtMs : spans[0]!.startedAtMs)),
       status,
       reason,
+      reasonCodes,
       ...(terminal?.nodeId === undefined ? {} : { terminalNodeId: terminal.nodeId }),
       componentIds: [...new Set(spans.map((span) => span.nodeId))],
       spans,
@@ -99,7 +106,7 @@ export function filterTraceRecords(records: readonly TraceRecord[], filters: Tra
     (filters.status === 'all' || trace.status === filters.status)
     && trace.durationMs >= filters.minimumLatencyMs
     && (!filters.componentId || trace.componentIds.includes(filters.componentId))
-    && (filters.reason === 'all' || trace.reason === filters.reason),
+    && (filters.reason === 'all' || trace.reasonCodes.includes(filters.reason)),
   )
 }
 
@@ -132,7 +139,8 @@ export function buildTraceMarkers(trace: TraceRecord, events: readonly RuntimeEv
   const laneBySpan = new Map(lanes.map((lane, index) => [lane.span.spanId, index]))
   return events.filter((event) => {
     if (event.timestampMs < trace.startedAtMs || event.timestampMs > trace.endedAtMs) return false
-    return globalMarkerTypes.has(event.type) || (traceMarkerTypes.has(event.type) && event.traceId === trace.traceId)
+    return globalMarkerTypes.has(event.type)
+      || (traceMarkerTypes.has(event.type) && event.traceId === trace.traceId && (event.type !== 'attempt-started' || event.attempt > 1))
   }).map((event) => {
     const matchingNodeLane = event.nodeId === undefined ? undefined : lanes.findIndex((lane) => lane.span.nodeId === event.nodeId)
     return {

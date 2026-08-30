@@ -29,9 +29,9 @@ describe('trace explorer projections', () => {
 
     const records = buildTraceRecords(result(spans, events))
     expect(records).toHaveLength(2)
-    expect(records[0]).toMatchObject({ traceId: 'trace-ok', status: 'ok', reason: 'none', startedAtMs: 10, endedAtMs: 32, durationMs: 22, terminalNodeId: 'api' })
+    expect(records[0]).toMatchObject({ traceId: 'trace-ok', status: 'ok', reason: 'none', reasonCodes: [], startedAtMs: 10, endedAtMs: 32, durationMs: 22, terminalNodeId: 'api' })
     expect(records[0]?.componentIds).toEqual(['api', 'database'])
-    expect(records[1]).toMatchObject({ traceId: 'trace-error', status: 'error', reason: 'timeout', durationMs: 32 })
+    expect(records[1]).toMatchObject({ traceId: 'trace-error', status: 'error', reason: 'timeout', reasonCodes: ['timeout'], durationMs: 32 })
   })
 
   it('filters by outcome, latency, component and terminal reason together', () => {
@@ -49,6 +49,19 @@ describe('trace explorer projections', () => {
     expect(filterTraceRecords(records, { status: 'ok', minimumLatencyMs: 40, componentId: '', reason: 'all' })).toEqual([])
   })
 
+  it('filters a recovered request by an earlier failed-attempt reason', () => {
+    const records = buildTraceRecords(result([
+      span(),
+      span({ spanId: 'retry', parentSpanId: 'root', nodeId: 'database', attempt: 1, startedAtMs: 12, endedAtMs: 17, durationMs: 5, status: 'error', reason: 'timeout' }),
+    ], [
+      event({ requestId: '1', traceId: 'trace-ok', spanId: 'root' }),
+      event({ timestampMs: 30, sequence: 1, requestId: '1', traceId: 'trace-ok', spanId: 'root', nodeId: 'api', type: 'request-completed', status: 'ok', attributes: { terminal: true } }),
+    ]))
+
+    expect(records[0]).toMatchObject({ status: 'ok', reason: 'none', reasonCodes: ['timeout'] })
+    expect(filterTraceRecords(records, { status: 'ok', minimumLatencyMs: 0, componentId: '', reason: 'timeout' })).toHaveLength(1)
+  })
+
   it('projects dependency depth, queue versus service time, retries and aligned event markers', () => {
     const trace = buildTraceRecords(result([
       span(),
@@ -59,7 +72,7 @@ describe('trace explorer projections', () => {
     ]))[0]!
     const lanes = buildWaterfallLanes(trace, new Map([['api', 'API'], ['database', 'Database']]))
     const markers = buildTraceMarkers(trace, [
-      event({ timestampMs: 15, sequence: 1, requestId: '1', traceId: 'trace-ok', spanId: 'attempt', nodeId: 'database', type: 'attempt-started', status: 'pending' }),
+      event({ timestampMs: 15, sequence: 1, requestId: '1', traceId: 'trace-ok', spanId: 'attempt', nodeId: 'database', type: 'attempt-started', status: 'pending', attempt: 2 }),
       event({ timestampMs: 16, sequence: 2, requestId: '1', traceId: 'trace-ok', spanId: 'attempt', nodeId: 'database', type: 'timeout-fired', status: 'error', reason: 'timeout' }),
       event({ timestampMs: 20, sequence: 3, type: 'fault-activated', status: 'error', reason: 'node_down', nodeId: 'database', attributes: { faultId: 'fault' } }),
       event({ timestampMs: 50, sequence: 4, type: 'fault-recovered', status: 'ok', reason: 'node_down', nodeId: 'database', attributes: { faultId: 'fault' } }),

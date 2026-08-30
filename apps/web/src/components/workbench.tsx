@@ -35,6 +35,7 @@ function PaletteItem({ type, onAdd }: { type: ComponentType; onAdd: () => void }
   const Icon = componentIcons[definition.iconToken]!
   return (
     <button
+      type="button"
       className="palette-item"
       draggable
       onClick={onAdd}
@@ -136,7 +137,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
     const asynchronous = edge.sourceSemantic === 'publish'
     return (
       <div className="properties-form">
-        <div className="section-heading"><div><span>Selected connection</span><strong>{edge.sourceSemantic} → {edge.targetSemantic}</strong></div><button className="icon-button danger" onClick={deleteEdge} aria-label="Delete selected connection"><Trash2 size={16} /></button></div>
+        <div className="section-heading"><div><span>Selected connection</span><strong>{edge.sourceSemantic} → {edge.targetSemantic}</strong></div><button type="button" className="icon-button danger" onClick={deleteEdge} aria-label="Delete selected connection"><Trash2 size={16} /></button></div>
         <label className="field"><span>Routing mode</span><select value={edge.routingMode} disabled={asynchronous} onChange={(event) => updateEdge({ routingMode: event.target.value as 'weighted-one' | 'fan-out' })}>{asynchronous ? <option value="async-publish">Async publish</option> : <><option value="weighted-one">Weighted one-of</option><option value="fan-out">Fan-out</option></>}</select></label>
         {edge.routingMode === 'weighted-one' ? <Field label="Routing weight" value={edge.weight} min={0.001} step={0.1} onChange={(weight) => updateEdge({ weight })} /> : null}
         <p className="property-help">Routing is applied to every connection from the same output port.</p>
@@ -151,7 +152,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
   const setConfig = (key: string, value: number | string) => updateNode({ config: { [key]: value } })
   return (
     <div className="properties-form">
-      <div className="section-heading"><div><span>Selected component</span><strong>{manifest.label}</strong></div><button className="icon-button danger" onClick={deleteNode} aria-label="Delete selected component"><Trash2 size={16} /></button></div>
+      <div className="section-heading"><div><span>Selected component</span><strong>{manifest.label}</strong></div><button type="button" className="icon-button danger" onClick={deleteNode} aria-label="Delete selected component"><Trash2 size={16} /></button></div>
       <label className="field"><span>Name</span><input value={node.name} onChange={(event) => updateNode({ name: event.target.value })} /></label>
       {node.type === 'traffic' && workload ? <>
         <Field label="Requests / second" value={workload.requestsPerSecond} min={0.1} step={10} onChange={(value) => updateWorkload({ requestsPerSecond: value })} />
@@ -247,6 +248,8 @@ function WorkbenchInner() {
   const [historyReady, setHistoryReady] = useState(false)
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
+  const runTabRef = useRef<HTMLButtonElement>(null)
+  const compareTabRef = useRef<HTMLButtonElement>(null)
   const topologyNodes = project.topology.nodes
   const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(affected.nodes.has(node.id) ? { className: 'is-fault-target' } : {}) })), [affected.nodes, topologyNodes, selectedNodeId])
   const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(affected.edges.has(edge.id) ? { className: 'is-fault-target' } : {}) })), [affected.edges, project, selectedEdgeId])
@@ -324,6 +327,15 @@ function WorkbenchInner() {
   }
 
   const cancelRun = () => clientRef.current?.cancelActive()
+  const selectResultsView = (view: 'run' | 'compare') => {
+    setResultsView(view)
+    ;(view === 'run' ? runTabRef : compareTabRef).current?.focus()
+  }
+  const handleResultsTabKey = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    selectResultsView(event.key === 'ArrowRight' || event.key === 'End' ? 'compare' : 'run')
+  }
 
   const exportProject = () => {
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
@@ -366,20 +378,20 @@ function WorkbenchInner() {
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>System Design Simulator</strong><span>Build · Run · Break · Measure</span></div></div>
         <div className="topbar-center"><span className="status-dot" /> Local simulation <span className="separator" /> <strong>{project.topology.nodes.length}</strong> components <span className="separator" /> <strong>{project.topology.edges.length}</strong> links</div>
         <div className="top-actions">
-          <button className="button subtle icon-only" aria-label="Undo project change" title="Undo project change" disabled={!canUndo || running} onClick={undoProject}><Undo2 size={15} /></button>
-          <button className="button subtle icon-only" aria-label="Redo project change" title="Redo project change" disabled={!canRedo || running} onClick={redoProject}><Redo2 size={15} /></button>
+          <button type="button" className="button subtle icon-only" aria-label="Undo project change" title="Undo project change" disabled={!canUndo || running} onClick={undoProject}><Undo2 size={15} /></button>
+          <button type="button" className="button subtle icon-only" aria-label="Redo project change" title="Redo project change" disabled={!canRedo || running} onClick={redoProject}><Redo2 size={15} /></button>
           <div className="history-picker">
-            <button className="button subtle" aria-expanded={historyOpen} onClick={() => { const next = !historyOpen; setHistoryOpen(next); if (next) void refreshHistory(project.id) }}><History size={15} /> History</button>
+            <button type="button" className="button subtle" aria-expanded={historyOpen} onClick={() => { const next = !historyOpen; setHistoryOpen(next); if (next) void refreshHistory(project.id) }}><History size={15} /> History</button>
             {historyOpen ? <div className="history-menu" role="dialog" aria-label="Local project history">
-              <div className="history-section"><strong>Project revisions</strong>{revisions.length ? revisions.slice(0, 8).map((revision) => <button key={revision.revisionId} onClick={() => void restoreRevision(revision.revisionId)}><span>{revision.projectName}</span><small>{revision.source} · {new Date(revision.createdAt).toLocaleString()}</small></button>) : <p>No saved revisions yet.</p>}</div>
-              <div className="history-section"><strong>Simulation runs</strong>{runs.length ? runs.slice(0, 8).map((savedRun) => <button key={savedRun.runId} onClick={() => void restoreRun(savedRun)}><span>{savedRun.result.summary.completedRequests.toLocaleString()} completed · {(savedRun.result.summary.errorRate * 100).toFixed(1)}% errors</span><small>{new Date(savedRun.createdAt).toLocaleString()} · seed {savedRun.result.seed}</small></button>) : <p>No saved runs yet.</p>}</div>
+              <div className="history-section"><strong>Project revisions</strong>{revisions.length ? revisions.slice(0, 8).map((revision) => <button type="button" key={revision.revisionId} onClick={() => void restoreRevision(revision.revisionId)}><span>{revision.projectName}</span><small>{revision.source} · {new Date(revision.createdAt).toLocaleString()}</small></button>) : <p>No saved revisions yet.</p>}</div>
+              <div className="history-section"><strong>Simulation runs</strong>{runs.length ? runs.slice(0, 8).map((savedRun) => <button type="button" key={savedRun.runId} onClick={() => void restoreRun(savedRun)}><span>{savedRun.result.summary.completedRequests.toLocaleString()} completed · {(savedRun.result.summary.errorRate * 100).toFixed(1)}% errors</span><small>{new Date(savedRun.createdAt).toLocaleString()} · seed {savedRun.result.seed}</small></button>) : <p>No saved runs yet.</p>}</div>
             </div> : null}
           </div>
-          <button className="button subtle" onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Import</button>
+          <button type="button" className="button subtle" onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Import</button>
           <input ref={fileInputRef} hidden type="file" accept="application/json" onChange={(event) => void importProject(event.target.files?.[0])} />
-          <button className="button subtle" onClick={exportProject}><Download size={15} /> Export</button>
-          {running ? <button className="button subtle" onClick={cancelRun}><Square size={14} fill="currentColor" /> Cancel</button> : null}
-          <button className="button run" onClick={() => void run()} disabled={running}><Play size={15} fill="currentColor" /> {running ? 'Running…' : 'Run simulation'}</button>
+          <button type="button" className="button subtle" onClick={exportProject}><Download size={15} /> Export</button>
+          {running ? <button type="button" className="button subtle" onClick={cancelRun}><Square size={14} fill="currentColor" /> Cancel</button> : null}
+          <button type="button" className="button run" onClick={() => void run()} disabled={running}><Play size={15} fill="currentColor" /> {running ? 'Running…' : 'Run simulation'}</button>
         </div>
       </header>
 
@@ -400,9 +412,9 @@ function WorkbenchInner() {
           <Controls position="bottom-left" showInteractive={false} />
           <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
           {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
-          <Panel position="top-left"><div className="canvas-toolbar"><button onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
+          <Panel position="top-left"><div className="canvas-toolbar"><button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button type="button" onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button type="button" onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button><button type="button" onClick={() => { setProject(createDataPlatformExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Data platform</strong><span>Cache → Shards → Stream → Objects</span></button></div> : null}</div></div></Panel>
         </ReactFlow>
-        {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
+        {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
       </section>
 
       <FaultLaboratory experiment={experiment} project={project} selectedFaultId={selectedFaultId} onSelectFault={selectFault} onAddFault={addFault} onUpdateFault={updateFault} onDeleteFault={deleteFault} />
@@ -414,7 +426,7 @@ function WorkbenchInner() {
         <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
       </aside>
 
-      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div><div className="results-views" role="tablist" aria-label="Simulation result views"><button role="tab" aria-selected={resultsView === 'run'} onClick={() => setResultsView('run')}>Run details</button><button role="tab" aria-selected={resultsView === 'compare'} onClick={() => setResultsView('compare')}>Compare runs <small>{runs.length}</small></button></div></div>{resultsView === 'run' ? <ResultsPanel result={result} progress={progress} running={running} nodes={project.topology.nodes} onShowTraceNode={showTraceNode} /> : <RunComparisonPanel key={`${project.id}:${result?.runId ?? ''}`} runs={runs} {...(result ? { activeRunId: result.runId } : {})} />}</section>
+      <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div><div className="results-views" role="tablist" aria-label="Simulation result views"><button ref={runTabRef} type="button" role="tab" aria-selected={resultsView === 'run'} tabIndex={resultsView === 'run' ? 0 : -1} onKeyDown={handleResultsTabKey} onClick={() => setResultsView('run')}>Run details</button><button ref={compareTabRef} type="button" role="tab" aria-selected={resultsView === 'compare'} tabIndex={resultsView === 'compare' ? 0 : -1} onKeyDown={handleResultsTabKey} onClick={() => setResultsView('compare')}>Compare runs <small>{runs.length}</small></button></div></div><div role="tabpanel" aria-label={resultsView === 'run' ? 'Run details' : 'Compare runs'}>{resultsView === 'run' ? <ResultsPanel result={result} progress={progress} running={running} nodes={project.topology.nodes} onShowTraceNode={showTraceNode} /> : <RunComparisonPanel key={`${project.id}:${result?.runId ?? ''}`} runs={runs} {...(result ? { activeRunId: result.runId } : {})} />}</div></section>
     </main>
   )
 }

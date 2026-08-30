@@ -444,11 +444,13 @@ Exit criteria:
 
 Deliverables:
 
-- [ ] property-based invariants for migrations and runtime determinism;
-- [ ] performance budgets for large graphs and runs;
-- [ ] keyboard and screen-reader paths for editors and timelines;
-- [ ] documentation for model assumptions and unsupported semantics;
-- [ ] CI coverage for all Phase 1 acceptance experiments.
+- [x] property-based invariants for migrations and runtime determinism;
+- [x] performance budgets for large graphs and runs;
+- [x] keyboard and screen-reader paths for editors and timelines;
+- [x] documentation for model assumptions and unsupported semantics;
+- [x] CI coverage for all Phase 1 acceptance experiments.
+
+Status: complete. Verified by migration/serialization and runtime property tests, a combined 100-node/100,000-request `<5s` gate, lossless aggregate telemetry under trace sampling, keyboard browser acceptance, documented model boundaries, and the complete `pnpm check` CI gate.
 
 Exit criteria:
 
@@ -540,16 +542,16 @@ Those capabilities require separate decisions after the generic Phase 1 contract
 
 Phase 1 is complete only when all of the following are true:
 
-- [ ] all P1.0 through P1.6 exit criteria pass in CI;
-- [ ] the reference experiment can be built from a blank canvas;
-- [ ] faults and policies change actual runtime events and derived metrics;
-- [ ] a failed request can be explained through spans and stable reason codes;
-- [ ] two designs can be compared under the exact same experiment and seed;
-- [ ] new components use shared registries and do not add case-specific pages;
-- [ ] project v1 files migrate, project v2 files round-trip, and unsupported versions fail safely;
-- [ ] all metrics shown by the UI originate from runtime events;
-- [ ] `pnpm check` passes, including production browser tests;
-- [ ] the README Phase 1 checklist is updated to reflect the shipped state.
+- [x] all P1.0 through P1.6 exit criteria pass in CI;
+- [x] the reference experiment can be built from a blank canvas;
+- [x] faults and policies change actual runtime events and derived metrics;
+- [x] a failed request can be explained through spans and stable reason codes;
+- [x] two designs can be compared under the exact same experiment and seed;
+- [x] new components use shared registries and do not add case-specific pages;
+- [x] project v1 files migrate, project v2 files round-trip, and unsupported versions fail safely;
+- [x] all metrics shown by the UI originate from runtime events and online event aggregates;
+- [x] `pnpm check` passes, including production browser tests;
+- [x] the README Phase 1 checklist is updated to reflect the shipped state.
 
 ## 18. Execution order
 

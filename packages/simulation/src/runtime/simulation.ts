@@ -36,7 +36,7 @@ export class SystemDesignSimulation extends Simulation {
     this.scenario = scenario
     this.random = seedrandom(scenario.seed)
     this.warnings = warnings
-    this.eventSink = new RuntimeEventSink(runId, onEventBatch, eventBatchSize)
+    this.eventSink = new RuntimeEventSink(runId, onEventBatch, eventBatchSize, scenario.simulation.traceLimit, scenario.simulation.sampleIntervalMs)
     this.nodes = compiled.nodes
     compiled.outgoing.forEach((edges, nodeId) => this.outgoing.set(nodeId, edges))
     for (const edge of compiled.edges) {
@@ -70,6 +70,12 @@ export class SystemDesignSimulation extends Simulation {
   }
 
   emitRequestEvent(request: RequestState, node: ComponentNode, type: 'request-generated' | 'request-arrived' | 'request-queued' | 'request-started' | 'request-completed' | 'request-failed', status: 'pending' | 'ok' | 'error' | 'rejected', extra: { edgeId?: string; durationMs?: number; queueDurationMs?: number; reason?: ReasonCode; attributes?: Record<string, string | number | boolean> } = {}) {
+    const retained = this.retainsRequest(request.id)
+    const updatesAggregate = type === 'request-generated'
+      || (type === 'request-completed' && extra.durationMs !== undefined)
+      || type === 'request-failed'
+      || extra.attributes?.terminal === true
+    if (!retained && !updatesAggregate) return
     this.eventSink.emit({
       timestampMs: round(this.timeNow), requestId: String(request.id), traceId: request.traceId, spanId: request.spanId,
       ...(request.parentSpanId === undefined ? {} : { parentSpanId: request.parentSpanId }), nodeId: node.id,
@@ -77,6 +83,10 @@ export class SystemDesignSimulation extends Simulation {
       attempt: request.reliabilityAttempt?.attempt ?? 1,
       ...extra,
     })
+  }
+
+  retainsRequest(requestId: number) {
+    return this.eventSink.isRequestRetained(requestId)
   }
 
   activeFaults(kind: FaultTarget['kind'], targetId: string, type: FaultType) {
@@ -93,7 +103,8 @@ export class SystemDesignSimulation extends Simulation {
 
   serviceTime(node: Exclude<ComponentNode, { type: 'traffic' }>, request: RequestState) {
     const behavior = getNodeBehavior(node)
-    let serviceTime = behavior.baseServiceTimeMs(node, request) + (this.random() * 2 - 1) * behavior.jitterMs(node)
+    const jitterMs = behavior.jitterMs(node)
+    let serviceTime = behavior.baseServiceTimeMs(node, request) + (this.random() * 2 - 1) * jitterMs
     serviceTime = applyLatencyFaults(serviceTime, this.activeFaults('node', node.id, 'latency-spike'))
     if (request.incomingEdgeId) {
       const edgeLatency = this.activeFaults('edge', request.incomingEdgeId, 'latency-spike')
@@ -118,6 +129,7 @@ export class SystemDesignSimulation extends Simulation {
   }
 
   chooseEdge(edges: CompiledConnection[]) {
+    if (edges.length === 1) return edges[0]!
     const totalWeight = edges.reduce((sum, edge) => sum + edge.weight, 0)
     let choice = this.random() * totalWeight
     for (const edge of edges) { choice -= edge.weight; if (choice <= 0) return edge }
@@ -686,7 +698,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         this.finishBranch(false, node, 'no_healthy_target')
         return
       }
-      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: edge.id, type: 'dependency-started', status: 'pending', bytes: this.request.bytes })
+      if (simulation.retainsRequest(this.request.id)) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, nodeId: node.id, edgeId: edge.id, type: 'dependency-started', status: 'pending', bytes: this.request.bytes })
       const parentSpanId = this.request.spanId
       const { queuedAtMs: _queuedAtMs, startedAtMs: _startedAtMs, outgoingPort: selectedOutgoingPort, ...request } = this.request
       const timeout = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'timeout')[0]

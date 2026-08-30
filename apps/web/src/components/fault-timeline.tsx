@@ -78,7 +78,7 @@ export function FaultTimeline({ experiment, project, selectedFaultId, onSelect, 
 
   return (
     <div className="fault-timeline">
-      <div ref={containerRef} aria-label="Editable fault timeline" />
+      <div ref={containerRef} aria-hidden="true" />
       {experiment.faults.length === 0 ? <p className="fault-timeline__empty">No faults scheduled. Add one to break this design during virtual time.</p> : null}
     </div>
   )

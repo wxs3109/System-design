@@ -24,7 +24,9 @@ test('compares two topology revisions under one immutable experiment', async ({ 
   await comparison.getByLabel('Comparison chart metric').selectOption('latencyP95Ms')
   await expect(comparison.getByRole('img', { name: /P95 latency delta/ })).toBeVisible()
 
-  await page.getByRole('tab', { name: 'Run details' }).click()
+  await page.getByRole('tab', { name: /Compare runs 2/ }).focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByRole('tab', { name: 'Run details' })).toHaveAttribute('aria-selected', 'true')
   await page.getByLabel('Random seed').fill('different-experiment-seed')
   await page.getByRole('button', { name: 'Run simulation' }).click()
   const compareThreeRuns = page.getByRole('tab', { name: /Compare runs 3/ })

@@ -32,6 +32,23 @@ describe('event reducers', () => {
     expect(result.spans.some((span) => span.parentSpanId)).toBe(true)
   })
 
+  it('keeps aggregate metrics exact when detailed traces are disabled', async () => {
+    const fullInput = scenario()
+    fullInput.simulation.traceLimit = 100
+    fullInput.workloads[0]!.requestsPerSecond = 25
+    const service = fullInput.nodes.find((node) => node.type === 'service')!
+    if (service.type === 'service') Object.assign(service.config, { replicas: 1, concurrencyPerReplica: 1, serviceTimeMs: 120, jitterMs: 0, errorRate: 0.35, maxQueueSize: 100 })
+    const sampledInput = structuredClone(fullInput)
+    sampledInput.simulation.traceLimit = 0
+
+    const [full, sampled] = await Promise.all([runSimulation(fullInput, 'full-traces'), runSimulation(sampledInput, 'no-traces')])
+
+    expect(sampled.summary).toEqual(reduceSummary(full.events, fullInput.simulation.durationSeconds))
+    expect(sampled.nodes).toEqual(reduceNodeMetrics(full.events, fullInput.nodes))
+    expect(sampled.timeSeries).toEqual(reduceTimeSeries(full.events, fullInput))
+    expect(sampled.events.every((event) => event.requestId === undefined)).toBe(true)
+  })
+
   it('counts pre-service rejection once in node failures', async () => {
     const input = scenario()
     const service = input.nodes.find((node) => node.type === 'service')!

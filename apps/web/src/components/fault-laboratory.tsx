@@ -96,7 +96,18 @@ export function FaultLaboratory({ experiment, project, selectedFaultId, onSelect
     <section className="fault-laboratory" aria-label="Fault laboratory">
       <div className="fault-laboratory__header">
         <div><strong>Fault timeline</strong><span>Drag to move · pull either edge to resize · virtual seconds</span></div>
-        <button type="button" className="button" onClick={onAddFault} disabled={project.topology.nodes.length === 0}><Plus size={14} /> Add fault</button>
+        <div className="fault-laboratory__actions">
+          <select
+            aria-label="Fault timeline entry"
+            value={selectedFaultId ?? ''}
+            disabled={experiment.faults.length === 0}
+            onChange={(event) => onSelectFault(event.target.value || null)}
+          >
+            <option value="">{experiment.faults.length === 0 ? 'No faults scheduled' : 'Select a fault…'}</option>
+            {experiment.faults.map((fault) => <option key={fault.id} value={fault.id}>{fault.name ?? faultTypeLabels[fault.type]} · {fault.startAtSeconds}s–{fault.startAtSeconds + fault.durationSeconds}s</option>)}
+          </select>
+          <button type="button" className="button" onClick={onAddFault} disabled={project.topology.nodes.length === 0}><Plus size={14} /> Add fault</button>
+        </div>
       </div>
       <FaultTimeline experiment={experiment} project={project} selectedFaultId={selectedFaultId} onSelect={onSelectFault} onMove={(id, startAtSeconds, durationSeconds) => onUpdateFault(id, { startAtSeconds, durationSeconds })} />
       {selectedFault && selectedTarget ? (
