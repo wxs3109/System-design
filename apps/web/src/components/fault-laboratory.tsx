@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import type { Experiment, Fault, ProjectFile } from '@system-design/model'
+import { componentRegistry } from '@system-design/components'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { FaultTimeline } from './fault-timeline'
 import { faultTarget, faultTargetName, faultTypeLabels } from './fault-topology'
@@ -58,8 +59,10 @@ const factorLabel: Partial<Record<Fault['type'], string>> = {
 }
 const probabilityFactor = (type: Fault['type']) => ['capacity-drop', 'bandwidth-drop', 'packet-loss', 'hot-key'].includes(type)
 
-function targetChoices(project: ProjectFile, experiment: Experiment, kind: FaultTarget['kind']) {
-  if (kind === 'node') return project.topology.nodes.map((node) => ({ id: node.id, label: node.name }))
+function targetChoices(project: ProjectFile, experiment: Experiment, kind: FaultTarget['kind'], type: Fault['type']) {
+  if (kind === 'node') return project.topology.nodes
+    .filter((node) => componentRegistry.get(node.type, node.componentVersion).supportedFaults.includes(type))
+    .map((node) => ({ id: node.id, label: node.name }))
   if (kind === 'edge') return project.topology.edges.map((edge) => {
     const source = project.topology.nodes.find((node) => node.id === edge.source)?.name ?? edge.source
     const target = project.topology.nodes.find((node) => node.id === edge.target)?.name ?? edge.target
@@ -77,13 +80,13 @@ const toNumber = (value: string, fallback: number) => {
 export function FaultLaboratory({ experiment, project, selectedFaultId, onSelectFault, onAddFault, onUpdateFault, onDeleteFault }: FaultLaboratoryProps) {
   const selectedFault = experiment.faults.find((fault) => fault.id === selectedFaultId)
   const selectedTarget = selectedFault ? faultTarget(selectedFault) : undefined
-  const choices = useMemo(() => selectedTarget ? targetChoices(project, experiment, selectedTarget.kind) : [], [experiment, project, selectedTarget])
+  const choices = useMemo(() => selectedFault && selectedTarget ? targetChoices(project, experiment, selectedTarget.kind, selectedFault.type) : [], [experiment, project, selectedFault, selectedTarget])
 
   const updateType = (type: Fault['type']) => {
     if (!selectedFault) return
     const current = faultTarget(selectedFault)
     const kind = requiredTargetKind[type] ?? (allowedTargetKinds[type].includes(current.kind) ? current.kind : allowedTargetKinds[type][0]!)
-    const choicesForKind = targetChoices(project, experiment, kind)
+    const choicesForKind = targetChoices(project, experiment, kind, type)
     if (choicesForKind.length === 0) return
     onUpdateFault(selectedFault.id, {
       type,
@@ -114,8 +117,8 @@ export function FaultLaboratory({ experiment, project, selectedFaultId, onSelect
         <div className="fault-editor" aria-label="Selected fault editor">
           <label className="policy-toggle fault-editor__enabled"><input type="checkbox" checked={selectedFault.enabled} onChange={(event) => onUpdateFault(selectedFault.id, { enabled: event.target.checked })} /><span>Enabled</span></label>
           <label className="field"><span>Name</span><input value={selectedFault.name ?? ''} placeholder={faultTypeLabels[selectedFault.type]} onChange={(event) => onUpdateFault(selectedFault.id, { name: event.target.value || undefined })} /></label>
-          <label className="field"><span>Fault type</span><select value={selectedFault.type} onChange={(event) => updateType(event.target.value as Fault['type'])}>{faultTypes.map((type) => { const kind = requiredTargetKind[type] ?? allowedTargetKinds[type][0]!; const available = targetChoices(project, experiment, kind).length > 0; return <option key={type} value={type} disabled={!available}>{faultTypeLabels[type]}{available ? '' : ' (no target)'}</option> })}</select></label>
-          <label className="field"><span>Target kind</span><select value={selectedTarget.kind} onChange={(event) => { const kind = event.target.value as FaultTarget['kind']; const next = targetChoices(project, experiment, kind)[0]; if (next) onUpdateFault(selectedFault.id, { target: { kind, id: next.id } }) }}>{allowedTargetKinds[selectedFault.type].map((kind) => <option key={kind} value={kind}>{targetKindLabels[kind]}</option>)}</select></label>
+          <label className="field"><span>Fault type</span><select value={selectedFault.type} onChange={(event) => updateType(event.target.value as Fault['type'])}>{faultTypes.map((type) => { const available = allowedTargetKinds[type].some((kind) => targetChoices(project, experiment, kind, type).length > 0); return <option key={type} value={type} disabled={!available}>{faultTypeLabels[type]}{available ? '' : ' (no target)'}</option> })}</select></label>
+          <label className="field"><span>Target kind</span><select value={selectedTarget.kind} onChange={(event) => { const kind = event.target.value as FaultTarget['kind']; const next = targetChoices(project, experiment, kind, selectedFault.type)[0]; if (next) onUpdateFault(selectedFault.id, { target: { kind, id: next.id } }) }}>{allowedTargetKinds[selectedFault.type].map((kind) => <option key={kind} value={kind} disabled={targetChoices(project, experiment, kind, selectedFault.type).length === 0}>{targetKindLabels[kind]}</option>)}</select></label>
           <label className="field"><span>Target</span><select value={selectedTarget.id} aria-label="Fault target" onChange={(event) => onUpdateFault(selectedFault.id, { target: { kind: selectedTarget.kind, id: event.target.value } })}>{choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}</select></label>
           <label className="field"><span>Start (seconds)</span><input type="number" min={0} max={experiment.simulation.durationSeconds} step={0.1} value={selectedFault.startAtSeconds} onChange={(event) => onUpdateFault(selectedFault.id, { startAtSeconds: Math.max(0, toNumber(event.target.value, selectedFault.startAtSeconds)) })} /></label>
           <label className="field"><span>Duration (seconds)</span><input type="number" min={0.1} max={experiment.simulation.durationSeconds} step={0.1} value={selectedFault.durationSeconds} onChange={(event) => onUpdateFault(selectedFault.id, { durationSeconds: Math.max(0.1, toNumber(event.target.value, selectedFault.durationSeconds)) })} /></label>

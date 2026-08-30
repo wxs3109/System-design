@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createEmptyProject, createOrderSystemContractFixture, projectFileV3Schema, type SimulationResult } from '@system-design/model'
+import { createRegisteredNode } from '@system-design/components'
 import { redoProject, undoProject, useWorkbenchStore } from './store'
 
 const emptyResult: SimulationResult = {
@@ -130,6 +131,21 @@ describe('validated project undo and redo', () => {
     const project = useWorkbenchStore.getState().project
     expect(project.topology.nodes[0]).toMatchObject({ name: 'Client', type: 'traffic', rolePreset: { id: 'client', version: 1 } })
     expect(project.experiments[0]!.workloads[0]).toMatchObject({ sourceNodeId: project.topology.nodes[0]!.id, name: 'Client workload' })
+  })
+
+  it('skips Scheduler for default faults and rejects unsupported Scheduler node policies', () => {
+    const project = createEmptyProject('scheduler-controls')
+    project.topology.nodes = [
+      createRegisteredNode('scheduler', 'scheduler', { x: 0, y: 0 }),
+      createRegisteredNode('service', 'service', { x: 100, y: 0 }),
+    ]
+    useWorkbenchStore.getState().restoreProject(project)
+    useWorkbenchStore.getState().addFault()
+    expect(useWorkbenchStore.getState().project.experiments[0]!.faults[0]?.target).toEqual({ kind: 'node', id: 'service' })
+
+    useWorkbenchStore.getState().attachPolicy({ kind: 'node', id: 'scheduler' }, 'rate-limit', 1)
+    expect(useWorkbenchStore.getState().project.topology.policies).toEqual([])
+    expect(useWorkbenchStore.getState().error).toContain('Scheduler does not support Rate Limit')
   })
 
   it('runs an unknown preset as its resolved behavior but rejects a known mismatched preset', () => {

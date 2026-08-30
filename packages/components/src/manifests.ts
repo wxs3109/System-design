@@ -46,7 +46,7 @@ export const builtInComponentManifests = [
   {
     type: 'traffic', version: 1, label: 'Traffic Generator', description: 'Produces a configurable request workload.', category: 'traffic', iconToken: 'globe', color: '#8b5cf6',
     configSchema: z.object({}), createDefaultConfig: () => ({}), configFields: [], ports: [requestOutput],
-    capabilities: ['workload-source'], emittedMetrics: ['generated-requests'], supportedFaults: [], runtimeBehavior: 'traffic-v1',
+    capabilities: ['workload-source'], emittedMetrics: ['generated-requests'], supportedFaults: [], supportedNodePolicies: [], runtimeBehavior: 'traffic-v1',
     describeConfig: () => 'workload source',
   },
   {
@@ -62,7 +62,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'concurrencyLimit', label: 'Concurrent runs', min: 1, step: 1 },
       { kind: 'number', key: 'maxPendingRuns', label: 'Pending-run limit', min: 0, step: 1 },
       { kind: 'number', key: 'requestBytes', label: 'Run payload (bytes)', min: 1, step: 1_024 },
-    ], ports: [requestOutput], capabilities: ['workload-source', 'scheduling', 'batch-release', 'missed-run-policy'], emittedMetrics: ['scheduled-runs', 'released-runs', 'queued-runs', 'skipped-runs', 'active-runs'], supportedFaults: [], runtimeBehavior: 'scheduler-v1',
+    ], ports: [requestOutput], capabilities: ['workload-source', 'scheduling', 'batch-release', 'missed-run-policy'], emittedMetrics: ['scheduled-runs', 'released-runs', 'queued-runs', 'skipped-runs', 'active-runs'], supportedFaults: [], supportedNodePolicies: [], runtimeBehavior: 'scheduler-v1',
     describeConfig: (config) => `${config.scheduleMode === 'batch' ? config.batchSize : 1} run${config.scheduleMode === 'batch' && config.batchSize !== 1 ? 's' : ''} every ${config.intervalMs} ms · ${config.concurrencyLimit} concurrent · ${config.missedRunPolicy}`,
   },
   {
@@ -75,7 +75,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'parallelism', label: 'Parallelism', min: 1, step: 1 },
       { kind: 'number', key: 'packetLossRate', label: 'Packet loss (0–1)', min: 0, max: 1, step: 0.001 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
-    ], ports: [requestInput, requestOutput], capabilities: ['network'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop', 'bandwidth-drop', 'packet-loss', 'region-outage'], runtimeBehavior: 'network-v1',
+    ], ports: [requestInput, requestOutput], capabilities: ['network'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop', 'bandwidth-drop', 'packet-loss', 'region-outage'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'network-v1',
     describeConfig: (config) => `${config.latencyMs} ms · ${config.bandwidthMbps} Mbps`,
   },
   {
@@ -92,7 +92,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
       { kind: 'number', key: 'failureThreshold', label: 'Failures before unhealthy', min: 1, step: 1 },
       { kind: 'number', key: 'recoveryTimeMs', label: 'Health recovery (ms)', min: 0, step: 100 },
-    ], ports: [requestInput, requestOutput], capabilities: ['routing', 'load-balancing', 'health-aware-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'requests-per-target', 'target-imbalance'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'load-balancer-v1',
+    ], ports: [requestInput, requestOutput], capabilities: ['routing', 'load-balancing', 'health-aware-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'requests-per-target', 'target-imbalance'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'load-balancer-v1',
     describeConfig: (config) => `${config.algorithm} · ${config.capacity} concurrent`,
   },
   {
@@ -105,7 +105,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, messageInput, requestOutput, messageOutput], capabilities: ['compute', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'service-v1',
+    ], ports: [requestInput, messageInput, requestOutput, messageOutput], capabilities: ['compute', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit', 'backpressure'], runtimeBehavior: 'service-v1',
     describeConfig: (config) => `${config.replicas} × ${config.concurrencyPerReplica} concurrent`,
   },
   {
@@ -117,7 +117,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
       { kind: 'number', key: 'maxDepth', label: 'Max depth', min: 1, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, messageInput, requestOutput, messageOutput], capabilities: ['buffering', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'queue-v1',
+    ], ports: [requestInput, messageInput, requestOutput, messageOutput], capabilities: ['buffering', 'asynchronous-delivery'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit', 'backpressure'], runtimeBehavior: 'queue-v1',
     describeConfig: (config) => `${config.consumers} consumers · ${config.maxDepth} max`,
   },
   {
@@ -134,7 +134,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 0.1 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, cacheHitOutput, cacheMissOutput], capabilities: ['storage', 'caching', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'cache-hit-rate', 'cache-evictions', 'cache-occupancy'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'cache-v1',
+    ], ports: [requestInput, cacheHitOutput, cacheMissOutput], capabilities: ['storage', 'caching', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'cache-hit-rate', 'cache-evictions', 'cache-occupancy'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'cache-v1',
     describeConfig: (config) => `${config.capacityEntries} entries · ${config.ttlMs} ms TTL · ${String(config.evictionPolicy).toUpperCase()}`,
   },
   {
@@ -152,7 +152,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 0.1 },
       { kind: 'number', key: 'maxDepth', label: 'Max producer queue', min: 1, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [messageInput, messageOutput], capabilities: ['buffering', 'streaming', 'partitioning', 'consumer-groups', 'asynchronous-delivery'], emittedMetrics: ['publish-rate', 'consumer-rate', 'consumer-lag', 'partition-imbalance', 'utilization'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'stream-v1',
+    ], ports: [messageInput, messageOutput], capabilities: ['buffering', 'streaming', 'partitioning', 'consumer-groups', 'asynchronous-delivery'], emittedMetrics: ['publish-rate', 'consumer-rate', 'consumer-lag', 'partition-imbalance', 'utilization'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit', 'backpressure'], runtimeBehavior: 'stream-v1',
     describeConfig: (config) => `${config.partitions} partitions · ${config.consumerGroups} groups · batch ${config.batchSize}`,
   },
   {
@@ -168,7 +168,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'writeThroughputMbps', label: 'Write throughput (Mbps)', min: 0.001, step: 10 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, messageInput, requestOutput], capabilities: ['storage', 'object-storage', 'byte-throughput', 'asynchronous-delivery'], emittedMetrics: ['operations', 'bytes', 'latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'object-storage-v1',
+    ], ports: [requestInput, messageInput, requestOutput], capabilities: ['storage', 'object-storage', 'byte-throughput', 'asynchronous-delivery'], emittedMetrics: ['operations', 'bytes', 'latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit', 'backpressure'], runtimeBehavior: 'object-storage-v1',
     describeConfig: (config) => `${config.maxConcurrentRequests} concurrent · ${config.readThroughputMbps}/${config.writeThroughputMbps} Mbps read/write`,
   },
   {
@@ -180,7 +180,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 1 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
       { kind: 'number', key: 'errorRate', label: 'Error rate (0–1)', min: 0, max: 1, step: 0.001 },
-    ], ports: [requestInput, requestOutput], capabilities: ['storage'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'database-v1',
+    ], ports: [requestInput, requestOutput], capabilities: ['storage'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'database-v1',
     describeConfig: (config) => `${config.maxConnections} connections · ${config.queryTimeMs} ms`,
   },
   {
@@ -199,7 +199,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'writeRatio', label: 'Write ratio (0–1)', min: 0, max: 1, step: 0.05 },
       { kind: 'number', key: 'keySpaceSize', label: 'Key space', min: 1, step: 1 },
       { kind: 'number', key: 'hotKeyProbability', label: 'Hot-key probability (0–1)', min: 0, max: 1, step: 0.05 },
-    ], ports: [requestInput, requestOutput], capabilities: ['storage', 'sharding', 'replication', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'requests-per-shard', 'hot-shard-ratio', 'replica-lag'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'database-v2',
+    ], ports: [requestInput, requestOutput], capabilities: ['storage', 'sharding', 'replication', 'key-routing'], emittedMetrics: ['latency', 'utilization', 'queue', 'requests-per-shard', 'hot-shard-ratio', 'replica-lag'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'database-v2',
     describeConfig: (config) => `${config.shardCount} shards · ${config.replicasPerShard} replicas / shard · ${config.readPreference}`,
   },
 ] as const satisfies readonly ComponentManifest[]

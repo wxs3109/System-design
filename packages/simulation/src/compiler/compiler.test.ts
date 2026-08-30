@@ -40,4 +40,15 @@ describe('generic project compiler', () => {
     project.topology.policies[0]!.config = { timeoutMs: -1 }
     expect(() => compileSimulationInput(project)).toThrow()
   })
+
+  it('rejects Scheduler faults and node policies that have no runtime semantics', () => {
+    const project = createEmptyProject('scheduler-semantics')
+    project.topology.nodes = [createRegisteredNode('scheduler', 'scheduler', { x: 0, y: 0 }), createRegisteredNode('service', 'service', { x: 100, y: 0 })]
+    project.topology.edges = [{ id: 'edge', source: 'scheduler', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' }]
+    project.topology.policies = [{ id: 'limit', type: 'rate-limit', version: 1, target: { kind: 'node', id: 'scheduler' }, order: 0, enabled: true, config: { capacity: 1, refillTokens: 1, refillIntervalMs: 1_000 } }]
+    expect(() => compileSimulationInput(project)).toThrow('Scheduler does not support rate-limit@1 as a node policy')
+    project.topology.policies = []
+    project.experiments[0]!.faults = [{ id: 'down', type: 'node-down', target: { kind: 'node', id: 'scheduler' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }]
+    expect(() => compileSimulationInput(project)).toThrow('Scheduler does not support node-down faults')
+  })
 })

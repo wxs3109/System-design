@@ -118,13 +118,13 @@ function PolicyEditor({ policy, index, count }: { policy: PolicyAttachment; inde
   )
 }
 
-function PolicySection({ target }: { target: PolicyAttachment['target'] }) {
+function PolicySection({ target, supportedTypes }: { target: PolicyAttachment['target']; supportedTypes?: readonly string[] }) {
   const allPolicies = useWorkbenchStore((state) => state.project.topology.policies)
   const policies = useMemo(() => allPolicies
     .filter((policy) => policy.target.kind === target.kind && policy.target.id === target.id)
     .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id)), [allPolicies, target.id, target.kind])
   const attachPolicy = useWorkbenchStore((state) => state.attachPolicy)
-  const manifests = policyRegistry.list().filter((manifest) => manifest.targets.includes(target.kind))
+  const manifests = policyRegistry.list().filter((manifest) => manifest.targets.includes(target.kind) && (supportedTypes === undefined || supportedTypes.includes(manifest.type)))
   const available = manifests.filter((manifest) => !manifest.singletonPerTarget || !policies.some((policy) => policy.type === manifest.type && policy.version === manifest.version))
   const [selection, setSelection] = useState('')
   const add = () => {
@@ -138,7 +138,7 @@ function PolicySection({ target }: { target: PolicyAttachment['target'] }) {
       <div className="policy-section__heading"><span>Reliability policies</span><small>{policies.length ? `${policies.length} attached · evaluated top to bottom` : 'No policies attached'}</small></div>
       {policies.map((policy, index) => <PolicyEditor key={policy.id} policy={policy} index={index} count={policies.length} />)}
       <div className="policy-add">
-        <label className="field"><span>Add policy</span><select aria-label={`Policy for selected ${target.kind}`} value={selection} disabled={available.length === 0} onChange={(event) => setSelection(event.target.value)}><option value="">{available.length ? 'Choose a policy…' : 'All available policies attached'}</option>{available.map((manifest) => <option key={`${manifest.type}@${manifest.version}`} value={`${manifest.type}@${manifest.version}`}>{manifest.label}</option>)}</select></label>
+        <label className="field"><span>Add policy</span><select aria-label={`Policy for selected ${target.kind}`} value={selection} disabled={available.length === 0} onChange={(event) => setSelection(event.target.value)}><option value="">{available.length ? 'Choose a policy…' : manifests.length ? 'All supported policies attached' : 'No supported policies'}</option>{available.map((manifest) => <option key={`${manifest.type}@${manifest.version}`} value={`${manifest.type}@${manifest.version}`}>{manifest.label}</option>)}</select></label>
         <button type="button" className="button" disabled={!selection || available.length === 0} onClick={add}><Plus size={14} /> Add</button>
       </div>
     </div>
@@ -200,7 +200,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
         <label className="field"><span>Arrival pattern</span><select value={workload.pattern} onChange={(event) => updateWorkload({ pattern: event.target.value as 'constant' | 'poisson' })}><option value="poisson">Poisson</option><option value="constant">Constant</option></select></label>
       </> : null}
       {manifest.configFields.map((field) => <ConfigFieldControl key={field.key} field={field} value={(node.config as Record<string, unknown>)[field.key]} onChange={(value) => setConfig(field.key, value)} />)}
-      <PolicySection key={`node:${node.id}`} target={{ kind: 'node', id: node.id }} />
+      <PolicySection key={`node:${node.id}`} target={{ kind: 'node', id: node.id }} supportedTypes={manifest.supportedNodePolicies} />
     </div>
   )
 }

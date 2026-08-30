@@ -194,6 +194,22 @@ test('shows Scheduler timing instead of editable arrival phases for a scheduled 
   await expect(editor.getByLabel('Requests / second')).toHaveCount(0)
 })
 
+test('does not offer faults or node policies that Scheduler cannot execute', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Scheduled batch/ }).click()
+
+  await page.getByTestId('rf__node-batch-scheduler').dispatchEvent('click')
+  await expect(page.getByLabel('Policy for selected node')).toBeDisabled()
+  await expect(page.getByLabel('Policy for selected node')).toHaveValue('')
+  await expect(page.getByLabel('Policy for selected node').locator('option')).toHaveText(['No supported policies'])
+
+  await page.getByRole('button', { name: 'Add fault' }).click()
+  const editor = page.getByLabel('Selected fault editor')
+  await expect(editor.getByLabel('Fault target')).not.toHaveValue('batch-scheduler')
+  await expect(editor.getByLabel('Fault target').locator('option', { hasText: 'Nightly release' })).toHaveCount(0)
+})
+
 test('migrates a v1 import and exports a capacity-only ProjectFile v3', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacyScenario)) })

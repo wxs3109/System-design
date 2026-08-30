@@ -19,7 +19,23 @@ describe('component registry', () => {
     expect(manifest.ports).toEqual([expect.objectContaining({ direction: 'output', semantic: 'request' })])
     expect(manifest.capabilities).toEqual(expect.arrayContaining(['scheduling', 'batch-release', 'missed-run-policy']))
     expect(componentCatalog.listPresets('scheduler')).toEqual([])
+    expect(manifest.supportedFaults).toEqual([])
+    expect(manifest.supportedNodePolicies).toEqual([])
     expect(() => manifest.configSchema.parse({ ...scheduler.config, jitterMs: 1_001 })).toThrow('jitter')
+  })
+
+  it('rejects imported faults and node policies that a variant does not execute', () => {
+    const scheduler = componentRegistry.createNode('scheduler', 'scheduler', { x: 0, y: 0 })
+    const project = {
+      schemaVersion: 2 as const, id: 'unsupported-semantics', name: 'Unsupported semantics', activeExperimentId: 'experiment',
+      topology: { nodes: [scheduler], edges: [], groups: [], policies: [] as import('@system-design/model').PolicyAttachment[] },
+      experiments: [{ id: 'experiment', name: 'Experiment', workloads: [], faults: [] as import('@system-design/model').Fault[], simulation: { durationSeconds: 1, sampleIntervalMs: 100, maxRequests: 10, traceLimit: 10, maxHops: 10 }, seed: 'seed' }],
+    }
+    project.topology.policies.push({ id: 'limit', type: 'rate-limit', version: 1, target: { kind: 'node', id: 'scheduler' }, order: 0, enabled: true, config: { capacity: 1, refillTokens: 1, refillIntervalMs: 1_000 } })
+    expect(() => componentRegistry.validateProject(project)).toThrow('Scheduler does not support rate-limit@1 as a node policy')
+    project.topology.policies = []
+    project.experiments[0]!.faults.push({ id: 'down', type: 'node-down', target: { kind: 'node', id: 'scheduler' }, startAtSeconds: 0, durationSeconds: 1, enabled: true })
+    expect(() => componentRegistry.validateProject(project)).toThrow('Scheduler does not support node-down faults')
   })
 
   it('declares an editable Load Balancer manifest', () => {
@@ -61,7 +77,7 @@ describe('component registry', () => {
       configSchema: z.object({ latencyMs: z.number().nonnegative() }), createDefaultConfig: () => ({ latencyMs: 5 }),
       configFields: [{ kind: 'number', key: 'latencyMs', label: 'Latency', min: 0 }],
       ports: [{ id: 'in', label: 'Input', direction: 'input', semantic: 'request' }], capabilities: ['sink'],
-      emittedMetrics: ['latency'], supportedFaults: [], runtimeBehavior: 'test-sink-v1', describeConfig: (config) => `${config.latencyMs} ms`,
+      emittedMetrics: ['latency'], supportedFaults: [], supportedNodePolicies: [], runtimeBehavior: 'test-sink-v1', describeConfig: (config) => `${config.latencyMs} ms`,
     })
     const node = registry.createNode('test-sink', 'sink', { x: 0, y: 0 })
     expect(node.config).toEqual({ latencyMs: 5 })
@@ -149,7 +165,7 @@ describe('component creation hierarchy', () => {
     const categories = new ComponentCategoryRegistry([{ id: 'service', label: 'Service', description: 'Compute.', iconToken: 'server', color: '#000', order: 0 }])
     const variants = new ComponentRegistry([{
       type: 'test-service', version: 1, label: 'Test service', description: 'Test.', category: 'service', iconToken: 'server', color: '#000',
-      configSchema: z.object({ concurrency: z.number().positive() }), createDefaultConfig: () => ({ concurrency: 1 }), configFields: [], ports: [], capabilities: [], emittedMetrics: [], supportedFaults: [], runtimeBehavior: 'test-service-v1', describeConfig: () => 'test',
+      configSchema: z.object({ concurrency: z.number().positive() }), createDefaultConfig: () => ({ concurrency: 1 }), configFields: [], ports: [], capabilities: [], emittedMetrics: [], supportedFaults: [], supportedNodePolicies: [], runtimeBehavior: 'test-service-v1', describeConfig: () => 'test',
     }])
     const presets = new ComponentPresetRegistry(variants, [{ id: 'test-preset', version: 1, label: 'Test preset', description: 'Test.', iconToken: 'server', behavior: { type: 'test-service', version: 1 }, configOverrides: { concurrency: 2 } }])
     expect(() => new ComponentCatalog(new ComponentCategoryRegistry(), variants, presets)).toThrow('Unknown component category: service')

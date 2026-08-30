@@ -327,11 +327,16 @@ const validateBusinessReferences = (project: {
 
   project.experiments.forEach((experiment, experimentIndex) => {
     const operationWorkloadIds = new Set<string>()
+    const schedulerWorkloadSources = new Set<string>()
     experiment.operationWorkloads.forEach((workload, workloadIndex) => {
       if (operationWorkloadIds.has(workload.id)) addDuplicateIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'id'], 'operation workload', workload.id)
       operationWorkloadIds.add(workload.id)
       const source = requireNode(workload.sourceNodeId, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'])
       if (source && source.type !== 'traffic' && source.type !== 'scheduler') addReferenceIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'], `Node ${source.id} must be a traffic or scheduler component.`)
+      if (source?.type === 'scheduler') {
+        if (schedulerWorkloadSources.has(source.id)) addReferenceIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'], `Scheduler ${source.id} can bind only one operation workload per experiment.`)
+        schedulerWorkloadSources.add(source.id)
+      }
       workload.operationMix.forEach((mix, mixIndex) => {
         const operation = requireOperation(mix.operation, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'operationMix', mixIndex, 'operation'])
         const interactionKey = referenceKey(mix.interaction.interactionId, mix.interaction.interactionVersion)

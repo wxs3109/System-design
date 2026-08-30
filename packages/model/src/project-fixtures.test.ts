@@ -19,6 +19,21 @@ describe('order-system contract fixture', () => {
     expect(fixture.experiments[0]?.operationWorkloads[0]?.sourceNodeId).toBe('report-scheduler')
   })
 
+  it('rejects multiple operation workloads bound to the same Scheduler before compilation', () => {
+    const fixture = createScheduledReportContractFixture()
+    const duplicate = structuredClone(fixture.experiments[0]!.operationWorkloads[0]!)
+    duplicate.id = 'second-scheduled-workload'
+    fixture.experiments[0]!.operationWorkloads.push(duplicate)
+
+    const result = projectFileV3Schema.safeParse(fixture)
+    expect(result.success).toBe(false)
+    if (result.success) throw new Error('Expected duplicate Scheduler workload binding to fail validation.')
+    expect(result.error.issues).toContainEqual(expect.objectContaining({
+      path: ['experiments', 0, 'operationWorkloads', 1, 'sourceNodeId'],
+      message: 'Scheduler report-scheduler can bind only one operation workload per experiment.',
+    }))
+  })
+
   it('creates deterministic, independently mutable project values', () => {
     const first = createOrderSystemContractFixture()
     const second = createOrderSystemContractFixture()

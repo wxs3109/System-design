@@ -227,8 +227,8 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
   selectFault: (selectedFaultId) => set({ selectedFaultId, selectedNodeId: null, selectedEdgeId: null }),
   addFault: () => set((state) => {
     const experiment = state.project.experiments.find((candidate) => candidate.id === state.project.activeExperimentId)
-    const node = state.project.topology.nodes[0]
-    if (!experiment || !node) return { error: 'Add at least one component before scheduling a fault.' }
+    const node = state.project.topology.nodes.find((candidate) => componentRegistry.get(candidate.type, candidate.componentVersion).supportedFaults.includes('node-down'))
+    if (!experiment || !node) return { error: 'Add a component with executable node-down behavior before scheduling a node fault.' }
     const id = `fault-${crypto.randomUUID()}`
     const startAtSeconds = Math.min(Math.max(0, Math.round(experiment.simulation.durationSeconds / 3)), Math.max(0, experiment.simulation.durationSeconds - 0.1))
     const fault: Fault = { id, name: 'Node outage', target: { kind: 'node', id: node.id }, type: 'node-down', startAtSeconds, durationSeconds: Math.max(0.1, Math.min(5, experiment.simulation.durationSeconds - startAtSeconds)), enabled: true }
@@ -296,6 +296,12 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
   attachPolicy: (target, type, version) => set((state) => {
     const manifest = policyRegistry.get(type, version)
     if (!manifest.targets.includes(target.kind)) return { error: `${manifest.label} cannot be attached to a ${target.kind}.` }
+    if (target.kind === 'node') {
+      const node = state.project.topology.nodes.find((candidate) => candidate.id === target.id)
+      if (!node) return { error: `Cannot attach ${manifest.label} to a missing node.` }
+      const variant = componentRegistry.get(node.type, node.componentVersion)
+      if (!variant.supportedNodePolicies.includes(type)) return { error: `${variant.label} does not support ${manifest.label} as a node policy.` }
+    }
     const targetPolicies = state.project.topology.policies.filter((policy) => policy.target.kind === target.kind && policy.target.id === target.id)
     if (manifest.singletonPerTarget && targetPolicies.some((policy) => policy.type === type && policy.version === version)) {
       return { error: `${manifest.label} is already attached to this ${target.kind}.` }

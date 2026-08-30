@@ -68,6 +68,7 @@ export interface BehaviorVariantManifest<TConfig extends Record<string, unknown>
   capabilities: readonly string[]
   emittedMetrics: readonly string[]
   supportedFaults: readonly Fault['type'][]
+  supportedNodePolicies: readonly PolicyAttachment['type'][]
   runtimeBehavior: string
   describeConfig: (config: TConfig) => string
 }
@@ -188,11 +189,34 @@ export class ComponentRegistry {
   }
 
   validateProject<T extends ProjectFileV2 | ProjectFile>(project: T, presets?: ComponentPresetRegistry): T {
+    const nodes = project.topology.nodes.map((node) => this.validateNode(presets?.validateReference(node) ?? node))
+    const nodesById = new Map(nodes.map((node) => [node.id, node]))
+    for (const policy of project.topology.policies) {
+      if (policy.target.kind !== 'node') continue
+      const node = nodesById.get(policy.target.id)
+      if (!node) continue
+      const manifest = this.get(node.type, node.componentVersion)
+      if (!manifest.supportedNodePolicies.includes(policy.type)) {
+        throw new Error(`${manifest.label} does not support ${policy.type}@${policy.version} as a node policy.`)
+      }
+    }
+    for (const experiment of project.experiments) {
+      for (const fault of experiment.faults) {
+        const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
+        if (target?.kind !== 'node') continue
+        const node = nodesById.get(target.id)
+        if (!node) continue
+        const manifest = this.get(node.type, node.componentVersion)
+        if (!manifest.supportedFaults.includes(fault.type)) {
+          throw new Error(`${manifest.label} does not support ${fault.type} faults.`)
+        }
+      }
+    }
     return {
       ...project,
       topology: {
         ...project.topology,
-        nodes: project.topology.nodes.map((node) => this.validateNode(presets?.validateReference(node) ?? node)),
+        nodes,
       },
     }
   }

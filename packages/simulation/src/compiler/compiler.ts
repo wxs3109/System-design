@@ -41,7 +41,7 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
   let policies = new Map<string, CompiledPolicy[]>()
   let project: ProjectFile | undefined
   if (version === 2 || version === 3) {
-    project = parseProjectFile(input)
+    project = componentRegistry.validateProject(parseProjectFile(input))
     const topologyNodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
     for (const edge of project.topology.edges) {
       const source = topologyNodes.get(edge.source)!
