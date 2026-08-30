@@ -330,4 +330,4 @@ Minimal validation only covers core promises:
 
 Minimum indicators include PUT / GET / HEAD / LIST results and delays, object size distribution, logical / physical bytes, Metadata QPS, Data / Replication / Repair bandwidth, Checksum Failure, Degraded Object, Scrub Coverage Age, Repair Backlog / Age, Staging / Orphan Bytes, each Failure Domain Capacity and hotspot Key.
 
-After completing [Review and Exercise](../../../08-templates-and-review/), you can explain Commit, sharding, redundancy, Repair, Multipart and GC in a closed-book manner. Encoding and durability models go to [`optional/`](optional/); cross-region, full versioning/WORM, Signed URL and product governance stay in [Parking Lot](PARKING-LOT.md).
+After completing [Review and Exercise](02-object-storage-review-and-practice.md), you can explain Commit, sharding, redundancy, Repair, Multipart and GC in a closed-book manner. Encoding and durability models go to [`optional/`](optional/); cross-region, full versioning/WORM, Signed URL and product governance stay in [Parking Lot](PARKING-LOT.md).

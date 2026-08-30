@@ -35,7 +35,7 @@ Synchronization and asynchronousness can also be mixed: payment requests complet
 2. [How to asynchronously: Queue, Pub/Sub, Event Stream and Workflow](02-how-to-asynchronously-message-model-and-selection.md)
 3. [Reliable Delivery: Success Boundary, Outbox and Consumption Semantics](03-reliable-delivery-success-boundary-and-consistency.md)
 4. [Runtime Correctness: Ordering, Backpressure, Retry, DLQ and Observability](04-runtime-correctness-ordering-backpressure-retry-and-observability.md)
-5. [Case Study: News Feed, Payment and Image Processing](../02-latency-throughput-and-tail-latency/06-case-study-and-design-checklist.md)
+5. [Case Study: News Feed, Payment and Image Processing](05-case-deduction-how-does-the-asynchronous-boundary-fall-into-the-design.md)
 
 ## Boundaries with other chapters
 

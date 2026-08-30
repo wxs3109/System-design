@@ -5,8 +5,8 @@ This case trains a transferable ability: starting from the smallest system that 
 The default learning path only has three documents:
 
 1. This article: fixed scope, target architecture and completion conditions.
-2. [Progressive Design Main Line](../04-rate-limiter/01-rate-limiter-the-main-line-of-progressive-design.md): Continuous derivation from the minimum system to the expansion plan.
-3. [Review and Practice](../01-load-balancer/02-load-balancer-review-and-practice.md): Close-book reconstruction of the design and verification of true mastery.
+2. [Progressive Design Main Line](01-job-scheduler-progressive-design-mainline.md): Continuous derivation from the minimum system to the expansion plan.
+3. [Review and Practice](02-job-scheduler-review-and-practice.md): Close-book reconstruction of the design and verification of true mastery.
 
 Stop when you have completed the exercise. Cron and implementation fragments are read on demand in [`optional/`](optional/); production management, workflow and multi-region remain in [Parking Lot](PARKING-LOT.md).
 

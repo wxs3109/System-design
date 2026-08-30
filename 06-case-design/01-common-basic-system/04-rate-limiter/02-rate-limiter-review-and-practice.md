@@ -1,6 +1,6 @@
 # Rate Limiter: review and practice
 
-This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) first, then close the document and complete it within 45–60 minutes.
+This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](01-rate-limiter-the-main-line-of-progressive-design.md) first, then close the document and complete it within 45–60 minutes.
 
 Use the same framework for each answer:
 

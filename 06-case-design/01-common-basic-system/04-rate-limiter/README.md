@@ -5,8 +5,8 @@ This case trains how to start with single-process Rate Limiting, and gradually i
 The default learning path only has three documents:
 
 1. This article: fixed scope, core model, architecture map and completion conditions.
-2. [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md): Continuously deduced from single-process Token Bucket to single-Region shared Rate Limiting.
-3. [Review and Practice](../01-load-balancer/02-load-balancer-review-and-practice.md): Close-book reconstruction of the design and verification of true mastery.
+2. [Progressive Design Mainline](01-rate-limiter-the-main-line-of-progressive-design.md): Continuously deduced from single-process Token Bucket to single-Region shared Rate Limiting.
+3. [Review and Practice](02-rate-limiter-review-and-practice.md): Close-book reconstruction of the design and verification of true mastery.
 
 Stop when you have completed the exercise. Algorithm implementation and rule interface semantics can be read on demand in [`optional/`](optional/); multi-Region, Token Lease and complete product governance stay in [Parking Lot](PARKING-LOT.md).
 

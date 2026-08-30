@@ -294,4 +294,4 @@ Minimal validation only covers core promises:
 
 Minimum indicators include ingress Request/s and Backend Attempt/s, P50/P99 latency breakdown, In-flight and errors per Pool / Endpoint, Active / New Connections, TLS Handshake Rate, inbound and outbound bandwidth, Ejection / Drain status, Snapshot Version distribution, Retry Amplification, Queue and Shed Rate. Average is not a substitute for Endpoint and AZ distributions.
 
-After completing [Review and Exercise](../../../08-templates-and-review/), you can deduce health, scheduling, fleet, configuration and overload boundaries in a closed-book manner. State convergence and long-lived connection variants go into [`optional/`](optional/); global scheduling, L4 Fast Path and full product governance stay in [Parking Lot](PARKING-LOT.md).
+After completing [Review and Exercise](02-load-balancer-review-and-practice.md), you can deduce health, scheduling, fleet, configuration and overload boundaries in a closed-book manner. State convergence and long-lived connection variants go into [`optional/`](optional/); global scheduling, L4 Fast Path and full product governance stay in [Parking Lot](PARKING-LOT.md).

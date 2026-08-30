@@ -1,6 +1,6 @@
 # Object Storage: review and practice
 
-This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) first, then close the document and complete it within 50–70 minutes.
+This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](01-object-storage-progressive-design-mainline.md) first, then close the document and complete it within 50–70 minutes.
 
 Use the same framework for each answer:
 

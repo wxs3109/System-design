@@ -118,6 +118,30 @@ for (const abs of walk(ROOT)) {
     if (/^-[A-Za-z]/.test(line)) {
       add(rel, no, 'list', 'bullet missing space after "-"')
     }
+    // 5) cross-case leakage
+    //
+    // A case's own reading path ("Progressive Design Mainline", "Review and
+    // Practice") must resolve inside that case. A link labelled as this case's
+    // mainline but pointing into a sibling case still resolves on disk, so the
+    // dead-link rule cannot see it — this is what a repo-wide fuzzy path
+    // rewrite silently produces.
+    const caseDir = /^(06-case-design\/[^/]+\/[^/]+)\//.exec(rel)
+    if (caseDir) {
+      for (const m of line.matchAll(/\[([^\]\n]*)\]\(([^)\n]+)\)/g)) {
+        const label = m[1].trim()
+        const target = m[2].split('#')[0].trim()
+        if (!/^(?:\.\.\/)/.test(target)) continue
+        if (!/^(?:0[12]-|.*(?:mainline|main-line|review-and-practice))/i.test(path.basename(target))) continue
+        if (!/mainline|main line|review and (?:practice|exercise)/i.test(label)) continue
+
+        const resolvedCase = path
+          .relative(ROOT, path.resolve(dir, target))
+          .split(path.sep).join('/')
+        if (!resolvedCase.startsWith(caseDir[1] + '/')) {
+          add(rel, no, 'cross-case', `"${label}" points outside its own case: ${target}`)
+        }
+      }
+    }
   })
 }
 

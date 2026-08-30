@@ -266,4 +266,4 @@ Minimal validation only covers core promises:
 
 The minimum metrics are Decision's QPS, P99, `ALLOW/DENY/ERROR/DEGRADED`, Store latency and errors, Shard/Hot Key load, and configuration version and age. Raw User ID, IP or API Key are not directly used as high-cardinality metric labels.
 
-After completing [Review and Exercise](../../../08-templates-and-review/), you can deduce Shared Counter, Atomic Decision, Sharding/Hot Key, Fault Contract and Rule Snapshot from a single process in closed volume and then stop. Algorithms and interface implementations enter [`optional/`](optional/) on demand; multi-rule transactions, Token Lease, global quotas and complete product governance remain in [Parking Lot](PARKING-LOT.md).
+After completing [Review and Exercise](02-rate-limiter-review-and-practice.md), you can deduce Shared Counter, Atomic Decision, Sharding/Hot Key, Fault Contract and Rule Snapshot from a single process in closed volume and then stop. Algorithms and interface implementations enter [`optional/`](optional/) on demand; multi-rule transactions, Token Lease, global quotas and complete product governance remain in [Parking Lot](PARKING-LOT.md).
