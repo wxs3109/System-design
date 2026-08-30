@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 2,
+  "id": "legacy-order-platform",
+  "name": "Legacy order platform",
+  "topology": {
+    "nodes": [
+      {
+        "id": "client-traffic",
+        "name": "Client traffic",
+        "type": "traffic",
+        "componentVersion": 1,
+        "position": { "x": 0, "y": 0 },
+        "config": {}
+      },
+      {
+        "id": "orders-service",
+        "name": "Orders service",
+        "type": "service",
+        "componentVersion": 1,
+        "position": { "x": 200, "y": 0 },
+        "rolePreset": { "id": "worker", "version": 1 },
+        "config": {
+          "replicas": 3,
+          "concurrencyPerReplica": 20,
+          "serviceTimeMs": 18,
+          "jitterMs": 2,
+          "errorRate": 0.001,
+          "maxQueueSize": 2000
+        }
+      },
+      {
+        "id": "orders-db",
+        "name": "Orders database",
+        "type": "database",
+        "componentVersion": 2,
+        "position": { "x": 400, "y": 100 },
+        "config": {
+          "maxConnections": 250,
+          "queryTimeMs": 8,
+          "jitterMs": 1,
+          "errorRate": 0.0005,
+          "maxQueueSize": 5000,
+          "shardCount": 8,
+          "replicasPerShard": 2,
+          "readPreference": "replica-preferred",
+          "replicationDelayMs": 75,
+          "writeRatio": 0.35,
+          "keySpaceSize": 10000000,
+          "hotKeyProbability": 0.08
+        }
+      },
+      {
+        "id": "orders-stream",
+        "name": "Orders stream",
+        "type": "stream",
+        "componentVersion": 1,
+        "position": { "x": 400, "y": -100 },
+        "config": {
+          "partitions": 24,
+          "producerCapacity": 5000,
+          "consumerGroups": 2,
+          "consumersPerGroup": 8,
+          "batchSize": 200,
+          "acknowledgement": "explicit",
+          "publishTimeMs": 1,
+          "consumeTimeMs": 6,
+          "jitterMs": 1,
+          "maxDepth": 2000000,
+          "errorRate": 0.0001
+        }
+      },
+      {
+        "id": "fulfillment-worker",
+        "name": "Fulfillment worker",
+        "type": "service",
+        "componentVersion": 1,
+        "position": { "x": 600, "y": -100 },
+        "config": {
+          "replicas": 4,
+          "concurrencyPerReplica": 10,
+          "serviceTimeMs": 25,
+          "jitterMs": 3,
+          "errorRate": 0,
+          "maxQueueSize": 4000
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "client-to-orders",
+        "source": "client-traffic",
+        "target": "orders-service",
+        "sourcePort": "out",
+        "targetPort": "in",
+        "weight": 1,
+        "sourceSemantic": "request",
+        "targetSemantic": "request",
+        "routingMode": "weighted-one"
+      },
+      {
+        "id": "orders-to-db",
+        "source": "orders-service",
+        "target": "orders-db",
+        "sourcePort": "out",
+        "targetPort": "in",
+        "weight": 2,
+        "sourceSemantic": "request",
+        "targetSemantic": "request",
+        "routingMode": "fan-out"
+      },
+      {
+        "id": "orders-to-stream",
+        "source": "orders-service",
+        "target": "orders-stream",
+        "sourcePort": "publish",
+        "targetPort": "consume",
+        "weight": 1,
+        "sourceSemantic": "publish",
+        "targetSemantic": "consume",
+        "routingMode": "async-publish"
+      },
+      {
+        "id": "stream-to-worker",
+        "source": "orders-stream",
+        "target": "fulfillment-worker",
+        "sourcePort": "publish",
+        "targetPort": "consume",
+        "weight": 1,
+        "sourceSemantic": "publish",
+        "targetSemantic": "consume",
+        "routingMode": "async-publish"
+      }
+    ],
+    "groups": [
+      {
+        "id": "primary-region",
+        "name": "Primary region",
+        "kind": "region",
+        "nodeIds": ["orders-service", "orders-db", "orders-stream"]
+      }
+    ],
+    "policies": [
+      {
+        "id": "orders-timeout",
+        "type": "timeout",
+        "version": 1,
+        "target": { "kind": "edge", "id": "orders-to-db" },
+        "order": 0,
+        "enabled": true,
+        "config": { "timeoutMs": 250 }
+      },
+      {
+        "id": "region-backpressure",
+        "type": "backpressure",
+        "version": 1,
+        "target": { "kind": "group", "id": "primary-region" },
+        "order": 1,
+        "enabled": false,
+        "config": { "maxInFlight": 5000, "overflow": "reject" }
+      }
+    ]
+  },
+  "experiments": [
+    {
+      "id": "baseline",
+      "name": "Baseline",
+      "workloads": [
+        {
+          "id": "baseline-load",
+          "name": "Baseline traffic",
+          "sourceNodeId": "client-traffic",
+          "requestsPerSecond": 120,
+          "startAtSeconds": 0,
+          "durationSeconds": 60,
+          "pattern": "poisson",
+          "requestBytes": 2048
+        }
+      ],
+      "faults": [
+        {
+          "id": "legacy-service-outage",
+          "targetNodeId": "orders-service",
+          "type": "node-down",
+          "startAtSeconds": 20,
+          "durationSeconds": 5,
+          "enabled": false
+        },
+        {
+          "id": "database-latency",
+          "target": { "kind": "edge", "id": "orders-to-db" },
+          "type": "latency-spike",
+          "startAtSeconds": 30,
+          "durationSeconds": 10,
+          "factor": 3,
+          "enabled": true
+        }
+      ],
+      "simulation": {
+        "durationSeconds": 60,
+        "sampleIntervalMs": 500,
+        "maxRequests": 250000,
+        "traceLimit": 300,
+        "maxHops": 80
+      },
+      "seed": "legacy-baseline-seed"
+    },
+    {
+      "id": "regional-failure",
+      "name": "Regional failure",
+      "workloads": [
+        {
+          "id": "failure-load",
+          "name": "Failure traffic",
+          "sourceNodeId": "client-traffic",
+          "requestsPerSecond": 300,
+          "startAtSeconds": 5,
+          "durationSeconds": 40,
+          "pattern": "constant",
+          "requestBytes": 4096
+        }
+      ],
+      "faults": [
+        {
+          "id": "primary-region-outage",
+          "target": { "kind": "group", "id": "primary-region" },
+          "type": "region-outage",
+          "startAtSeconds": 10,
+          "durationSeconds": 15,
+          "enabled": true
+        },
+        {
+          "id": "hot-orders",
+          "target": { "kind": "workload", "id": "failure-load" },
+          "type": "hot-key",
+          "startAtSeconds": 5,
+          "durationSeconds": 30,
+          "factor": 0.75,
+          "enabled": true
+        }
+      ],
+      "simulation": {
+        "durationSeconds": 50,
+        "sampleIntervalMs": 1000,
+        "maxRequests": 500000,
+        "traceLimit": 500,
+        "maxHops": 96
+      },
+      "seed": "legacy-regional-failure-seed"
+    }
+  ],
+  "activeExperimentId": "regional-failure"
+}

@@ -92,15 +92,17 @@ Exit criteria: a user starts with “Database” and then chooses only among imp
 
 Deliverables:
 
-- [ ] versioned API catalog with stable operation IDs, HTTP method/path, request/response JSON Schema references, payload estimates, ownership, and optional SLO targets;
-- [ ] versioned data-model catalog with discriminated Relational, Document, and Key-Value definitions;
-- [ ] relational tables, typed columns, nullability, primary/unique/foreign keys, indexes, cardinality, and row-size estimates;
-- [ ] document collections, JSON Schema, partition keys, secondary indexes, cardinality, and document-size estimates;
-- [ ] key/value schemas, key distribution, value-size estimates, TTL, and consistency hints;
-- [ ] versioned event catalog with event name/version, payload JSON Schema, partition/ordering key, producer, and consumers;
-- [ ] interaction/access-pattern catalog whose typed actions reference topology nodes, API operations, data objects/indexes, cache keys, and event contracts;
-- [ ] workload operation mixes with weights, key/value distributions, payload overrides, and arrival phases;
-- [ ] deterministic v2-to-v3 migration, reference validation, serialization, and compatibility fixtures.
+- [x] versioned API catalog with stable operation IDs, HTTP method/path, request/response JSON Schema references, payload estimates, ownership, and optional SLO targets;
+- [x] versioned data-model catalog with discriminated Relational, Document, and Key-Value definitions;
+- [x] relational tables, typed columns, nullability, primary/unique/foreign keys, indexes, cardinality, and row-size estimates;
+- [x] document collections, JSON Schema, partition keys, secondary indexes, cardinality, and document-size estimates;
+- [x] key/value schemas, key distribution, value-size estimates, TTL, and consistency hints;
+- [x] versioned event catalog with event name/version, payload JSON Schema, partition/ordering key, producer, and consumers;
+- [x] interaction/access-pattern catalog whose typed actions reference topology nodes, API operations, data objects/indexes, cache keys, and event contracts;
+- [x] workload operation mixes with weights, key/value distributions, payload overrides, and arrival phases;
+- [x] deterministic v2-to-v3 migration, reference validation, serialization, and compatibility fixtures.
+
+Status: complete. `ProjectFile v3` now separates topology, normalized business definitions, and experiments; distinguishes `capacity-only` from `business-aware`; validates cross-resource and topology references; and includes a serialization-stable order-system contract fixture. Version 1 and 2 imports migrate deterministically to capacity-only v3 without inventing contracts, while their Phase 1 executable scenarios remain unchanged. These contracts are intentionally not executed yet: P2.3 makes them generically editable and P2.4 gives them runtime meaning.
 
 Contracts are normalized internal domain objects. OpenAPI 3.1, JSON Schema 2020-12, and DBML are import/export formats behind adapters, not unvalidated arbitrary objects copied into runtime state.
 
@@ -233,8 +235,8 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 ## 7. Phase 2 definition of done
 
-- [ ] the palette follows category → variant → optional preset, with no separate preset shelf;
-- [ ] ProjectFile v3 represents APIs, data models, events, interactions, and operation-aware workloads;
+- [x] the palette follows category → variant → optional preset, with no separate preset shelf;
+- [x] ProjectFile v3 represents APIs, data models, events, interactions, and operation-aware workloads;
 - [ ] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
 - [ ] the generic order-system acceptance project proves the end-to-end workflow;
 - [ ] representative systems use shared behavior variants without case-specific runtime or editor branches;
@@ -246,4 +248,4 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 ## 8. Immediate execution order
 
-Implement P2.2 next and commit it independently. Then complete P2.3, P2.4, and P2.5 in order. Do not add Scheduler, CDN, Search Index, or new role names before the business contracts and operation-aware runtime pass the order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.
+Implement P2.3 next and commit it independently. Then complete P2.4 and P2.5 in order. Do not add Scheduler, CDN, Search Index, or new role names before the business contracts and operation-aware runtime pass the order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.

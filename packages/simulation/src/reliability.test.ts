@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyProject, spanSchema, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, spanSchema, type ProjectFile } from '@system-design/model'
 import { createRegisteredNode } from '@system-design/components'
 import { runSimulation } from './engine'
 
-const reliabilityProject = (serviceTimeMs = 100): ProjectFileV2 => {
+const reliabilityProject = (serviceTimeMs = 100): ProjectFile => {
   const project = createEmptyProject('reliability')
   project.topology.nodes = [
     createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }),

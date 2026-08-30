@@ -90,7 +90,10 @@ export function assessRunComparability(baseline: SimulationRunRecord, candidate:
   }
 
   if (baselineExperiment.seed !== candidateExperiment.seed) issues.push({ code: 'seed-mismatch', message: 'Random seeds differ.' })
-  if (!sameValue(baselineExperiment.workloads, candidateExperiment.workloads)) issues.push({ code: 'workload-mismatch', message: 'Workload definitions differ.' })
+  if (
+    !sameValue(baselineExperiment.workloads, candidateExperiment.workloads)
+    || !sameValue(baselineExperiment.operationWorkloads, candidateExperiment.operationWorkloads)
+  ) issues.push({ code: 'workload-mismatch', message: 'Workload definitions differ.' })
   if (!sameValue(baselineExperiment.faults, candidateExperiment.faults)) issues.push({ code: 'fault-mismatch', message: 'Fault schedules differ.' })
   if (!sameValue(baselineExperiment.simulation, candidateExperiment.simulation)) issues.push({ code: 'simulation-mismatch', message: 'Simulation duration, sampling, limits or trace settings differ.' })
   if (baseline.result.seed !== baselineExperiment.seed || candidate.result.seed !== candidateExperiment.seed) {

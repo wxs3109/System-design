@@ -78,7 +78,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.algorithm} · ${config.capacity} concurrent`,
   },
   {
-    type: 'service', version: 1, label: 'Service', description: 'A replicated concurrent request processor; API contracts are not modeled yet.', category: 'service', iconToken: 'server', color: '#3b82f6',
+    type: 'service', version: 1, label: 'Service', description: 'A replicated concurrent request processor. Project API contracts remain descriptive until the operation-aware runtime.', category: 'service', iconToken: 'server', color: '#3b82f6',
     configSchema: serviceConfigSchema, createDefaultConfig: () => ({ replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 }),
     configFields: [
       { kind: 'number', key: 'replicas', label: 'Replicas', min: 1, step: 1 },
@@ -166,7 +166,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.maxConnections} connections · ${config.queryTimeMs} ms`,
   },
   {
-    type: 'database', version: 2, label: 'Database', description: 'Routes generic keyed reads and writes across shards and replicas; table, SQL, and document schemas are not modeled yet.', category: 'database', iconToken: 'database', color: '#10b981',
+    type: 'database', version: 2, label: 'Database', description: 'Routes generic keyed reads and writes across shards and replicas. Project data models remain descriptive until the operation-aware runtime.', category: 'database', iconToken: 'database', color: '#10b981',
     configSchema: databaseConfigSchema, createDefaultConfig: () => ({ maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000, shardCount: 1, replicasPerShard: 0, readPreference: 'primary', replicationDelayMs: 100, writeRatio: 0.2, keySpaceSize: 1_000_000, hotKeyProbability: 0 }),
     configFields: [
       { kind: 'number', key: 'maxConnections', label: 'Connections / node', min: 1, step: 1 },

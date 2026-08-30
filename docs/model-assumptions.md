@@ -1,6 +1,8 @@
 # Simulation model assumptions
 
-This document defines what a Phase 1 result means. The simulator is a deterministic, virtual-time model for exploring system-design trade-offs. It is not a capacity promise, benchmark of a real product, cloud-provider emulator, packet-level network simulator, or correctness proof.
+This document defines what a current simulation result means. The simulator is a deterministic, virtual-time model for exploring system-design trade-offs. It is not a capacity promise, benchmark of a real product, cloud-provider emulator, packet-level network simulator, or correctness proof.
+
+`ProjectFile v3` can now store and validate business definitions for APIs, JSON Schemas, relational/document/key-value data models, cache keys, events, interactions, and operation workloads. P2.2 establishes those contracts only. Until the operation-aware compiler and runtime land in P2.4, simulation still executes the Phase 1 anonymous-request projection described below: business definitions, operation mixes, handler estimates, table/index metadata, and event identities do not change runtime events or metrics. A `business-aware` badge therefore describes the project model, not the current execution fidelity.
 
 Results are useful for comparing designs only when the experiment is held constant. Baseline and candidate runs must use identical workload definitions, fault schedules, simulation limits, and seed. Absolute values are model outputs, not production forecasts. Calibrate component inputs with measurements before using them for planning.
 
@@ -69,7 +71,7 @@ Faults do not model correlated stochastic failure, cascading failure discovery, 
 
 ## Unsupported inputs and safe failure
 
-Project files are validated before compilation. Phase 1 opens schema versions 1 and 2, migrates version 1 deterministically, and rejects missing, future, unknown, or structurally invalid versions. Unknown component or policy versions, invalid port semantics, duplicate identifiers, missing references, invalid fault targets, and unsupported policy targets fail with validation errors instead of being guessed or silently approximated.
+Project files are validated before compilation. The current parser opens schema versions 1, 2, and 3. Versions 1 and 2 migrate deterministically to a capacity-only v3 project with empty business catalogs and operation workloads; migration does not infer APIs, data models, events, or interactions. Version 3 validates those catalogs and all supported cross-resource/topology references. Missing, future, unknown, or structurally invalid versions are rejected. Unknown component or policy versions, invalid port semantics, duplicate identifiers, missing references, invalid fault targets, and unsupported policy targets fail with validation errors instead of being guessed or silently approximated.
 
 The following remain explicitly out of scope for Phase 1: vendor API compatibility; packet-level emulation; production traffic replay; arbitrary user code or public plugins; real distributed clocks; service discovery; protocol details; database query planning and storage engines; Raft, Paxos, or other consensus; accounts, hosted collaboration, and multiplayer editing.
 

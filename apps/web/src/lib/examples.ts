@@ -1,12 +1,12 @@
 import { createRegisteredNode } from '@system-design/components'
-import { createEmptyProject, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, type ProjectFile } from '@system-design/model'
 
 const connection = (id: string, source: string, target: string) => ({
   id, source, target, sourcePort: 'out', targetPort: 'in', weight: 1,
   sourceSemantic: 'request' as const, targetSemantic: 'request' as const, routingMode: 'weighted-one' as const,
 })
 
-export const createDirectExample = (): ProjectFileV2 => {
+export const createDirectExample = (): ProjectFile => {
   const project = createEmptyProject('direct-service')
   project.name = 'Direct service'
   project.topology.nodes = [
@@ -23,7 +23,7 @@ export const createDirectExample = (): ProjectFileV2 => {
   return project
 }
 
-export const createAsyncExample = (): ProjectFileV2 => {
+export const createAsyncExample = (): ProjectFile => {
   const project = createEmptyProject('async-pipeline')
   project.name = 'Async pipeline'
   project.topology.nodes = [
@@ -42,7 +42,7 @@ export const createAsyncExample = (): ProjectFileV2 => {
   return project
 }
 
-export const createDataPlatformExample = (): ProjectFileV2 => {
+export const createDataPlatformExample = (): ProjectFile => {
   const project = createEmptyProject('data-platform')
   project.name = 'Data platform'
   project.topology.nodes = [

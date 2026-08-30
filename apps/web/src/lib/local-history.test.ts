@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createEmptyProject, type SimulationResult } from '@system-design/model'
+import Dexie from 'dexie'
+import { createEmptyProject, type ProjectFileV2, type SimulationResult } from '@system-design/model'
 import { LocalHistoryDatabase, LocalHistoryRepository } from './local-history'
 
 const databases: LocalHistoryDatabase[] = []
@@ -15,6 +16,22 @@ const resultFor = (runId: string, projectId: string): SimulationResult => ({
   runId, scenarioId: projectId, seed: 'system-design', simulatedDurationMs: 1_000, wallClockDurationMs: 1,
   summary: { generatedRequests: 1, completedRequests: 1, failedRequests: 0, throughputPerSecond: 1, errorRate: 0, latencyP50Ms: 1, latencyP95Ms: 1, latencyP99Ms: 1 },
   nodes: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
+})
+
+const asProjectV2 = (project: ReturnType<typeof createEmptyProject>): ProjectFileV2 => ({
+  schemaVersion: 2,
+  id: project.id,
+  name: project.name,
+  topology: structuredClone(project.topology),
+  experiments: project.experiments.map((experiment) => ({
+    id: experiment.id,
+    name: experiment.name,
+    workloads: structuredClone(experiment.workloads),
+    faults: structuredClone(experiment.faults),
+    simulation: structuredClone(experiment.simulation),
+    seed: experiment.seed,
+  })),
+  activeExperimentId: project.activeExperimentId,
 })
 
 afterEach(async () => {
@@ -38,6 +55,44 @@ describe('local project and run history', () => {
 
     restored!.project.name = 'Changed after load'
     expect((await repository.loadActiveProject())?.project.name).toBe('Untitled system')
+  })
+
+  it('upgrades persisted v2 revisions and run snapshots to capacity-only v3 records', async () => {
+    const name = `history-test-${crypto.randomUUID()}`
+    const legacyDatabase = new Dexie(name)
+    legacyDatabase.version(1).stores({
+      projectRevisions: '&revisionId, projectId, [projectId+createdAt], fingerprint',
+      simulationRuns: '&runId, projectId, [projectId+createdAt], projectRevisionId',
+      activeWorkspace: '&key, updatedAt',
+    })
+    const project = asProjectV2(createEmptyProject('legacy-history'))
+    await legacyDatabase.table('projectRevisions').add({
+      revisionId: 'legacy-revision', projectId: project.id, projectName: project.name, createdAt: 1,
+      source: 'autosave', fingerprint: JSON.stringify(project), project,
+    })
+    await legacyDatabase.table('simulationRuns').add({
+      runId: 'legacy-run', projectId: project.id, projectRevisionId: 'legacy-revision',
+      experimentId: project.activeExperimentId, createdAt: 1, projectSnapshot: project, result: resultFor('legacy-run', project.id),
+    })
+    await legacyDatabase.table('activeWorkspace').add({
+      key: 'active', projectId: project.id, projectRevisionId: 'legacy-revision', updatedAt: 1,
+    })
+    legacyDatabase.close()
+
+    const database = new LocalHistoryDatabase(name)
+    databases.push(database)
+    const repository = new LocalHistoryRepository(database)
+    const revision = await repository.loadActiveProject()
+    const listedRevision = (await repository.listProjectRevisions(project.id))[0]
+    const run = (await repository.listSimulationRuns(project.id))[0]
+
+    expect(revision?.project).toMatchObject({ schemaVersion: 3, modelingMode: 'capacity-only' })
+    expect(revision?.project.definitions).toMatchObject({ schemaVersion: 1, apis: [], dataModels: [], events: [], interactions: [] })
+    expect(revision?.project.experiments[0]?.operationWorkloads).toEqual([])
+    expect(revision?.fingerprint).toBe(JSON.stringify(revision?.project))
+    expect(listedRevision?.project).toEqual(revision?.project)
+    expect(listedRevision?.fingerprint).toBe(JSON.stringify(listedRevision?.project))
+    expect(run?.projectSnapshot).toEqual(revision?.project)
   })
 
   it('deduplicates identical autosaves but keeps exact changed revisions', async () => {

@@ -8,6 +8,12 @@ import {
   positionSchema,
   type Scenario,
 } from './schema'
+import {
+  businessDefinitionsSchema,
+  emptyBusinessDefinitions,
+  operationWorkloadSchema,
+  type BusinessDefinitions,
+} from './business-contracts'
 
 const projectIdSchema = z.string().trim().min(1).max(120)
 const projectNameSchema = z.string().trim().min(1).max(120)
@@ -69,6 +75,10 @@ export const experimentSchema = z.object({
   simulation: simulationConfigSchema,
   seed: z.string().min(1).max(120),
 })
+
+export const projectExperimentSchema = experimentSchema.extend({
+  operationWorkloads: z.array(operationWorkloadSchema).max(1_000).default([]),
+}).strict()
 
 const addDuplicateIssue = (
   context: z.RefinementCtx,
@@ -171,12 +181,209 @@ export type ProjectConnection = z.infer<typeof projectConnectionSchema>
 export type TopologyGroup = z.infer<typeof topologyGroupSchema>
 export type PolicyAttachment = z.infer<typeof policyAttachmentSchema>
 export type Topology = z.infer<typeof topologySchema>
-export type Experiment = z.infer<typeof experimentSchema>
+export type ExperimentV2 = z.infer<typeof experimentSchema>
 export type ProjectFileV2 = z.infer<typeof projectFileV2Schema>
+
+export const projectModelingModeSchema = z.enum(['capacity-only', 'business-aware'])
+
+const referenceKey = (id: string, version: number) => `${id}@${version}`
+const operationReferenceKey = (apiId: string, apiVersion: number, operationId: string) => `${referenceKey(apiId, apiVersion)}:${operationId}`
+
+const addReferenceIssue = (context: z.RefinementCtx, path: (string | number)[], message: string) => {
+  context.addIssue({ code: 'custom', path, message })
+}
+
+const validateBusinessReferences = (project: {
+  modelingMode: 'capacity-only' | 'business-aware'
+  topology: Topology
+  definitions: BusinessDefinitions
+  experiments: Array<ExperimentV2 & { operationWorkloads: z.infer<typeof operationWorkloadSchema>[] }>
+}, context: z.RefinementCtx) => {
+  const nodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
+  const schemas = new Set(project.definitions.jsonSchemas.map((schema) => referenceKey(schema.id, schema.version)))
+  const apis = new Map(project.definitions.apis.map((api) => [referenceKey(api.id, api.version), api]))
+  const operations = new Map(project.definitions.apis.flatMap((api) => api.operations.map((operation) => [
+    operationReferenceKey(api.id, api.version, operation.id), { api, operation },
+  ] as const)))
+  const models = new Map(project.definitions.dataModels.map((model) => [referenceKey(model.id, model.version), model]))
+  const events = new Map(project.definitions.events.map((event) => [referenceKey(event.id, event.version), event]))
+  const cacheKeys = new Set(project.definitions.cacheKeys.map((key) => referenceKey(key.id, key.version)))
+  const interactions = new Map(project.definitions.interactions.map((interaction) => [referenceKey(interaction.id, interaction.version), interaction]))
+
+  const requireNode = (id: string, path: (string | number)[], expectedType?: string) => {
+    const node = nodes.get(id)
+    if (!node) {
+      addReferenceIssue(context, path, `Unknown topology node: ${id}`)
+      return undefined
+    }
+    if (expectedType && node.type !== expectedType) addReferenceIssue(context, path, `Node ${id} must be a ${expectedType} component.`)
+    return node
+  }
+  const requireSchema = (reference: { schemaId: string; schemaVersion: number }, path: (string | number)[]) => {
+    const key = referenceKey(reference.schemaId, reference.schemaVersion)
+    if (!schemas.has(key)) addReferenceIssue(context, path, `Unknown JSON Schema: ${key}`)
+  }
+  const requireOperation = (reference: { apiId: string; apiVersion: number; operationId: string }, path: (string | number)[]) => {
+    const key = operationReferenceKey(reference.apiId, reference.apiVersion, reference.operationId)
+    const operation = operations.get(key)
+    if (!operation) addReferenceIssue(context, path, `Unknown API operation: ${key}`)
+    return operation
+  }
+
+  project.definitions.apis.forEach((api, apiIndex) => {
+    requireNode(api.ownerNodeId, ['definitions', 'apis', apiIndex, 'ownerNodeId'], 'service')
+    api.operations.forEach((operation, operationIndex) => {
+      if (operation.request) requireSchema(operation.request.schema, ['definitions', 'apis', apiIndex, 'operations', operationIndex, 'request', 'schema'])
+      operation.responses.forEach((response, responseIndex) => {
+        if (response.body) requireSchema(response.body.schema, ['definitions', 'apis', apiIndex, 'operations', operationIndex, 'responses', responseIndex, 'body', 'schema'])
+      })
+    })
+  })
+
+  project.definitions.dataModels.forEach((model, modelIndex) => {
+    requireNode(model.ownerNodeId, ['definitions', 'dataModels', modelIndex, 'ownerNodeId'], 'database')
+    if (model.kind === 'document') model.collections.forEach((collection, collectionIndex) => {
+      requireSchema(collection.documentSchema, ['definitions', 'dataModels', modelIndex, 'collections', collectionIndex, 'documentSchema'])
+    })
+    if (model.kind === 'key-value') model.namespaces.forEach((namespace, namespaceIndex) => {
+      requireSchema(namespace.keySchema, ['definitions', 'dataModels', modelIndex, 'namespaces', namespaceIndex, 'keySchema'])
+      requireSchema(namespace.valueSchema, ['definitions', 'dataModels', modelIndex, 'namespaces', namespaceIndex, 'valueSchema'])
+    })
+  })
+
+  project.definitions.events.forEach((event, eventIndex) => {
+    requireSchema(event.payloadSchema, ['definitions', 'events', eventIndex, 'payloadSchema'])
+    requireNode(event.producerNodeId, ['definitions', 'events', eventIndex, 'producerNodeId'], 'service')
+    event.consumerNodeIds.forEach((nodeId, nodeIndex) => requireNode(nodeId, ['definitions', 'events', eventIndex, 'consumerNodeIds', nodeIndex], 'service'))
+  })
+  project.definitions.cacheKeys.forEach((cacheKey, cacheKeyIndex) => {
+    if (cacheKey.valueSchema) requireSchema(cacheKey.valueSchema, ['definitions', 'cacheKeys', cacheKeyIndex, 'valueSchema'])
+  })
+
+  project.definitions.interactions.forEach((interaction, interactionIndex) => {
+    requireOperation(interaction.entryOperation, ['definitions', 'interactions', interactionIndex, 'entryOperation'])
+    interaction.actions.forEach((action, actionIndex) => {
+      const path = ['definitions', 'interactions', interactionIndex, 'actions', actionIndex] as (string | number)[]
+      if (action.kind === 'api-call') {
+        requireNode(action.sourceNodeId, [...path, 'sourceNodeId'])
+        const target = requireNode(action.targetNodeId, [...path, 'targetNodeId'], 'service')
+        const referenced = requireOperation(action.operation, [...path, 'operation'])
+        if (target && referenced && referenced.api.ownerNodeId !== target.id) addReferenceIssue(context, [...path, 'targetNodeId'], `API operation is owned by node ${referenced.api.ownerNodeId}, not ${target.id}.`)
+      } else if (action.kind === 'service-call') {
+        requireNode(action.sourceNodeId, [...path, 'sourceNodeId'])
+        const target = requireNode(action.targetNodeId, [...path, 'targetNodeId'], 'service')
+        if (action.operation) {
+          const referenced = requireOperation(action.operation, [...path, 'operation'])
+          if (target && referenced && referenced.api.ownerNodeId !== target.id) addReferenceIssue(context, [...path, 'targetNodeId'], `API operation is owned by node ${referenced.api.ownerNodeId}, not ${target.id}.`)
+        }
+      } else if (action.kind === 'data-access') {
+        const node = requireNode(action.nodeId, [...path, 'nodeId'], 'database')
+        const modelKey = referenceKey(action.model.modelId, action.model.modelVersion)
+        const model = models.get(modelKey)
+        if (!model) {
+          addReferenceIssue(context, [...path, 'model'], `Unknown data model: ${modelKey}`)
+          return
+        }
+        if (node && model.ownerNodeId !== node.id) addReferenceIssue(context, [...path, 'nodeId'], `Data model is owned by node ${model.ownerNodeId}, not ${node.id}.`)
+        const object = model.kind === 'relational' ? model.tables.find((candidate) => candidate.id === action.objectId)
+          : model.kind === 'document' ? model.collections.find((candidate) => candidate.id === action.objectId)
+            : model.namespaces.find((candidate) => candidate.id === action.objectId)
+        if (!object) {
+          addReferenceIssue(context, [...path, 'objectId'], `Unknown ${model.kind} data object: ${action.objectId}`)
+          return
+        }
+        if (action.indexId) {
+          const indexExists = model.kind === 'relational'
+            ? (() => {
+                const relationalObject = model.tables.find((candidate) => candidate.id === action.objectId)!
+                return [relationalObject.primaryKey, ...relationalObject.uniqueKeys, ...relationalObject.indexes].some((index) => index.id === action.indexId)
+              })()
+            : model.kind === 'document'
+              ? model.collections.find((candidate) => candidate.id === action.objectId)!.secondaryIndexes.some((index) => index.id === action.indexId)
+              : false
+          if (!indexExists) addReferenceIssue(context, [...path, 'indexId'], `Unknown index ${action.indexId} on data object ${action.objectId}.`)
+        }
+      } else if (action.kind === 'cache-access') {
+        requireNode(action.nodeId, [...path, 'nodeId'], 'cache')
+        const key = referenceKey(action.key.cacheKeyId, action.key.cacheKeyVersion)
+        if (!cacheKeys.has(key)) addReferenceIssue(context, [...path, 'key'], `Unknown cache-key contract: ${key}`)
+      } else {
+        const brokerNodeId = action.brokerNodeId
+        const broker = requireNode(brokerNodeId, [...path, 'brokerNodeId'])
+        if (broker && broker.type !== 'queue' && broker.type !== 'stream') addReferenceIssue(context, [...path, 'brokerNodeId'], `Node ${brokerNodeId} must be a queue or stream component.`)
+        const eventKey = referenceKey(action.event.eventId, action.event.eventVersion)
+        const event = events.get(eventKey)
+        if (!event) addReferenceIssue(context, [...path, 'event'], `Unknown event contract: ${eventKey}`)
+        if (action.kind === 'event-publish') {
+          requireNode(action.producerNodeId, [...path, 'producerNodeId'], 'service')
+          if (event && event.producerNodeId !== action.producerNodeId) addReferenceIssue(context, [...path, 'producerNodeId'], `Event ${eventKey} is produced by ${event.producerNodeId}.`)
+        } else {
+          requireNode(action.consumerNodeId, [...path, 'consumerNodeId'], 'service')
+          if (event && !event.consumerNodeIds.includes(action.consumerNodeId)) addReferenceIssue(context, [...path, 'consumerNodeId'], `Node ${action.consumerNodeId} is not a consumer of event ${eventKey}.`)
+        }
+      }
+    })
+  })
+
+  project.experiments.forEach((experiment, experimentIndex) => {
+    const operationWorkloadIds = new Set<string>()
+    experiment.operationWorkloads.forEach((workload, workloadIndex) => {
+      if (operationWorkloadIds.has(workload.id)) addDuplicateIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'id'], 'operation workload', workload.id)
+      operationWorkloadIds.add(workload.id)
+      requireNode(workload.sourceNodeId, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'sourceNodeId'], 'traffic')
+      workload.operationMix.forEach((mix, mixIndex) => {
+        const operation = requireOperation(mix.operation, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'operationMix', mixIndex, 'operation'])
+        const interactionKey = referenceKey(mix.interaction.interactionId, mix.interaction.interactionVersion)
+        const interaction = interactions.get(interactionKey)
+        if (!interaction) addReferenceIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'operationMix', mixIndex, 'interaction'], `Unknown interaction: ${interactionKey}`)
+        if (operation && interaction && operationReferenceKey(interaction.entryOperation.apiId, interaction.entryOperation.apiVersion, interaction.entryOperation.operationId) !== operationReferenceKey(mix.operation.apiId, mix.operation.apiVersion, mix.operation.operationId)) {
+          addReferenceIssue(context, ['experiments', experimentIndex, 'operationWorkloads', workloadIndex, 'operationMix', mixIndex, 'interaction'], `Interaction ${interactionKey} does not implement the selected operation.`)
+        }
+      })
+    })
+  })
+
+  const hasDefinitions = project.definitions.jsonSchemas.length + project.definitions.apis.length + project.definitions.dataModels.length
+    + project.definitions.events.length + project.definitions.cacheKeys.length + project.definitions.interactions.length > 0
+  const hasOperationWorkloads = project.experiments.some((experiment) => experiment.operationWorkloads.length > 0)
+  if (project.modelingMode === 'capacity-only' && (hasDefinitions || hasOperationWorkloads)) {
+    addReferenceIssue(context, ['modelingMode'], 'A capacity-only project cannot contain business definitions or operation workloads.')
+  }
+}
+
+const projectFileV3BaseSchema = z.object({
+  schemaVersion: z.literal(3),
+  id: projectIdSchema,
+  name: projectNameSchema,
+  modelingMode: projectModelingModeSchema,
+  topology: topologySchema,
+  definitions: businessDefinitionsSchema,
+  experiments: z.array(projectExperimentSchema).min(1).max(1_000),
+  activeExperimentId: projectIdSchema,
+}).strict()
+
+export const projectFileV3Schema = projectFileV3BaseSchema.superRefine((project, context) => {
+  const phaseOneShape = {
+    schemaVersion: 2 as const, id: project.id, name: project.name, topology: project.topology,
+    experiments: project.experiments.map(({ operationWorkloads: _operationWorkloads, ...experiment }) => experiment),
+    activeExperimentId: project.activeExperimentId,
+  }
+  const phaseOneValidation = projectFileV2Schema.safeParse(phaseOneShape)
+  if (!phaseOneValidation.success) phaseOneValidation.error.issues.forEach((issue) => {
+    context.addIssue({ code: 'custom', path: [...issue.path], message: issue.message })
+  })
+  validateBusinessReferences(project, context)
+})
+
+export type Experiment = z.infer<typeof projectExperimentSchema>
+export type ProjectModelingMode = z.infer<typeof projectModelingModeSchema>
+export type ProjectFileV3 = z.infer<typeof projectFileV3Schema>
+export type ProjectFile = ProjectFileV3
+export type AnyProjectFile = ProjectFileV2 | ProjectFileV3
 
 export class UnsupportedProjectVersionError extends Error {
   constructor(readonly version: unknown) {
-    super(`Unsupported project schemaVersion: ${String(version)}. This version can open schemaVersion 1 or 2.`)
+    super(`Unsupported project schemaVersion: ${String(version)}. This version can open schemaVersion 1, 2, or 3.`)
     this.name = 'UnsupportedProjectVersionError'
   }
 }
@@ -211,29 +418,46 @@ export const migrateScenarioV1ToProjectV2 = (input: Scenario | unknown): Project
   })
 }
 
-export const parseProjectFile = (input: unknown): ProjectFileV2 => {
+export const migrateProjectV2ToProjectV3 = (input: ProjectFileV2 | unknown): ProjectFileV3 => {
+  const project = projectFileV2Schema.parse(input)
+  return projectFileV3Schema.parse({
+    ...project,
+    schemaVersion: 3,
+    modelingMode: 'capacity-only',
+    definitions: emptyBusinessDefinitions(),
+    experiments: project.experiments.map((experiment) => ({ ...experiment, operationWorkloads: [] })),
+  })
+}
+
+export const migrateScenarioV1ToProjectV3 = (input: Scenario | unknown): ProjectFileV3 => migrateProjectV2ToProjectV3(migrateScenarioV1ToProjectV2(input))
+
+export const parseProjectFile = (input: unknown): ProjectFileV3 => {
   if (typeof input !== 'object' || input === null || !('schemaVersion' in input)) {
     throw new UnsupportedProjectVersionError(undefined)
   }
   const version = (input as { schemaVersion?: unknown }).schemaVersion
-  if (version === 1) return migrateScenarioV1ToProjectV2(input)
-  if (version === 2) return projectFileV2Schema.parse(input)
+  if (version === 1) return migrateScenarioV1ToProjectV3(input)
+  if (version === 2) return migrateProjectV2ToProjectV3(input)
+  if (version === 3) return projectFileV3Schema.parse(input)
   throw new UnsupportedProjectVersionError(version)
 }
 
-export const getActiveExperiment = (project: ProjectFileV2): Experiment => {
+export function getActiveExperiment(project: ProjectFileV3): Experiment
+export function getActiveExperiment(project: ProjectFileV2): ExperimentV2
+export function getActiveExperiment(project: AnyProjectFile): Experiment | ExperimentV2
+export function getActiveExperiment(project: AnyProjectFile): Experiment | ExperimentV2 {
   const experiment = project.experiments.find((candidate) => candidate.id === project.activeExperimentId)
   if (!experiment) throw new Error(`Active experiment ${project.activeExperimentId} does not exist.`)
   return experiment
 }
 
-export const setActiveExperiment = (input: ProjectFileV2, experimentId: string): ProjectFileV2 => projectFileV2Schema.parse({
-  ...input,
-  activeExperimentId: experimentId,
-})
+export const setActiveExperiment = <T extends AnyProjectFile>(input: T, experimentId: string): T => {
+  const schema = input.schemaVersion === 3 ? projectFileV3Schema : projectFileV2Schema
+  return schema.parse({ ...input, activeExperimentId: experimentId }) as T
+}
 
-export const projectToScenario = (input: ProjectFileV2, experimentId = input.activeExperimentId): Scenario => {
-  const project = projectFileV2Schema.parse(input)
+export const projectToScenario = (input: AnyProjectFile, experimentId = input.activeExperimentId): Scenario => {
+  const project = input.schemaVersion === 3 ? projectFileV3Schema.parse(input) : projectFileV2Schema.parse(input)
   const experiment = project.experiments.find((candidate) => candidate.id === experimentId)
   if (!experiment) throw new Error(`Experiment ${experimentId} does not exist.`)
   return scenarioSchema.parse({
@@ -265,11 +489,13 @@ export const projectToScenario = (input: ProjectFileV2, experimentId = input.act
   })
 }
 
-export const createEmptyProject = (id = 'untitled-system'): ProjectFileV2 => projectFileV2Schema.parse({
-  schemaVersion: 2,
+export const createEmptyProject = (id = 'untitled-system'): ProjectFileV3 => projectFileV3Schema.parse({
+  schemaVersion: 3,
   id,
   name: 'Untitled system',
+  modelingMode: 'capacity-only',
   topology: { nodes: [], edges: [], groups: [], policies: [] },
+  definitions: emptyBusinessDefinitions(),
   experiments: [{
     id: defaultExperimentId,
     name: 'Default experiment',
@@ -277,6 +503,7 @@ export const createEmptyProject = (id = 'untitled-system'): ProjectFileV2 => pro
     faults: [],
     simulation: { durationSeconds: 30, sampleIntervalMs: 1_000, maxRequests: 100_000, traceLimit: 200, maxHops: 64 },
     seed: 'system-design',
+    operationWorkloads: [],
   }],
   activeExperimentId: defaultExperimentId,
 })

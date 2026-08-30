@@ -1,9 +1,9 @@
-import { parseProjectFile, projectToScenario, scenarioSchema, type ComponentNode, type Connection, type PortSemantic, type ProjectConnection, type ProjectFileV2, type RoutingMode, type Scenario } from '@system-design/model'
+import { parseProjectFile, projectToScenario, scenarioSchema, type ComponentNode, type Connection, type PortSemantic, type ProjectConnection, type ProjectFile, type ProjectFileV2, type RoutingMode, type Scenario } from '@system-design/model'
 import { arePortSemanticsCompatible, componentRegistry } from '@system-design/components'
 import { getNodeBehavior } from '../components/behavior'
 import { compilePolicies, type CompiledPolicy } from '../policies/compiler'
 
-export type SimulationInput = Scenario | ProjectFileV2
+export type SimulationInput = Scenario | ProjectFileV2 | ProjectFile
 export interface CompiledConnection {
   id: string
   source: string
@@ -37,11 +37,12 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
   let edges: CompiledConnection[]
   let experimentId: string
   let policies = new Map<string, CompiledPolicy[]>()
-  if (version === 2) {
+  if (version === 2 || version === 3) {
     const project = parseProjectFile(input)
+    const topologyNodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
     for (const edge of project.topology.edges) {
-      const source = project.topology.nodes.find((node) => node.id === edge.source)!
-      const target = project.topology.nodes.find((node) => node.id === edge.target)!
+      const source = topologyNodes.get(edge.source)!
+      const target = topologyNodes.get(edge.target)!
       const sourcePort = componentRegistry.getPort(source, edge.sourcePort, 'output')
       const targetPort = componentRegistry.getPort(target, edge.targetPort, 'input')
       if (!sourcePort) throw new Error(`Edge ${edge.id} references unknown output port ${edge.sourcePort} on ${source.name}.`)

@@ -185,7 +185,7 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 
 Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
 
-P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。下一步让 Service 定义 API、Database 定义数据模型、Workload 命中具体 operation，并让访问模式真正影响仿真；之后才增加 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router 等新行为。
+P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 也已建立 `ProjectFile v3` 业务合同，使 API、数据模型、事件、交互与 operation workload 成为可校验、可引用、可迁移的项目资源。下一步在 P2.3 提供通用合同编辑器，再由 P2.4 让这些合同真正影响仿真；之后才增加 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router 等新行为。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -222,7 +222,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0、P2.1a 与 P2.1b 已完成。Palette 已按 category → variant → optional preset 组织；当前组件仍缺少 API、数据模型和访问模式。下一步是 P2.2：建立 ProjectFile v3 业务契约。
+当前进度：P2.0、P2.1a、P2.1b 与 P2.2 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 已能表达并严格校验 API、JSON Schema、Relational/Document/Key-Value 数据模型、Cache Key、Event、Interaction 和 operation-level Workload。下一步是 P2.3：用通用 UI 编辑这些合同并完成 OpenAPI、JSON Schema 与 DBML 适配器选型。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
@@ -274,7 +274,9 @@ Phase 1 的 P1.5 已完成：Trace Explorer 可按结果、延迟、组件与原
 
 Phase 1 的 P1.6 已完成：项目迁移、序列化、固定种子重放、计数、队列、重试和 hop-limit 具有属性不变量；100 节点项目中的 10 万请求运行受 `<5s` CI 性能门禁约束；裁剪 request trace 不会改变 summary、节点指标或时间序列；Results 与 Fault Timeline 有原生键盘路径；模型假设和不支持语义已文档化，CI 统一运行完整 `pnpm check`。
 
-当前仍是早期平台：已有容量、排队、故障和可观测性基础，但请求仍缺少业务 operation，Service 尚无 API contract，Database 尚无 Table/Collection、字段和 Index。下一步按 Phase 2 计划先修正组件层级，再完成 ProjectFile v3、合同编辑器和 operation-aware runtime；不能继续用新增图标掩盖这些语义缺口。
+Phase 2 的 P2.2 已完成：`ProjectFile v3` 区分 `capacity-only` 与 `business-aware`，提供版本化 API、数据、事件、Cache Key、Interaction 和 operation workload 合同；v1/v2 项目会确定性迁移且不虚构业务定义；订单系统 fixture 覆盖三类数据模型、typed actions 与跨资源引用校验。
+
+当前仍是早期平台：已有业务合同模型，但通用编辑器和 operation-aware runtime 尚未完成。现有仿真仍执行 Phase 1 的匿名请求语义，不能把表、索引、operation mix 或事件合同解读为已经影响指标。下一步依次完成 P2.3 合同编辑器、P2.4 operation-aware runtime 和 P2.5 通用订单系统纵切；不能继续用新增图标掩盖这些语义缺口。
 
 本地运行：
 

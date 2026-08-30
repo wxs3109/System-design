@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyProject, type ProjectFileV2, type SimulationResult, type TimeSeriesPoint } from '@system-design/model'
+import { createEmptyProject, createOrderSystemContractFixture, type ProjectFile, type SimulationResult, type TimeSeriesPoint } from '@system-design/model'
 import type { SimulationRunRecord } from './local-history'
 import { alignComparisonSeries, assessRunComparability, compareSimulationRuns } from './run-comparison'
 
@@ -21,7 +21,7 @@ const result = (runId: string, scenarioId: string, seed: string, throughput: num
   traces: [], events: [], spans: [], warnings: [],
 })
 
-const run = (runId: string, project: ProjectFileV2, throughput: number): SimulationRunRecord => ({
+const run = (runId: string, project: ProjectFile, throughput: number): SimulationRunRecord => ({
   runId, projectId: project.id, projectRevisionId: `${runId}-revision`, experimentId: project.activeExperimentId, createdAt: 1,
   projectSnapshot: structuredClone(project), result: result(runId, project.id, project.experiments[0]!.seed, throughput),
 })
@@ -61,6 +61,18 @@ describe('run comparison', () => {
     ])
     expect(comparison.metrics).toEqual([])
     expect(comparison.series.throughputPerSecond).toEqual([])
+  })
+
+  it('locks operation-level workload mixes for business-aware runs', () => {
+    const baselineProject = createOrderSystemContractFixture()
+    const candidateProject = structuredClone(baselineProject)
+    candidateProject.experiments[0]!.operationWorkloads[0]!.phases[1]!.requestsPerSecond = 200
+
+    const comparison = assessRunComparability(run('baseline', baselineProject, 8), run('candidate', candidateProject, 10))
+    expect(comparison).toEqual({
+      comparable: false,
+      issues: [{ code: 'workload-mismatch', message: 'Workload definitions differ.' }],
+    })
   })
 
   it('rejects same-run, legacy and tampered result snapshots explicitly', () => {

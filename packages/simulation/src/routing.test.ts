@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyProject, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, migrateProjectV2ToProjectV3, type ProjectFile, type ProjectFileV2 } from '@system-design/model'
 import { createRegisteredNode } from '@system-design/components'
 import { runSimulation } from './engine'
 
-const routingProject = (mode: 'weighted-one' | 'fan-out' | 'async-publish'): ProjectFileV2 => {
+const routingProject = (mode: 'weighted-one' | 'fan-out' | 'async-publish'): ProjectFile => {
   const project = createEmptyProject(`routing-${mode}`)
   project.topology.nodes = [
     createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }),
@@ -107,9 +107,20 @@ describe('explicit routing modes', () => {
     expect(result.events.some((event) => event.reason === 'backpressure')).toBe(false)
   })
 
-  it('replays ProjectFile v2 events deterministically for a fixed run id and seed', async () => {
-    const project = routingProject('weighted-one')
-    const [first, second] = await Promise.all([runSimulation(project, 'project-replay'), runSimulation(structuredClone(project), 'project-replay')])
-    expect(second.events).toEqual(first.events)
+  it('preserves complete Phase 1 results when ProjectFile v2 is migrated to v3', async () => {
+    const current = routingProject('weighted-one')
+    const legacy: ProjectFileV2 = {
+      schemaVersion: 2,
+      id: current.id,
+      name: current.name,
+      topology: structuredClone(current.topology),
+      experiments: current.experiments.map(({ operationWorkloads: _operationWorkloads, ...experiment }) => structuredClone(experiment)),
+      activeExperimentId: current.activeExperimentId,
+    }
+    const migrated = migrateProjectV2ToProjectV3(legacy)
+    const [before, after] = await Promise.all([runSimulation(legacy, 'project-migration'), runSimulation(migrated, 'project-migration')])
+    const { wallClockDurationMs: _beforeWallClock, ...beforeDeterministic } = before
+    const { wallClockDurationMs: _afterWallClock, ...afterDeterministic } = after
+    expect(afterDeterministic).toEqual(beforeDeterministic)
   })
 })

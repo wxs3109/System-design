@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createRegisteredNode } from '@system-design/components'
-import { createEmptyProject, type ProjectConnection, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, type ProjectConnection, type ProjectFile } from '@system-design/model'
 import { runSimulation } from './engine'
 
 const requestEdge = (id: string, source: string, target: string, weight = 1): ProjectConnection => ({
   id, source, target, sourcePort: 'out', targetPort: 'in', weight, routingMode: 'weighted-one', sourceSemantic: 'request', targetSemantic: 'request',
 })
 
-const loadBalancedProject = (algorithm: 'weighted' | 'round-robin' | 'health-aware'): ProjectFileV2 => {
+const loadBalancedProject = (algorithm: 'weighted' | 'round-robin' | 'health-aware'): ProjectFile => {
   const project = createEmptyProject(`load-balancer-${algorithm}`)
   project.topology.nodes = [
     createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }, 'load'),

@@ -2,23 +2,23 @@
 
 import { addEdge, applyEdgeChanges, applyNodeChanges, type Connection as FlowConnection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react'
 import { componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry } from '@system-design/components'
-import { createEmptyProject, parseProjectFile, projectFileV2Schema, projectToScenario, type ComponentType, type Experiment, type Fault, type PolicyAttachment, type ProjectConnection, type ProjectFileV2, type SimulationResult, type TopologyGroup } from '@system-design/model'
+import { createEmptyProject, parseProjectFile, projectFileV3Schema, projectToScenario, type ComponentType, type Experiment, type Fault, type PolicyAttachment, type ProjectConnection, type ProjectFile, type SimulationResult, type TopologyGroup } from '@system-design/model'
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
 
-export type ProjectNode = ProjectFileV2['topology']['nodes'][number]
+export type ProjectNode = ProjectFile['topology']['nodes'][number]
 export type WorkbenchNode = Node<ProjectNode, 'component'>
 
 interface WorkbenchState {
-  project: ProjectFileV2
+  project: ProjectFile
   selectedNodeId: string | null
   selectedEdgeId: string | null
   selectedFaultId: string | null
   result: SimulationResult | null
   running: boolean
   error: string | null
-  setProject: (project: ProjectFileV2 | unknown) => void
-  restoreProject: (project: ProjectFileV2 | unknown) => void
+  setProject: (project: ProjectFile | unknown) => void
+  restoreProject: (project: ProjectFile | unknown) => void
   addComponent: (type: ComponentType, position: { x: number; y: number }) => void
   addCatalogComponent: (categoryId: string, type: ComponentType, position: { x: number; y: number }, preset?: { id: string; version: number }) => void
   /** Compatibility command for existing callers and ProjectFile v2 preset provenance. */
@@ -51,7 +51,7 @@ interface WorkbenchState {
   setError: (error: string | null) => void
 }
 
-const updateActiveExperiment = (project: ProjectFileV2, update: (experiment: Experiment) => Experiment): ProjectFileV2 => ({
+const updateActiveExperiment = (project: ProjectFile, update: (experiment: Experiment) => Experiment): ProjectFile => ({
   ...project, experiments: project.experiments.map((experiment) => experiment.id === project.activeExperimentId ? update(experiment) : experiment),
 })
 
@@ -63,7 +63,7 @@ const faultTargetsRemovedNode = (fault: Fault, removedIds: Set<string>) => {
 const faultTargetsRemovedEdge = (fault: Fault, removedIds: Set<string>) => fault.target?.kind === 'edge' && removedIds.has(fault.target.id)
 const faultTargetsRemovedGroup = (fault: Fault, removedIds: Set<string>) => fault.target?.kind === 'group' && removedIds.has(fault.target.id)
 
-const projectToNodes = (nodes: ProjectFileV2['topology']['nodes']): WorkbenchNode[] => nodes.map((node) => ({
+const projectToNodes = (nodes: ProjectFile['topology']['nodes']): WorkbenchNode[] => nodes.map((node) => ({
   id: node.id,
   type: 'component',
   position: node.position,
@@ -72,7 +72,7 @@ const projectToNodes = (nodes: ProjectFileV2['topology']['nodes']): WorkbenchNod
   initialWidth: 198,
   initialHeight: 76,
 }))
-const projectToEdges = (project: ProjectFileV2): Edge[] => project.topology.edges.map((edge) => {
+const projectToEdges = (project: ProjectFile): Edge[] => project.topology.edges.map((edge) => {
   const routingLabel = edge.routingMode === 'weighted-one' ? undefined : edge.routingMode === 'fan-out' ? 'fan-out' : 'async'
   const policyLabels = project.topology.policies
     .filter((policy) => policy.target.kind === 'edge' && policy.target.id === edge.id)
@@ -83,8 +83,8 @@ const projectToEdges = (project: ProjectFileV2): Edge[] => project.topology.edge
     label: [routingLabel, ...policyLabels].filter(Boolean).join(' · ') || undefined,
   }
 })
-const syncNodes = (project: ProjectFileV2, nodes: WorkbenchNode[]): ProjectFileV2 => ({ ...project, topology: { ...project.topology, nodes: nodes.map((flowNode) => ({ ...flowNode.data, position: flowNode.position })) } })
-const syncEdges = (project: ProjectFileV2, edges: Edge[]): ProjectFileV2 => ({
+const syncNodes = (project: ProjectFile, nodes: WorkbenchNode[]): ProjectFile => ({ ...project, topology: { ...project.topology, nodes: nodes.map((flowNode) => ({ ...flowNode.data, position: flowNode.position })) } })
+const syncEdges = (project: ProjectFile, edges: Edge[]): ProjectFile => ({
   ...project,
   topology: {
     ...project.topology,
@@ -231,7 +231,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
     const groups = state.project.topology.groups.map((group) => group.id === groupId ? {
       ...group, ...updates, ...(updates.nodeIds === undefined ? {} : { nodeIds: [...new Set(updates.nodeIds.filter((nodeId) => nodeIds.has(nodeId)))] }),
     } : group)
-    const parsed = projectFileV2Schema.safeParse({ ...state.project, topology: { ...state.project.topology, groups } })
+    const parsed = projectFileV3Schema.safeParse({ ...state.project, topology: { ...state.project.topology, groups } })
     return parsed.success ? { project: parsed.data, result: null, error: null } : { error: parsed.error.issues[0]?.message ?? 'Invalid region update.' }
   }),
   deleteRegion: (groupId) => set((state) => ({
@@ -369,7 +369,7 @@ const applyTimeTravel = (direction: 'undo' | 'redo') => {
   if (direction === 'undo') history.undo()
   else history.redo()
   const state = useWorkbenchStore.getState()
-  const parsed = projectFileV2Schema.safeParse(state.project)
+  const parsed = projectFileV3Schema.safeParse(state.project)
   if (!parsed.success) {
     if (direction === 'undo') history.redo()
     else history.undo()
@@ -402,8 +402,8 @@ export const redoProject = () => {
 export const useCanUndo = () => useStore(useWorkbenchStore.temporal, (state) => state.pastStates.length > 0)
 export const useCanRedo = () => useStore(useWorkbenchStore.temporal, (state) => state.futureStates.length > 0)
 
-export const getScenario = (project: ProjectFileV2) => {
+export const getScenario = (project: ProjectFile) => {
   return projectToScenario(project)
 }
 
-export { projectToEdges, projectToNodes, projectFileV2Schema }
+export { projectToEdges, projectToNodes, projectFileV3Schema }

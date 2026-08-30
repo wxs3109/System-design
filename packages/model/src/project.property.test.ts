@@ -4,6 +4,7 @@ import {
   createEmptyScenario,
   createNode,
   migrateScenarioV1ToProjectV2,
+  migrateProjectV2ToProjectV3,
   parseProjectFile,
   projectFileV2Schema,
   projectToScenario,
@@ -62,7 +63,7 @@ describe('ProjectFile migration properties', () => {
       const migrated = migrateScenarioV1ToProjectV2(scenario)
       const replay = parseProjectFile(JSON.parse(JSON.stringify(scenario)))
 
-      expect(replay).toEqual(migrated)
+      expect(replay).toEqual(migrateProjectV2ToProjectV3(migrated))
       expect(projectToScenario(migrated)).toEqual(scenario)
       expect(projectFileV2Schema.safeParse(migrated).success).toBe(true)
     }), { numRuns: 100 })
@@ -70,11 +71,11 @@ describe('ProjectFile migration properties', () => {
 
   it('keeps migrated projects valid and stable across JSON serialization', () => {
     fc.assert(fc.property(executableScenarioArbitrary, (scenario) => {
-      const migrated = migrateScenarioV1ToProjectV2(scenario)
+      const migrated = migrateProjectV2ToProjectV3(migrateScenarioV1ToProjectV2(scenario))
       const serialized = JSON.stringify(migrated)
       const parsed = parseProjectFile(JSON.parse(serialized))
 
-      expect(projectFileV2Schema.safeParse(parsed).success).toBe(true)
+      expect(parsed.schemaVersion).toBe(3)
       expect(JSON.stringify(parsed)).toBe(serialized)
     }), { numRuns: 100 })
   })

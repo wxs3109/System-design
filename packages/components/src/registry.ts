@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { Fault, PolicyAttachment, PortSemantic, Position, ProjectComponentNode, ProjectFileV2 } from '@system-design/model'
+import type { Fault, PolicyAttachment, PortSemantic, Position, ProjectComponentNode, ProjectFile, ProjectFileV2 } from '@system-design/model'
 
 export type PortDirection = 'input' | 'output'
 
@@ -187,7 +187,7 @@ export class ComponentRegistry {
     return { ...node, config: manifest.configSchema.parse(node.config) }
   }
 
-  validateProject(project: ProjectFileV2, presets?: ComponentPresetRegistry): ProjectFileV2 {
+  validateProject<T extends ProjectFileV2 | ProjectFile>(project: T, presets?: ComponentPresetRegistry): T {
     return {
       ...project,
       topology: {

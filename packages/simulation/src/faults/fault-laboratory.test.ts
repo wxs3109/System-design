@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyProject, createNode, projectToScenario, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, createNode, projectToScenario, type ProjectFile } from '@system-design/model'
 import { runSimulation } from '../engine'
 
-const projectWithNetwork = (): ProjectFileV2 => {
+const projectWithNetwork = (): ProjectFile => {
   const project = createEmptyProject('fault-laboratory')
   const traffic = createNode('traffic', 'traffic', { x: 0, y: 0 }, 'load')
   const network = createNode('network', 'network', { x: 100, y: 0 })

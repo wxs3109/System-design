@@ -1,7 +1,7 @@
 'use client'
 
 import Dexie, { type DexieOptions, type Table } from 'dexie'
-import { getActiveExperiment, projectFileV2Schema, type ProjectFileV2, type SimulationResult } from '@system-design/model'
+import { getActiveExperiment, parseProjectFile, type ProjectFile, type SimulationResult } from '@system-design/model'
 
 export type ProjectRevisionSource = 'autosave' | 'import' | 'manual' | 'restore'
 
@@ -12,7 +12,7 @@ export interface ProjectRevisionRecord {
   createdAt: number
   source: ProjectRevisionSource
   fingerprint: string
-  project: ProjectFileV2
+  project: ProjectFile
 }
 
 export interface SimulationRunRecord {
@@ -22,7 +22,7 @@ export interface SimulationRunRecord {
   experimentId: string
   createdAt: number
   /** Exact design and experiment used by this run. Legacy v1 records may not have one. */
-  projectSnapshot?: ProjectFileV2
+  projectSnapshot?: ProjectFile
   result: SimulationResult
 }
 
@@ -38,8 +38,22 @@ const MAX_RUNS_PER_PROJECT = 25
 let fallbackId = 0
 
 const immutableCopy = <T>(value: T): T => structuredClone(value)
-const fingerprintProject = (project: ProjectFileV2) => JSON.stringify(project)
+const fingerprintProject = (project: ProjectFile) => JSON.stringify(project)
 const nextId = () => globalThis.crypto?.randomUUID?.() ?? `fallback-${Date.now()}-${fallbackId++}`
+const normalizeRevision = (revision: ProjectRevisionRecord): ProjectRevisionRecord => {
+  const project = parseProjectFile(immutableCopy(revision.project))
+  return {
+    ...immutableCopy(revision),
+    projectId: project.id,
+    projectName: project.name,
+    fingerprint: fingerprintProject(project),
+    project,
+  }
+}
+const normalizeRun = (run: SimulationRunRecord): SimulationRunRecord => ({
+  ...immutableCopy(run),
+  ...(run.projectSnapshot ? { projectSnapshot: parseProjectFile(immutableCopy(run.projectSnapshot)) } : {}),
+})
 
 export class LocalHistoryDatabase extends Dexie {
   projectRevisions!: Table<ProjectRevisionRecord, string>
@@ -48,10 +62,23 @@ export class LocalHistoryDatabase extends Dexie {
 
   constructor(name = 'system-design-simulator', options?: DexieOptions) {
     super(name, options)
-    this.version(1).stores({
+    const stores = {
       projectRevisions: '&revisionId, projectId, [projectId+createdAt], fingerprint',
       simulationRuns: '&runId, projectId, [projectId+createdAt], projectRevisionId',
       activeWorkspace: '&key, updatedAt',
+    }
+    this.version(1).stores(stores)
+    this.version(2).stores(stores).upgrade(async (transaction) => {
+      await transaction.table<ProjectRevisionRecord>('projectRevisions').toCollection().modify((revision) => {
+        const project = parseProjectFile(revision.project)
+        revision.project = project
+        revision.projectId = project.id
+        revision.projectName = project.name
+        revision.fingerprint = fingerprintProject(project)
+      })
+      await transaction.table<SimulationRunRecord>('simulationRuns').toCollection().modify((run) => {
+        if (run.projectSnapshot) run.projectSnapshot = parseProjectFile(run.projectSnapshot)
+      })
     })
   }
 }
@@ -59,8 +86,8 @@ export class LocalHistoryDatabase extends Dexie {
 export class LocalHistoryRepository {
   constructor(readonly database = new LocalHistoryDatabase()) {}
 
-  async saveProjectRevision(input: ProjectFileV2 | unknown, source: ProjectRevisionSource = 'autosave'): Promise<ProjectRevisionRecord> {
-    const project = projectFileV2Schema.parse(immutableCopy(input))
+  async saveProjectRevision(input: ProjectFile | unknown, source: ProjectRevisionSource = 'autosave'): Promise<ProjectRevisionRecord> {
+    const project = parseProjectFile(immutableCopy(input))
     const fingerprint = fingerprintProject(project)
 
     return this.database.transaction('rw', this.database.projectRevisions, this.database.simulationRuns, this.database.activeWorkspace, async () => {
@@ -96,7 +123,7 @@ export class LocalHistoryRepository {
     if (!active) return undefined
     const revision = await this.database.projectRevisions.get(active.projectRevisionId)
     if (!revision) return undefined
-    return { ...immutableCopy(revision), project: projectFileV2Schema.parse(immutableCopy(revision.project)) }
+    return normalizeRevision(revision)
   }
 
   async listProjectRevisions(projectId: string, limit = MAX_REVISIONS_PER_PROJECT): Promise<ProjectRevisionRecord[]> {
@@ -106,17 +133,17 @@ export class LocalHistoryRepository {
       .reverse()
       .limit(limit)
       .toArray()
-    return records.map(immutableCopy)
+    return records.map(normalizeRevision)
   }
 
   async loadProjectRevision(revisionId: string): Promise<ProjectRevisionRecord | undefined> {
     const revision = await this.database.projectRevisions.get(revisionId)
     if (!revision) return undefined
-    return { ...immutableCopy(revision), project: projectFileV2Schema.parse(immutableCopy(revision.project)) }
+    return normalizeRevision(revision)
   }
 
-  async saveSimulationRun(projectInput: ProjectFileV2 | unknown, result: SimulationResult, projectRevisionId?: string): Promise<SimulationRunRecord> {
-    const project = projectFileV2Schema.parse(immutableCopy(projectInput))
+  async saveSimulationRun(projectInput: ProjectFile | unknown, result: SimulationResult, projectRevisionId?: string): Promise<SimulationRunRecord> {
+    const project = parseProjectFile(immutableCopy(projectInput))
     const experiment = getActiveExperiment(project)
     const revision = projectRevisionId
       ? await this.database.projectRevisions.get(projectRevisionId)
@@ -149,7 +176,7 @@ export class LocalHistoryRepository {
       .reverse()
       .limit(limit)
       .toArray()
-    return records.map(immutableCopy)
+    return records.map(normalizeRun)
   }
 
   private latestRevisionForProject(projectId: string) {

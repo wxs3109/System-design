@@ -1,4 +1,4 @@
-import type { Fault, ProjectFileV2 } from '@system-design/model'
+import type { Fault, ProjectFile } from '@system-design/model'
 
 export const faultTypeLabels: Record<Fault['type'], string> = {
   'node-down': 'Node down',
@@ -13,9 +13,9 @@ export const faultTypeLabels: Record<Fault['type'], string> = {
 
 export const faultTarget = (fault: Fault): NonNullable<Fault['target']> => fault.target ?? { kind: 'node', id: fault.targetNodeId! }
 
-const getActiveWorkloads = (project: ProjectFileV2) => project.experiments.find((experiment) => experiment.id === project.activeExperimentId)?.workloads ?? []
+const getActiveWorkloads = (project: ProjectFile) => project.experiments.find((experiment) => experiment.id === project.activeExperimentId)?.workloads ?? []
 
-export const faultTargetName = (fault: Fault, project: ProjectFileV2) => {
+export const faultTargetName = (fault: Fault, project: ProjectFile) => {
   const target = faultTarget(fault)
   if (target.kind === 'node') return project.topology.nodes.find((node) => node.id === target.id)?.name ?? target.id
   if (target.kind === 'edge') {
@@ -29,7 +29,7 @@ export const faultTargetName = (fault: Fault, project: ProjectFileV2) => {
   return project.topology.groups.find((group) => group.id === target.id)?.name ?? target.id
 }
 
-export function affectedTopology(fault: Fault | undefined, project: ProjectFileV2) {
+export function affectedTopology(fault: Fault | undefined, project: ProjectFile) {
   const nodes = new Set<string>()
   const edges = new Set<string>()
   if (!fault) return { nodes, edges }

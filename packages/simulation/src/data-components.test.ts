@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRegisteredNode } from '@system-design/components'
-import { createEmptyProject, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, type ProjectFile } from '@system-design/model'
 import { runSimulation } from './engine'
 
 const edge = (id: string, source: string, target: string, sourcePort = 'out', targetPort = 'in', routingMode: 'weighted-one' | 'async-publish' = 'weighted-one') => ({
@@ -9,7 +9,7 @@ const edge = (id: string, source: string, target: string, sourcePort = 'out', ta
   targetSemantic: (targetPort === 'consume' ? 'consume' : 'request') as 'request' | 'consume',
 })
 
-const project = (id: string): ProjectFileV2 => {
+const project = (id: string): ProjectFile => {
   const value = createEmptyProject(id)
   value.experiments[0]!.seed = `${id}-seed`
   value.experiments[0]!.simulation = { durationSeconds: 2, sampleIntervalMs: 250, maxRequests: 1_000, traceLimit: 20, maxHops: 20 }

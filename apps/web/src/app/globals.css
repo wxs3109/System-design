@@ -76,6 +76,8 @@ button { color: inherit; }
 .topbar-center { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--muted); font-size: 11px; gap: 8px; }
 .topbar-center strong { color: var(--muted-bright); }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; }
+.modeling-mode { padding: 3px 7px; color: var(--muted-bright); border: 1px solid var(--border-bright); border-radius: 99px; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.modeling-mode--business-aware { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, var(--border)); background: color-mix(in srgb, var(--cyan) 8%, transparent); }
 .separator { width: 1px; height: 12px; background: var(--border-bright); }
 .top-actions { display: flex; gap: 7px; }
 .button, .icon-button { border: 1px solid var(--border); background: var(--control); border-radius: 7px; cursor: pointer; transition: .15s ease; }

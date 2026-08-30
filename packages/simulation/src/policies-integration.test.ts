@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptyProject, type ProjectFileV2 } from '@system-design/model'
+import { createEmptyProject, type ProjectFile } from '@system-design/model'
 import { createRegisteredNode } from '@system-design/components'
 import { runSimulation } from './engine'
 
-const directProject = (requestsPerSecond = 10): ProjectFileV2 => {
+const directProject = (requestsPerSecond = 10): ProjectFile => {
   const project = createEmptyProject('policy-integration')
   project.topology.nodes = [createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }), createRegisteredNode('service', 'service', { x: 100, y: 0 })]
   project.topology.edges = [{ id: 'edge', source: 'traffic', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' }]

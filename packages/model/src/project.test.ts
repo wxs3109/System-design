@@ -4,6 +4,7 @@ import {
   createEmptyScenario,
   createNode,
   migrateScenarioV1ToProjectV2,
+  migrateProjectV2ToProjectV3,
   parseProjectFile,
   projectFileV2Schema,
   projectToScenario,
@@ -28,7 +29,7 @@ describe('ProjectFile v2', () => {
     const source = scenarioV1()
     const first = migrateScenarioV1ToProjectV2(source)
     const second = parseProjectFile(JSON.parse(JSON.stringify(source)))
-    expect(second).toEqual(first)
+    expect(second).toEqual(migrateProjectV2ToProjectV3(first))
     expect(projectToScenario(first)).toEqual(source)
     expect(first.topology.nodes.every((node) => node.componentVersion === 1)).toBe(true)
     expect(first.topology.nodes[0]!.config).toEqual({})
@@ -36,7 +37,7 @@ describe('ProjectFile v2', () => {
 
   it('round-trips a valid v2 project', () => {
     const project = migrateScenarioV1ToProjectV2(scenarioV1())
-    expect(parseProjectFile(JSON.parse(JSON.stringify(project)))).toEqual(project)
+    expect(parseProjectFile(JSON.parse(JSON.stringify(project)))).toEqual(migrateProjectV2ToProjectV3(project))
     expect(projectFileV2Schema.parse(project)).toEqual(project)
     expect(project.topology.edges[0]).toMatchObject({ routingMode: 'weighted-one', sourceSemantic: 'request', targetSemantic: 'request' })
   })
@@ -82,7 +83,7 @@ describe('ProjectFile v2', () => {
 
   it('rejects unsupported versions with an actionable error', () => {
     expect(() => parseProjectFile({ schemaVersion: 99 })).toThrow(UnsupportedProjectVersionError)
-    expect(() => parseProjectFile({ schemaVersion: 99 })).toThrow('schemaVersion 1 or 2')
+    expect(() => parseProjectFile({ schemaVersion: 99 })).toThrow('schemaVersion 1, 2, or 3')
   })
 
   it('validates references across topology and experiments', () => {

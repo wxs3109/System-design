@@ -1,4 +1,4 @@
-import type { ProjectFileV2, Scenario, SimulationProgress, SimulationResult } from '@system-design/model'
+import type { ProjectFile, ProjectFileV2, Scenario, SimulationProgress, SimulationResult } from '@system-design/model'
 import type { SimulationWorkerRequest, SimulationWorkerResponse } from './protocol'
 
 export interface WorkerLike {
@@ -29,7 +29,7 @@ export class SimulationWorkerClient {
 
   get activeRunId() { return this.active?.id ?? null }
 
-  run(scenario: Scenario | ProjectFileV2, options: { signal?: AbortSignal; runId?: string; onProgress?: (progress: SimulationProgress) => void } = {}): Promise<SimulationResult> {
+  run(scenario: Scenario | ProjectFileV2 | ProjectFile, options: { signal?: AbortSignal; runId?: string; onProgress?: (progress: SimulationProgress) => void } = {}): Promise<SimulationResult> {
     if (this.disposed) return Promise.reject(new Error('Simulation worker client is disposed.'))
     if (this.active) this.cancelActive()
     if (options.signal?.aborted) return Promise.reject(abortError())

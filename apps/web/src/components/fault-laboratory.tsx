@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { Experiment, Fault, ProjectFileV2 } from '@system-design/model'
+import type { Experiment, Fault, ProjectFile } from '@system-design/model'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { FaultTimeline } from './fault-timeline'
 import { faultTarget, faultTargetName, faultTypeLabels } from './fault-topology'
@@ -10,7 +10,7 @@ type FaultTarget = NonNullable<Fault['target']>
 
 interface FaultLaboratoryProps {
   experiment: Experiment
-  project: ProjectFileV2
+  project: ProjectFile
   selectedFaultId: string | null
   onSelectFault: (faultId: string | null) => void
   onAddFault: () => void
@@ -58,7 +58,7 @@ const factorLabel: Partial<Record<Fault['type'], string>> = {
 }
 const probabilityFactor = (type: Fault['type']) => ['capacity-drop', 'bandwidth-drop', 'packet-loss', 'hot-key'].includes(type)
 
-function targetChoices(project: ProjectFileV2, experiment: Experiment, kind: FaultTarget['kind']) {
+function targetChoices(project: ProjectFile, experiment: Experiment, kind: FaultTarget['kind']) {
   if (kind === 'node') return project.topology.nodes.map((node) => ({ id: node.id, label: node.name }))
   if (kind === 'edge') return project.topology.edges.map((edge) => {
     const source = project.topology.nodes.find((node) => node.id === edge.source)?.name ?? edge.source

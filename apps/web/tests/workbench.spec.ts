@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { createOrderSystemContractFixture } from '@system-design/model'
 
 async function openComponentCategory(page: Page, name: string) {
   const category = page.locator('.category-toggle').filter({ hasText: name })
@@ -88,6 +89,7 @@ test('starts blank and rejects an unconnected design', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('Start with an empty canvas')).toBeVisible()
   await expect(page.getByText('0 components')).toBeVisible()
+  await expect(page.getByLabel('Project modeling mode: Capacity-only')).toBeVisible()
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.locator('.error-toast')).toContainText('Add at least one enabled component')
 })
@@ -163,10 +165,11 @@ test('runs the reusable data-platform topology and exposes domain metrics', asyn
   await expect(page.locator('.domain-metrics').filter({ hasText: 'bytes/s' })).toBeVisible()
 })
 
-test('migrates a v1 import and exports ProjectFile v2', async ({ page }) => {
+test('migrates a v1 import and exports a capacity-only ProjectFile v3', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacyScenario)) })
   await expect(page.getByText('2 components')).toBeVisible()
+  await expect(page.getByLabel('Project modeling mode: Capacity-only')).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export' }).click()
@@ -175,9 +178,24 @@ test('migrates a v1 import and exports ProjectFile v2', async ({ page }) => {
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(Buffer.from(chunk))
   const project = JSON.parse(Buffer.concat(chunks).toString())
-  expect(project.schemaVersion).toBe(2)
+  expect(project.schemaVersion).toBe(3)
+  expect(project.modelingMode).toBe('capacity-only')
+  expect(project.definitions).toEqual({
+    schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], interactions: [],
+  })
   expect(project.topology.nodes[0].componentVersion).toBe(1)
   expect(project.experiments[0].seed).toBe('legacy-seed')
+  expect(project.experiments[0].operationWorkloads).toEqual([])
+})
+
+test('identifies an imported ProjectFile v3 with business contracts', async ({ page }) => {
+  await page.goto('/')
+  const fixture = createOrderSystemContractFixture()
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'business-aware.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)),
+  })
+  await expect(page.getByLabel('Project modeling mode: Business-aware')).toBeVisible()
+  await expect(page.getByText('6 components')).toBeVisible()
 })
 
 test('attaches and configures manifest-driven reliability policies', async ({ page }) => {

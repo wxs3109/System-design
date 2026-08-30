@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
-import type { Experiment, ProjectFileV2 } from '@system-design/model'
+import type { Experiment, ProjectFile } from '@system-design/model'
 import { DataSet } from 'vis-data'
 import { Timeline, type DataItem, type TimelineItem, type TimelineOptions } from 'vis-timeline'
 import { faultTargetName, faultTypeLabels } from './fault-topology'
@@ -13,7 +13,7 @@ const timelineValueMs = (value: { valueOf: () => unknown }) => Number(value.valu
 
 interface FaultTimelineProps {
   experiment: Experiment
-  project: ProjectFileV2
+  project: ProjectFile
   selectedFaultId: string | null
   onSelect: (faultId: string | null) => void
   onMove: (faultId: string, startAtSeconds: number, durationSeconds: number) => void

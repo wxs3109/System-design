@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createEmptyProject, projectFileV2Schema, type SimulationResult } from '@system-design/model'
+import { createEmptyProject, projectFileV3Schema, type SimulationResult } from '@system-design/model'
 import { redoProject, undoProject, useWorkbenchStore } from './store'
 
 const emptyResult: SimulationResult = {
@@ -24,11 +24,11 @@ describe('validated project undo and redo', () => {
     undoProject()
     expect(useWorkbenchStore.getState().project).toEqual(before)
     expect(useWorkbenchStore.getState().result).toBeNull()
-    expect(() => projectFileV2Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+    expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
 
     redoProject()
     expect(useWorkbenchStore.getState().project).toEqual(after)
-    expect(() => projectFileV2Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+    expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
   })
 
   it('starts restored sessions with an empty undo stack', () => {
@@ -67,14 +67,14 @@ describe('validated project undo and redo', () => {
     useWorkbenchStore.getState().selectNode('api')
     useWorkbenchStore.getState().deleteSelectedNode()
     expect(useWorkbenchStore.getState().project.topology.groups[0]?.nodeIds).toEqual([])
-    expect(() => projectFileV2Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+    expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
   })
 
   it('adds a role preset as a resolved behavior with stable preset identity', () => {
     useWorkbenchStore.getState().addRolePreset('worker', 1, { x: 10, y: 20 })
     const node = useWorkbenchStore.getState().project.topology.nodes[0]!
     expect(node).toMatchObject({ name: 'Worker', type: 'service', componentVersion: 1, rolePreset: { id: 'worker', version: 1 }, config: { replicas: 4, concurrencyPerReplica: 1 } })
-    expect(() => projectFileV2Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+    expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
   })
 
   it('creates a variant and nested preset through its component category', () => {
