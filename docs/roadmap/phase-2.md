@@ -2,147 +2,246 @@
 
 ## 1. Outcome
 
-Phase 2 turns the Phase 1 simulator into a broader and externally extensible component platform. It first proves the abstraction against missing, reusable system primitives; only then does it publish an SDK and load third-party packages.
+Phase 2 turns the Phase 1 capacity and failure simulator into a business-aware System Design workbench. Users must be able to define what an API accepts, what a service does, what data a store owns, which indexes and keys support an access pattern, which events are published, and how traffic is split across those operations. The simulator must execute those definitions instead of sending anonymous requests through decorative nodes.
 
-At the end of Phase 2, users must be able to choose clearly separated behavior components and role presets, build all representative systems in the coverage audit, install a versioned component package without editing the workbench core, and run isolated batch experiments using the same project/result contracts.
+At the end of Phase 2, users can:
 
-Detailed scope evidence: [Component coverage audit](../component-coverage.md).
+- choose a component category, then a truthful behavior variant and optional preset;
+- define reusable API, data, event, and interaction contracts without writing application code;
+- bind workload mixes to named operations and inspect operation-specific traces and metrics;
+- measure the effects of indexes, scans, payload sizes, hot keys, read/write mixes, caches, queues, and failures;
+- assemble representative systems without case-specific editor or runtime branches;
+- extend the same contracts through a versioned SDK and isolated plugin boundary;
+- run reproducible batch experiments and share compatible project artifacts.
 
-## 2. Non-negotiable rules
+Detailed scope evidence: [Component coverage audit](../component-coverage.md). Current runtime limits remain documented in [Simulation model assumptions](../model-assumptions.md).
 
-1. A behavior component adds real runtime semantics; a role preset only resolves to existing behavior and optional existing policies.
-2. Palette count is not progress. Decorative aliases and vendor logos do not count as behavior coverage.
-3. Project files store the resolved behavior type/version. Preset identity is optional versioned metadata and can never change runtime meaning silently.
-4. Unknown behavior, preset, policy, or package versions fail safely. No fallback may guess executable semantics.
-5. Built-in and external components use the same manifest, compiler, event, metric, and fault contracts.
-6. Reuse React Flow, Zod, SimScript, Web Workers, ECharts, Zustand, and Dexie; Phase 2 does not build replacement infrastructure.
-7. Each implementation settlement is verified and committed before the next one begins.
+## 2. Product taxonomy
 
-## 3. Compatibility decision
+The product uses three different concepts. They must not be flattened into parallel palette items.
 
-`ProjectFile v2` remains the executable format while optional role-preset metadata is added. Existing v1 migrations and v2 files remain valid. A preset resolves at creation/import time to a normal component node containing the base behavior `type`, `componentVersion`, and validated `config`.
+1. **Component category** is the architectural building block shown in the primary palette, such as Service, Database, Cache, Messaging, Gateway, Network, or Object Storage. It owns discovery and grouping, not runtime behavior.
+2. **Behavior variant** is a versioned executable form inside a category. It owns configuration validation, ports, runtime semantics, events, metrics, and supported faults. Examples include Relational Database, Document Database, Key-Value Store, API Service, and Worker. If SQL and NoSQL differ in schema, query, consistency, or cost behavior, they are variants rather than presets.
+3. **Preset** is an optional named starting configuration for exactly one variant. It may provide validated defaults and attach existing policies, but it adds no ports, schema rules, runtime dispatch, metrics, or claims of capability. Presets appear only inside the category/variant creation flow or as a configuration action; they never occupy a top-level palette section.
 
-The compiler and runtime execute only that resolved behavior. Removing the preset catalog must not make an otherwise valid project impossible to run; it may only remove role-specific presentation. If a future extension cannot preserve this rule, it requires a new project schema version and an explicit migration.
+The runtime executes a resolved behavior variant. Removing a preset catalog must not make an exported project unexecutable. A variant may be offered only after its claimed semantics are implemented and tested. Vendor product names are adapters or presets only when the generic variant can represent them truthfully.
 
-## 4. Settlements
+## 3. Non-negotiable rules
 
-### P2.0 — Coverage and classification
+1. Every visible semantic claim must be executable, or explicitly marked as documentation-only and excluded from simulated conclusions.
+2. Palette count is not progress. Decorative aliases, vendor logos, and differently named copies of one behavior do not increase coverage.
+3. API, data, event, and interaction definitions are project-level, versioned resources referenced by stable IDs. They do not live as unstructured blobs inside an individual node's `config`.
+4. A field that claims to affect performance or correctness must be consumed by compilation/runtime and covered by a result-changing test.
+5. Topology describes deployable structure; contracts describe business meaning; experiments describe workload and faults. Layout pixels affect none of them.
+6. Built-in and external variants use the same manifest, compiler, event, metric, fault, and compatibility contracts.
+7. Reuse React Flow, Zod, SimScript, Web Workers, ECharts, Zustand, and Dexie. Reuse OpenAPI, JSON Schema, and database-schema tooling through adapters after a bounded compatibility spike; do not build general-purpose parsers, form engines, or graph editors from scratch.
+8. Unknown category, variant, preset, policy, contract, or package versions fail with actionable errors. Runtime meaning is never guessed.
+9. Existing project files remain importable through explicit, deterministic migrations. Migrations never invent APIs, tables, indexes, or interactions that did not exist.
+10. Each settlement is implemented, verified, and committed independently before the next settlement begins.
 
-Deliverables:
+## 4. Compatibility direction
 
-- [x] inventory the nine shipped behavior types;
-- [x] define behavior-component versus role-preset acceptance rules;
-- [x] audit ten representative systems;
-- [x] prioritize missing reusable behaviors;
-- [x] define the compatibility direction for preset metadata.
+`ProjectFile v2` remains supported as the capacity-only format shipped by Phase 1. `ProjectFile v3` adds the business contract catalogs and references required for operation-aware simulation. Importing v2 into v3 preserves its current anonymous-request behavior and creates no fake business definitions. Capacity-only projects remain visibly identified as such.
 
-Status: planning complete. This settlement changes scope and documentation only; it does not claim new runtime behavior.
+The existing `RolePresetManifest` and resolved-node representation are reusable implementation foundations, but the separate “Role presets” palette shipped in P2.1 is transitional UI. Existing preset metadata continues to round-trip for compatibility. New projects use category, variant, and optional preset provenance; execution never depends on preset availability.
 
-### P2.1 — Role preset registry
+SQL Store and NoSQL Store cannot claim distinct database semantics while both resolve to the same generic database behavior. New creation must either describe them honestly as capacity templates or withhold those names until Relational, Document, and Key-Value variants implement their differences. Existing saved nodes retain their resolved Phase 1 behavior.
 
-Deliverables:
+## 5. Settlements
 
-- [x] versioned `RolePresetManifest` and registry;
-- [x] optional preset ID/version on project nodes without changing resolved behavior identity;
-- [x] generic creation path for validated configuration overrides;
-- [x] separate “Behaviors” and “Role presets” palette sections;
-- [x] initial truthful presets: Client, API Gateway (routing boundary), Worker, SQL Store, and NoSQL Store;
-- [x] visible base-behavior disclosure in palette, node details, and properties;
-- [x] migration, JSON round-trip, equivalence, and browser tests.
-
-Status: complete. Presets resolve to ordinary behavior nodes, unknown removed presets degrade to their stored base behavior, known mismatches fail validation, and the complete `pnpm check` gate covers creation, editing, export, compatibility, and disclosure. Policy recipes remain deferred until a preset needs one; they must reuse the existing Policy Registry rather than extend preset runtime semantics.
-
-Exit criteria: deleting all preset manifests leaves exported nodes executable as their resolved base behaviors, and adding a preset requires no editor or runtime case branch.
-
-### P2.2 — Behavior wave one
+### P2.0 — Initial coverage audit
 
 Deliverables:
 
-- [ ] Scheduler;
-- [ ] CDN;
-- [ ] Search Index;
-- [ ] reusable manifests, state machines, events, metrics, faults, and explanations;
-- [ ] video, search, notification, cloud-drive, and crawler acceptance fixtures.
+- [x] inventory the nine Phase 1 behavior types;
+- [x] establish that aliases and vendor names do not count as behavior coverage;
+- [x] audit representative systems for missing reusable infrastructure behaviors;
+- [x] document the initial compatibility direction.
 
-Exit criteria: each behavior changes measured results under parameter changes and is reused by at least two acceptance probes.
+Status: complete as an initial infrastructure audit. The later business-model review found a more fundamental prerequisite: named APIs, data models, events, access patterns, and operation-aware workloads must exist before adding more infrastructure icons.
 
-### P2.3 — Behavior wave two
-
-Deliverables:
-
-- [ ] Topic with independent subscription state;
-- [ ] Realtime Gateway with connection and broadcast amplification;
-- [ ] Workflow with durable steps and compensation;
-- [ ] Global Router with cached routing and failover delay;
-- [ ] chat, payment, notification, and multi-region acceptance fixtures.
-
-Exit criteria: all ten systems in the coverage audit can be assembled without a case-specific component or page, and every unsupported semantic remains explicit.
-
-### P2.4 — SDK extraction
+### P2.1a — Preset registry foundation
 
 Deliverables:
 
-- [ ] extract the proven built-in contracts into a documented component SDK;
-- [ ] package manifest, behavior adapter, config-field extension, event/metric namespace, and compatibility APIs;
-- [ ] CLI scaffolding, conformance suite, sample external component, and package validation;
-- [ ] SDK version policy and deprecation/migration rules.
+- [x] versioned preset manifest and registry;
+- [x] optional preset provenance on resolved project nodes;
+- [x] validated creation from a base behavior plus configuration overrides;
+- [x] migration, JSON round-trip, equivalence, and browser tests;
+- [x] visible disclosure that a preset currently uses an existing behavior.
 
-Exit criteria: the sample package lives outside the platform packages, passes conformance tests, and installs without edits to model, workbench, compiler dispatch, reducers, or result pages.
+Status: implementation complete. The registry and compatibility work remain useful, but the separate preset palette and SQL/NoSQL naming do not satisfy the revised product taxonomy. P2.1b corrects that presentation before new semantic work begins.
 
-### P2.5 — Plugin loading and isolation
+### P2.1b — Component hierarchy and palette correction
+
+Deliverables:
+
+- [ ] introduce explicit category, behavior-variant, and preset contracts;
+- [ ] show only component categories in the primary palette;
+- [ ] choose a variant and optional preset within the add/configure flow;
+- [ ] remove the separate top-level preset section;
+- [ ] preserve old preset provenance without making runtime depend on it;
+- [ ] remove or relabel claims such as SQL Store, NoSQL Store, and API Gateway when only generic Phase 1 behavior exists;
+- [ ] add keyboard, import/export, migration, and browser coverage for the hierarchy.
+
+Exit criteria: a user starts with “Database” and then chooses only among implemented variants; deleting every preset leaves the same project executable; no top-level palette item is merely a renamed copy of another runtime behavior.
+
+### P2.2 — ProjectFile v3 business contracts
+
+Deliverables:
+
+- [ ] versioned API catalog with stable operation IDs, HTTP method/path, request/response JSON Schema references, payload estimates, ownership, and optional SLO targets;
+- [ ] versioned data-model catalog with discriminated Relational, Document, and Key-Value definitions;
+- [ ] relational tables, typed columns, nullability, primary/unique/foreign keys, indexes, cardinality, and row-size estimates;
+- [ ] document collections, JSON Schema, partition keys, secondary indexes, cardinality, and document-size estimates;
+- [ ] key/value schemas, key distribution, value-size estimates, TTL, and consistency hints;
+- [ ] versioned event catalog with event name/version, payload JSON Schema, partition/ordering key, producer, and consumers;
+- [ ] interaction/access-pattern catalog whose typed actions reference topology nodes, API operations, data objects/indexes, cache keys, and event contracts;
+- [ ] workload operation mixes with weights, key/value distributions, payload overrides, and arrival phases;
+- [ ] deterministic v2-to-v3 migration, reference validation, serialization, and compatibility fixtures.
+
+Contracts are normalized internal domain objects. OpenAPI 3.1, JSON Schema 2020-12, and DBML are import/export formats behind adapters, not unvalidated arbitrary objects copied into runtime state.
+
+Exit criteria: a v3 fixture can express an API operation, its service owner, a relational or non-relational data model, its access steps, an emitted event, and a workload mix. Invalid method/path pairs, duplicate IDs, broken references, invalid index fields, and incompatible targets fail validation. Existing v2 fixtures retain their exact Phase 1 execution meaning.
+
+### P2.3 — Contract and interaction editors
+
+Deliverables:
+
+- [ ] a project-level Definitions explorer for APIs, data models, events, and interactions;
+- [ ] Service editing for operations, request/response schemas, handler estimates, SLOs, and ownership;
+- [ ] Database editing that changes with the selected Relational, Document, or Key-Value variant;
+- [ ] table/collection fields, keys, indexes, cardinality, and size editors with inline reference errors;
+- [ ] event schema, producer, consumer, key, and delivery-assumption editing;
+- [ ] an operation-focused overlay on the existing topology for binding typed calls, reads, writes, cache actions, and publishes without creating a second disconnected diagram;
+- [ ] workload mix editing against named operations;
+- [ ] OpenAPI and DBML import/export plus JSON Schema editing through selected mature libraries;
+- [ ] autosave, undo/redo, keyboard navigation, and large-form performance coverage.
+
+The settlement starts with a time-boxed dependency spike. Selection gates include OpenAPI 3.1 and JSON Schema 2020-12 correctness, editable arrays/unions/references, browser and Worker compatibility, maintained licensing, bundle cost, accessibility, and round-trip fidelity. Candidates include Swagger Parser or Redocly CLI for OpenAPI, JSON Forms or RJSF for schema-driven forms, and `@dbml/core` for DBML conversion. Node-only tools may be used in an import/export boundary but cannot be assumed to run in the browser. Failed candidates are recorded; a thin adapter prevents library types from becoming the project model.
+
+Exit criteria: using only the generic UI, a user can create and edit the complete P2.2 fixture, see contract errors before running, export it, reload it, and obtain a structurally identical project. Presets remain nested under their variant chooser.
+
+### P2.4 — Operation-aware compiler and runtime
+
+Deliverables:
+
+- [ ] compile each workload operation into a validated executable interaction plan;
+- [ ] carry operation ID, payload size, entity/data-object ID, action, key/partition value, query shape, and event identity in request context;
+- [ ] route only across edges and ports bound to the active interaction instead of broadcasting one anonymous request shape;
+- [ ] execute API-specific service cost and downstream actions;
+- [ ] execute database point lookup, indexed lookup, range access, scan, insert, update, and delete cost models against declared cardinality, selectivity, row/document size, index availability, shards, and replicas;
+- [ ] execute named cache-key and event publish/consume actions with existing cache/stream/queue primitives;
+- [ ] emit operation- and action-specific spans, events, metrics, warnings, and explanations;
+- [ ] keep all stochastic choices deterministic under project, engine, run, and seed identity;
+- [ ] clearly reject or label contract fields that remain descriptive and do not yet affect execution.
+
+The database model remains an explainable system-design approximation, not a SQL optimizer or storage-engine emulator. Its formulas, supported query shapes, transaction limits, and consistency assumptions must be documented and calibrated through editable parameters.
+
+Exit criteria: changing an operation mix, removing a supporting index, increasing cardinality or payload size, introducing a hot partition key, or changing a cache path produces deterministic and directionally justified changes in latency, throughput, queueing, shard load, and traces. No order-specific or case-specific runtime branch is allowed.
+
+### P2.5 — Generic vertical acceptance: order system
+
+Deliverables:
+
+- [ ] model `POST /orders`, `GET /orders/{id}`, and an indexed customer-order query;
+- [ ] define Orders and OrderItems tables with typed columns, keys, relationships, cardinality, and indexes;
+- [ ] model order creation writes followed by `OrderCreated` publication and worker consumption;
+- [ ] model cache-aside order reads with explicit hit and miss actions;
+- [ ] compare indexed versus scan queries, uniform versus hot-customer keys, cache configurations, and different read/write mixes;
+- [ ] provide browser acceptance, deterministic runtime, result-explanation, import/export, and migration tests.
+
+Exit criteria: the example is stored only as a normal v3 project fixture created from generic contracts. Every displayed result derives from runtime events. Removing the fixture leaves all editor and simulation capabilities intact.
+
+### P2.6 — Reusable behavior expansion
+
+Wave one:
+
+- [ ] Scheduler with periodic/batch releases, jitter, missed-run policy, and concurrency limits;
+- [ ] CDN with POP selection, edge cache/origin fetch, bandwidth, and hit/miss behavior;
+- [ ] Search Index with indexing delay, refresh visibility, shard/replica query fan-out, and merge cost.
+
+Wave two:
+
+- [ ] Topic with independent subscription state and retention;
+- [ ] Realtime Gateway with connection, channel, broadcast, and backpressure behavior;
+- [ ] Workflow with durable steps, idempotency, timeout, retry, and compensation;
+- [ ] Global Router with geo/weighted/health routing, cached decisions, TTL, and failover delay.
+
+Exit criteria: every variant owns distinct tested runtime semantics, changes measured results under parameter changes, integrates with the v3 contracts where relevant, and is reused by at least two representative systems.
+
+### P2.7 — SDK extraction
+
+Deliverables:
+
+- [ ] extract the proven category, variant, preset, contract, adapter, event, metric, and fault interfaces into a documented SDK;
+- [ ] provide CLI scaffolding, conformance tests, a sample external variant, and package validation;
+- [ ] define SDK version, capability, dependency, deprecation, and project-migration rules;
+- [ ] allow custom editor widgets only through declared extension points with generic fallbacks.
+
+Exit criteria: the sample package lives outside platform packages, passes conformance tests, appears under its declared category, and installs without edits to the model, workbench, compiler dispatch, reducers, or result pages.
+
+### P2.8 — Plugin loading and isolation
 
 Deliverables:
 
 - [ ] trusted local package installation first;
 - [ ] Worker boundary, capability declaration, CPU/event/memory budgets, and cancellation;
-- [ ] integrity metadata and explicit user consent;
-- [ ] failure isolation and safe diagnostics;
+- [ ] integrity metadata, explicit user consent, failure isolation, and safe diagnostics;
 - [ ] no arbitrary main-thread or DOM execution.
 
 Exit criteria: a malformed, incompatible, slow, or crashing plugin cannot corrupt the project, block the canvas indefinitely, or impersonate built-in events.
 
-### P2.6 — Batch experiments
+### P2.9 — Batch experiments
 
 Deliverables:
 
-- [ ] parameter sweeps and seeded repetitions;
-- [ ] bounded parallel Worker pool with cancellation;
-- [ ] capacity-boundary search and aggregate comparison;
-- [ ] reproducible experiment manifests and exportable results.
+- [ ] parameter sweeps across infrastructure and business-contract parameters;
+- [ ] seeded repetitions and aggregate confidence summaries;
+- [ ] bounded parallel Worker pool with progress and cancellation;
+- [ ] capacity-boundary search and reproducible experiment manifests.
 
-Exit criteria: one experiment definition can compare a parameter range without manually cloning projects, while every run remains independently reproducible.
+Exit criteria: one experiment compares a parameter range without manually cloning projects, while every constituent run remains independently reproducible and inspectable.
 
-### P2.7 — Sharing and adapters
+### P2.10 — Sharing and adapters
 
 Deliverables:
 
-- [ ] shareable, immutable project/experiment artifacts;
-- [ ] team component-package metadata;
+- [ ] shareable immutable project/experiment artifacts;
+- [ ] team package and contract metadata;
 - [ ] optional server runner using the browser result protocol;
 - [ ] adapter boundary for measured inputs without claiming live infrastructure emulation.
 
 Exit criteria: a shared artifact either reproduces with declared compatible versions or fails with an actionable compatibility error.
 
-## 5. Test strategy
+## 6. Verification strategy
 
-- Registry tests prove uniqueness, version resolution, schema validation, and behavior/preset separation.
-- Equivalence tests compare preset-created nodes with their resolved base behavior and policies.
-- Behavior tests cover state transitions, invariants, deterministic replay, overload, and faults.
-- Compatibility tests keep Phase 1 projects and v1 migration fixtures executable.
-- Browser tests build representative topologies from the generic palette and inspect real events/metrics.
-- SDK conformance tests run identically for built-in and external packages.
-- Isolation tests terminate excessive plugins and preserve an interactive canvas.
+- Schema and property tests cover IDs, references, migrations, round trips, and generated valid/invalid contracts.
+- Taxonomy tests prove that categories contain variants, presets belong to exactly one variant, and preset removal cannot alter execution.
+- Adapter contract tests use official OpenAPI/JSON Schema/DBML fixtures and preserve supported round trips.
+- Compiler tests reject unresolved and incompatible interaction actions before runtime.
+- Runtime tests cover named operations, query shapes, indexes/scans, cardinality, key distributions, payload sizes, caches, events, overload, and faults.
+- Metamorphic tests assert directional properties, such as a supported selective index touching no more records than the equivalent scan.
+- Determinism tests replay the same v3 project and seed into the same ordered event stream.
+- Browser tests build the order fixture through generic editors and inspect actual operation-specific traces and metrics.
+- Compatibility tests keep ProjectFile v1/v2 imports and capacity-only semantics executable.
+- SDK and isolation tests run identically for built-in and external variants and terminate excessive plugins safely.
 
-## 6. Phase 2 definition of done
+Each settlement runs its focused tests plus the complete `pnpm check` gate before commit. Documentation and model assumptions are updated in the same settlement whenever executable meaning changes.
 
-- [ ] behavior components and role presets are distinct in contracts, UI, docs, and tests;
-- [ ] all ten coverage probes are buildable with shared behaviors;
+## 7. Phase 2 definition of done
+
+- [ ] the palette follows category → variant → optional preset, with no separate preset shelf;
+- [ ] ProjectFile v3 represents APIs, data models, events, interactions, and operation-aware workloads;
+- [ ] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
+- [ ] the generic order-system acceptance project proves the end-to-end workflow;
+- [ ] representative systems use shared behavior variants without case-specific runtime or editor branches;
 - [ ] at least one external package installs and runs through the public SDK;
 - [ ] plugin failures and unsupported versions fail safely;
 - [ ] batch experiments are deterministic and cancellable;
-- [ ] Phase 1 project compatibility remains covered in CI;
-- [ ] `pnpm check` and the Phase 2 conformance suite pass.
+- [ ] Phase 1 projects preserve their documented execution meaning;
+- [ ] the complete check and conformance suites pass.
 
-## 7. Immediate execution order
+## 8. Immediate execution order
 
-Implement P2.1 next. Do not start Scheduler, CDN, or Search Index until the preset registry proves the two-class palette without changing runtime semantics. Do not freeze the public SDK until both behavior waves expose the contracts that real extensions need.
+Implement P2.1b next and commit it independently. Then complete P2.2, P2.3, P2.4, and P2.5 in order. Do not add Scheduler, CDN, Search Index, or new role names before the business contracts and operation-aware runtime pass the order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.

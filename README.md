@@ -16,8 +16,8 @@
 完整体验必须形成下面的闭环，而不是停留在“把图画出来”：
 
 1. **Build**：从空白画布或模板开始，拖入客户端、负载均衡器、服务、缓存、数据库、消息队列、对象存储等组件，并通过有类型的端口连线。
-2. **Configure**：设置实例数、并发、容量、服务时间分布、队列策略、超时、重试、缓存、分片、副本、一致性和路由规则。
-3. **Generate load**：定义读写比例、到达率、突发流量、数据分布、热点键、请求大小和流量随时间的变化。
+2. **Configure**：定义 API、请求响应 Schema、数据表或 Collection、字段类型、主键、索引、事件与访问路径，再设置实例数、并发、容量、超时、重试、缓存、分片、副本和路由规则。
+3. **Generate load**：把流量绑定到具体 API operation，定义 operation mix、到达率、突发阶段、Payload、数据分布、热点键和读写比例。
 4. **Run**：启动、暂停、单步、加速、重置仿真，并用随机种子完整复现一次运行。
 5. **Observe**：查看吞吐量、延迟分位数、错误率、队列长度、利用率、命中率、丢弃量、网络流量、成本估算和单请求事件链。
 6. **Break**：注入节点宕机、网络延迟、丢包、分区、容量下降、热点、依赖超时和区域故障。
@@ -27,7 +27,7 @@
 
 ## “可以设计任何系统”意味着什么
 
-这里的“任何系统”不是声称在浏览器中一比一复制所有生产基础设施，而是保证平台核心 **不绑定具体题目和固定拓扑**：
+这里的“任何系统”不是声称当前组件已经覆盖全部系统语义，也不是在浏览器中一比一复制所有生产基础设施；它表示平台核心 **不绑定具体题目和固定拓扑**，并能通过通用合同和行为变体持续扩展：
 
 - 编辑器处理通用的节点、端口、边、分组和区域，而不是 `RateLimiterCanvas`、`NewsFeedCanvas` 之类的案例专用页面。
 - 场景是独立、版本化的模型，可以表达拓扑、参数、工作负载、故障计划和运行配置。
@@ -57,7 +57,7 @@
 
 ```mermaid
 flowchart LR
-    U[组件面板与画布] --> M[版本化场景模型]
+    U[组件面板与画布] --> M[版本化项目与业务合同]
     M --> V[端口与配置校验]
     V --> C[仿真编译器]
     C --> R[离散事件运行时]
@@ -80,7 +80,8 @@ flowchart LR
 - 版本、ID、名称和随机种子。
 - 节点、端口、连接、分组、区域和布局。
 - 每个组件的类型与配置。
-- 工作负载模型与随时间变化的阶段。
+- API、数据模型、事件和服务间交互等可引用的业务合同。
+- 绑定具体 operation 的工作负载模型与随时间变化的阶段。
 - 故障注入计划。
 - 仿真时长、采样和停止条件。
 
@@ -88,9 +89,9 @@ flowchart LR
 
 ### Component
 
-一个组件定义必须提供：
+组件使用三层结构：一级是画布中可发现的 **category**，二级是具有真实运行语义的 **behavior variant**，三级是某个 variant 下可选的默认配置 **preset**。一个可执行 variant 必须提供：
 
-- 稳定的类型标识和版本。
+- 稳定的 category、variant 标识和版本。
 - 可验证的配置 Schema 与编辑表单。
 - 输入、输出端口以及连接兼容规则。
 - 可执行的请求、存储、排队或路由行为。
@@ -98,7 +99,7 @@ flowchart LR
 - 支持的故障类型。
 - 可选的图标、说明和教学链接。
 
-编辑器只依赖这份协议。增加新组件时，不应在画布代码中增加案例判断。
+Preset 不提供新的端口、Schema 或运行逻辑，也不在 Palette 中单独占一栏。编辑器只依赖统一协议；增加 variant 时，不应在画布代码中增加案例判断。
 
 ### Simulation
 
@@ -109,6 +110,7 @@ flowchart LR
 - 网络传输、延迟、带宽和丢失。
 - 路由、负载均衡、重试、超时和熔断。
 - 缓存、存储、复制、分片和一致性策略。
+- 具体 API operation、数据访问路径、索引或扫描成本和事件流。
 - 异步队列、消费者、背压和批处理。
 - 故障发生、传播与恢复。
 
@@ -125,7 +127,9 @@ flowchart LR
 | 自动布局 | [ELK.js](https://github.com/kieler/elkjs) | 把场景转换为布局输入，保存用户覆盖结果 |
 | 状态管理 | [Zustand](https://zustand.docs.pmnd.rs/) | 场景命令、选择状态、撤销/重做边界 |
 | Schema 与校验 | [Zod](https://zod.dev/) | 版本化 Scenario 和 Component 合同 |
-| 配置表单 | [React Hook Form](https://react-hook-form.com/) | 从组件 Schema 生成领域配置体验 |
+| API 合同 | [Swagger Parser](https://apitools.dev/swagger-parser/) 或 [Redocly CLI](https://redocly.com/docs/cli) 候选，P2.3 spike 后确定 | OpenAPI 3.1 导入导出、内部合同映射和 operation 语义 |
+| 数据模型 | [DBML / `@dbml/core`](https://dbml.dbdiagram.io/) 候选，需先验证浏览器兼容性 | 表结构导入导出、领域校验和仿真参数 |
+| Schema 表单 | [JSON Forms](https://jsonforms.io/) 或 [RJSF](https://rjsf-team.github.io/react-jsonschema-form/) 候选 | JSON Schema 编辑体验和领域控件 |
 | 离散事件仿真 | [SimScript](https://github.com/Bernardo-Castilho/SimScript) | 把场景编译为 System Design 组件行为 |
 | 后台执行 | Web Worker | 隔离仿真计算，不阻塞画布交互 |
 | Worker 通信 | 原生 Worker API；接口复杂后引入 [Comlink](https://github.com/GoogleChromeLabs/comlink) | 定义稳定的运行、取消和事件流 API |
@@ -170,16 +174,18 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 - 默认在浏览器的 Web Worker 中运行 SimScript，保证本地优先、无需登录即可实验。
 - 大型批量仿真可以把同一个 Scenario 发送给服务端 Runner；结果协议与浏览器模式保持一致。
 
-## 组件分为两类
+## 组件类别、行为变体、Preset 与业务契约
 
-组件面板不会把所有架构名词都实现成一套新运行逻辑：
+顶层组件面板只列出 **组件类别（component category）**，不会把所有架构名词都平铺成看似不同的组件：
 
-1. **行为组件**拥有独立仿真语义、状态、事件、指标和确定性测试，真正扩展平台能模拟的行为。
-2. **角色预设**复用一个已有行为组件，只提供更符合架构角色的名称、图标、说明、合法默认参数和可选的现有策略组合。它不拥有另一套运行时，也不能被算作新的仿真能力。
+1. **组件类别**是 Palette 中的一级构件，如 Service、Database、Cache、Messaging。它负责组织和发现，不等于一套运行时。
+2. **行为变体（behavior variant）**是类别内真正可执行的形态，拥有版本化 Schema、端口、状态、事件、指标、故障和测试。用户先选择 Database，再选择 Relational、Document 或 Key-Value；这些形态语义不同时就是不同 variant。
+3. **Preset** 只是一种 variant 的可选初始参数模板，可以附加已有策略，但不增加端口、Schema 或运行能力，也不在 Palette 中单独占一栏。
+4. **业务契约**定义组件实际处理的内容，包括 API operation、事件、table/collection、typed field、主键/分区键、index、关系、访问模式和 workload mix。它们是项目级可复用资源，不能只是塞进节点配置后被仿真忽略。
 
-Phase 1 已实现九个行为类型：Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和 Database。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
+Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
 
-Phase 2 首批角色预设计划为 Client、API Gateway（仅路由边界）、Worker、SQL Store 和 NoSQL Store。它们必须在界面中明确标出底层行为。下一批真正需要新语义的行为组件是 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router。Function 只有在实现冷启动、缩容到零或计费等语义后才升级为行为组件。
+P2.1a 已实现 preset Registry 基础，但当前单独的 “Role presets” 面板和把 SQL/NoSQL 映射到同一通用 Database 行为只是过渡实现。P2.1b 会撤销独立面板并建立 category → variant → optional preset 层级。下一步再让 Service 定义 API、Database 定义数据模型、Workload 命中具体 operation，并让访问模式真正影响仿真；之后才增加 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router 等新行为。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -216,10 +222,13 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 组件覆盖规划与 P2.1 角色预设 Registry 已完成；下一步是 P2.2 的 Scheduler、CDN 和 Search Index 行为组件。
+当前进度：P2.0 初始覆盖审查与 P2.1a preset Registry 基础已完成，但审查确认当前组件缺少 API、数据模型和访问模式，且 preset 不应单独占 Palette。下一步是 P2.1b：修正 category → variant → optional preset 层级；随后才进入 ProjectFile v3 业务契约。
 
-- 区分具有独立运行语义的行为组件与复用行为的角色预设。
-- 用通用行为补齐 Scheduler、CDN、Search、Topic、Realtime、Workflow 和 Global Routing。
+- 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
+- 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
+- 顶层 Palette 只显示组件类别；Relational/Document/Key-Value、API Service/Worker 等行为变体在选择所属类别后出现，preset 仅作为可选模板。
+- 用订单系统验收 API → Service → Cache/Database → Event 的完整可执行链路。
+- 纵切通过后再补齐 Scheduler、CDN、Search、Topic、Realtime、Workflow 和 Global Routing。
 - 在真实内置组件验证合同后发布 SDK、版本规则和插件沙箱。
 - 支持批量实验、参数扫描、容量边界搜索、分享和可选适配器。
 
@@ -236,6 +245,8 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 - 用户可以从空白画布开始，不依赖任何 Markdown 生成拓扑。
 - 同一个编辑器能搭建并运行至少三类明显不同的系统。
 - 每个可运行组件都有行为模型；纯装饰节点会被明确标记且不参与结果。
+- Palette 遵循 category → variant → optional preset，preset 不与组件类别并列。
+- 用户能够定义 API、数据模型、事件和访问路径，并且这些合同会改变仿真事件与结果。
 - 拓扑或参数变化会通过仿真事件产生合理、可测试的指标变化。
 - 相同场景和随机种子能够确定性重放。
 - 工作负载、故障和指标与场景分离，可以自由组合。
@@ -263,7 +274,7 @@ Phase 1 的 P1.5 已完成：Trace Explorer 可按结果、延迟、组件与原
 
 Phase 1 的 P1.6 已完成：项目迁移、序列化、固定种子重放、计数、队列、重试和 hop-limit 具有属性不变量；100 节点项目中的 10 万请求运行受 `<5s` CI 性能门禁约束；裁剪 request trace 不会改变 summary、节点指标或时间序列；Results 与 Fault Timeline 有原生键盘路径；模型假设和不支持语义已文档化，CI 统一运行完整 `pnpm check`。
 
-当前仍是早期平台。下一步是规划 Phase 2 的开放式组件 SDK、插件隔离与批量实验；不能退回文档站或案例专用 Demo。
+当前仍是早期平台：已有容量、排队、故障和可观测性基础，但请求仍缺少业务 operation，Service 尚无 API contract，Database 尚无 Table/Collection、字段和 Index。下一步按 Phase 2 计划先修正组件层级，再完成 ProjectFile v3、合同编辑器和 operation-aware runtime；不能继续用新增图标掩盖这些语义缺口。
 
 本地运行：
 
