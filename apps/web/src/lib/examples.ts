@@ -1,5 +1,5 @@
 import { createRegisteredNode } from '@system-design/components'
-import { createEmptyProject, type ProjectFile } from '@system-design/model'
+import { createEmptyProject, createOrderSystemContractFixture, type ProjectFile } from '@system-design/model'
 
 const connection = (id: string, source: string, target: string) => ({
   id, source, target, sourcePort: 'out', targetPort: 'in', weight: 1,
@@ -77,3 +77,6 @@ export const createDataPlatformExample = (): ProjectFile => {
   experiment.workloads = [{ id: 'workload-data', name: 'Keyed requests', sourceNodeId: 'traffic-data', requestsPerSecond: 50, startAtSeconds: 0, durationSeconds: 10, pattern: 'poisson', requestBytes: 8_192 }]
   return project
 }
+
+/** A normal ProjectFile v3 fixture: the editor and runtime contain no order-specific branches. */
+export const createOrderSystemExample = (): ProjectFile => createOrderSystemContractFixture()

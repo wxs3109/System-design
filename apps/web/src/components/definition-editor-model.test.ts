@@ -16,7 +16,7 @@ describe('definition editor project transforms', () => {
     const project = createOrderSystemContractFixture()
     expect(listDefinitionResources(project, 'jsonSchemas')).toHaveLength(3)
     expect(listDefinitionResources(project, 'dataModels').map((item) => item.detail)).toEqual([
-      'relational · 1 objects', 'document · 1 objects', 'key-value · 1 objects',
+      'relational · 2 objects', 'document · 1 objects', 'key-value · 1 objects',
     ])
     expect(listDefinitionResources(project, 'operationWorkloads')).toEqual([expect.objectContaining({ id: 'order-operations', kind: 'operationWorkloads' })])
     expect(findDefinitionResource(project, { kind: 'events', id: 'order-created', version: 1 })).toMatchObject({ name: 'OrderCreated' })

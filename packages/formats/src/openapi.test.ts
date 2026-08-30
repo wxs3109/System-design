@@ -27,4 +27,12 @@ describe('OpenAPI 3.1 adapter', () => {
     expect(imported.schemas[0]).toEqual(schema)
     expect(imported.schemas[0]?.id).toBe('schema.CreateOrder')
   })
+
+  it('exports inferred OpenAPI path parameters for modeled route templates', async () => {
+    const project = createOrderSystemContractFixture()
+    const document = JSON.parse(await exportOpenApi({ api: project.definitions.apis[0]!, schemas: project.definitions.jsonSchemas }))
+    expect(document.paths['/orders/{id}'].get.parameters).toEqual([{
+      name: 'id', in: 'path', required: true, schema: { type: 'string' },
+    }])
+  })
 })

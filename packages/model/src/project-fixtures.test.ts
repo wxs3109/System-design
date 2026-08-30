@@ -49,6 +49,11 @@ describe('order-system contract fixture', () => {
       request: { estimatedBytes: 1_024 },
       responses: [{ statusCode: '201', body: { estimatedBytes: 2_048 } }],
     })
+    expect(fixture.definitions.apis[0]?.operations.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'POST /orders',
+      'GET /orders/{id}',
+      'GET /orders',
+    ])
     expect(fixture.definitions.dataModels.map(({ kind }) => kind)).toEqual([
       'relational',
       'document',
@@ -65,12 +70,22 @@ describe('order-system contract fixture', () => {
       pattern: 'order:{id}',
       ttlSeconds: 300,
     })
+    expect(fixture.definitions.dataModels[0]?.kind === 'relational' ? fixture.definitions.dataModels[0].tables.map(({ id }) => id) : []).toEqual([
+      'orders-table',
+      'order-items-table',
+    ])
     expect(fixture.definitions.interactions[0]?.actions.map(({ kind }) => kind)).toEqual([
       'api-call',
+      'data-access',
       'data-access',
       'cache-access',
       'event-publish',
       'event-consume',
+    ])
+    expect(fixture.definitions.interactions.map(({ id }) => id)).toEqual([
+      'create-order-flow',
+      'get-order-flow',
+      'list-customer-orders-flow',
     ])
     expect(fixture.experiments[0]?.operationWorkloads[0]).toMatchObject({
       sourceNodeId: 'client-traffic',
@@ -78,14 +93,16 @@ describe('order-system contract fixture', () => {
         { id: 'warmup', pattern: 'constant' },
         { id: 'steady', pattern: 'poisson' },
       ],
-      operationMix: [{
-        weight: 1,
-        requestBytes: 1_024,
-        responseBytes: 2_048,
-        keyDistribution: { kind: 'hotspot' },
-        valueSizeDistribution: { kind: 'fixed' },
-      }],
     })
+    expect(fixture.experiments[0]?.operationWorkloads[0]?.operationMix[0]).toMatchObject({
+      weight: 2, requestBytes: 1_024, responseBytes: 2_048,
+      keyDistribution: { kind: 'hotspot' }, valueSizeDistribution: { kind: 'fixed' },
+    })
+    expect(fixture.experiments[0]?.operationWorkloads[0]?.operationMix.map((mix) => mix.operation.operationId)).toEqual([
+      'create-order',
+      'get-order',
+      'list-customer-orders',
+    ])
   })
 
   it.each([
@@ -116,28 +133,28 @@ describe('order-system contract fixture', () => {
     {
       name: 'event producer',
       mutate: (fixture: ProjectFileV3) => {
-        const action = fixture.definitions.interactions[0]!.actions[3]!
+        const action = fixture.definitions.interactions[0]!.actions[4]!
         if (action.kind === 'event-publish') action.producerNodeId = 'fulfillment-worker'
       },
-      path: ['definitions', 'interactions', 0, 'actions', 3, 'producerNodeId'],
+      path: ['definitions', 'interactions', 0, 'actions', 4, 'producerNodeId'],
       message: 'Event order-created@1 is produced by orders-service.',
     },
     {
       name: 'event consumer',
       mutate: (fixture: ProjectFileV3) => {
-        const action = fixture.definitions.interactions[0]!.actions[4]!
+        const action = fixture.definitions.interactions[0]!.actions[5]!
         if (action.kind === 'event-consume') action.consumerNodeId = 'orders-service'
       },
-      path: ['definitions', 'interactions', 0, 'actions', 4, 'consumerNodeId'],
+      path: ['definitions', 'interactions', 0, 'actions', 5, 'consumerNodeId'],
       message: 'Node orders-service is not a consumer of event order-created@1.',
     },
     {
       name: 'broker component',
       mutate: (fixture: ProjectFileV3) => {
-        const action = fixture.definitions.interactions[0]!.actions[3]!
+        const action = fixture.definitions.interactions[0]!.actions[4]!
         if (action.kind === 'event-publish') action.brokerNodeId = 'orders-db'
       },
-      path: ['definitions', 'interactions', 0, 'actions', 3, 'brokerNodeId'],
+      path: ['definitions', 'interactions', 0, 'actions', 4, 'brokerNodeId'],
       message: 'Node orders-db must be a queue or stream component.',
     },
     {

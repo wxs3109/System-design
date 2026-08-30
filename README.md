@@ -185,7 +185,7 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 
 Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
 
-P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 进一步把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划，并输出 operation/action 指标。下一步用 P2.5 订单系统纵切验证完整通用闭环；之后才增加 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router 等新行为。
+P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证三类 API、关系表、cache-aside、事件链和对照实验的完整闭环。下一步按 P2.6 增加 Scheduler、CDN、Search Index 等真正具有独立执行语义的行为。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -222,7 +222,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 到 P2.4 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的 API、JSON Schema、Relational/Document/Key-Value 数据模型、Cache Key、Event、Interaction 和 operation-level Workload 可通过通用 Definitions UI 创建、编辑、校验、撤销、自动保存和导出。OpenAPI 3.1 与 DBML 使用服务端成熟库适配器。Operation-aware 编译器和运行时会执行拓扑绑定的 action、数据库访问成本、显式缓存操作和事件动作，并在 Results 中展示 operation/action 遥测。下一步是 P2.5 通用订单系统纵切验收。
+当前进度：P2.0 到 P2.5 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的 API、JSON Schema、Relational/Document/Key-Value 数据模型、Cache Key、Event、Interaction 和 operation-level Workload 可通过通用 Definitions UI 创建、编辑、校验、撤销、自动保存和导出。OpenAPI 3.1 与 DBML 使用成熟库适配器。Operation-aware 运行时执行拓扑绑定的 action，并用普通订单项目验证了索引与扫描、热点键、缓存配置和读写混合的确定性结果。下一步是 P2.6 可复用行为扩展。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
@@ -278,7 +278,7 @@ Phase 2 的 P2.2 与 P2.3 已完成：`ProjectFile v3` 区分 `capacity-only` �
 
 Phase 2 的 P2.4 已完成：operation workload 会编译为拓扑绑定的交互计划，按依赖和条件执行 API/service、数据、缓存与事件 action；表或 collection 的 cardinality、记录大小、索引形态、estimated rows、handler time、operation mix 和键分布会进入可复现的成本与负载模型。Results 展示 operation 成功/失败/p95 和 action 延迟、records examined、bytes processed，Trace 保留 operation/action 身份。具体公式和仍属描述性的字段见 [Simulation Model Assumptions](docs/model-assumptions.md)。
 
-当前仍是早期平台：P2.5 还需用完全由通用合同组成的订单系统做浏览器纵切，覆盖写入后发事件、cache-aside、索引与扫描、热点键和不同读写混合的对比。此验收完成前，不能用新增图标替代端到端语义验证。
+当前仍是早期平台：P2.5 已用完全由通用合同组成的订单系统完成浏览器纵切，覆盖写入后发事件、cache-aside、索引与扫描、热点键和不同读写混合的对比。后续新增组件仍必须拥有独立、可测的运行时语义，不能用新增图标替代端到端行为。
 
 本地运行：
 

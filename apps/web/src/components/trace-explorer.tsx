@@ -56,7 +56,7 @@ export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId,
         <div className="trace-list" role="listbox" aria-label="Requests">
           {filtered.slice(0, 100).map((trace) => <button key={trace.traceId} type="button" role="option" aria-selected={trace.traceId === selectedTrace?.traceId} onClick={() => { setSelectedTraceId(trace.traceId); setSelectedSpanId(null) }}>
             <span className={trace.status === 'error' ? 'is-error' : 'is-ok'}>{trace.status === 'error' ? <CircleX size={11} /> : <CheckCircle2 size={11} />}</span>
-            <span><strong>Request {trace.requestId}</strong><small>{trace.reason === 'none' ? `${trace.spans.length} spans` : humanize(trace.reason)}</small></span>
+            <span><strong>{trace.operationId ? `${trace.operationId} · ` : ''}Request {trace.requestId}</strong><small>{trace.reason === 'none' ? `${trace.spans.length} spans` : humanize(trace.reason)}</small></span>
             <b>{formatMs(trace.durationMs)}</b>
           </button>)}
           {filtered.length > 100 ? <p>Showing the first 100 matching requests.</p> : null}
@@ -65,12 +65,12 @@ export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId,
 
         {selectedTrace ? <div className="trace-waterfall">
           <div className="trace-waterfall__summary">
-            <div><code>{selectedTrace.traceId}</code><span>request {selectedTrace.requestId} · {selectedTrace.spans.length} spans · terminal {humanize(selectedTrace.reason)}</span></div>
+            <div><code>{selectedTrace.traceId}</code><span>{selectedTrace.operationId ? `${selectedTrace.operationId} · ` : ''}request {selectedTrace.requestId} · {selectedTrace.spans.length} spans · terminal {humanize(selectedTrace.reason)}</span></div>
             {selectedLane ? <button type="button" onClick={() => onShowOnCanvas(selectedLane.span.nodeId)}><ArrowUpRight size={12} /> Show {nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId} on canvas</button> : null}
           </div>
           <div className="trace-waterfall__legend" aria-label="Waterfall legend"><span><i className="is-queue" /> Queue wait</span><span><i className="is-service" /> Service / dependency</span><span><i className="is-error" /> Failed span</span><span><i className="is-marker" /> Policy / fault event</span></div>
           <TraceWaterfallChart lanes={lanes} markers={markers} durationMs={traceDuration} selectedSpanId={selectedLane?.span.spanId} onSelectSpan={selectSpan} theme={theme} />
-          {selectedLane ? <div className="trace-span-detail" aria-live="polite"><Timer size={12} /><strong>{nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId}</strong><span>{formatMs(selectedLane.queueDurationMs)} queue · {formatMs(selectedLane.serviceDurationMs)} service</span><span>{selectedLane.span.status}{selectedLane.span.reason === 'none' ? '' : ` · ${humanize(selectedLane.span.reason)}`}</span>{selectedLane.span.edgeId ? <code>{selectedLane.span.edgeId}</code> : null}</div> : null}
+          {selectedLane ? <div className="trace-span-detail" aria-live="polite"><Timer size={12} /><strong>{nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId}</strong>{selectedLane.span.actionId ? <code>{selectedLane.span.actionId}</code> : selectedLane.span.operationId ? <code>{selectedLane.span.operationId}</code> : null}<span>{formatMs(selectedLane.queueDurationMs)} queue · {formatMs(selectedLane.serviceDurationMs)} service</span><span>{selectedLane.span.status}{selectedLane.span.reason === 'none' ? '' : ` · ${humanize(selectedLane.span.reason)}`}</span>{selectedLane.span.edgeId ? <code>{selectedLane.span.edgeId}</code> : null}</div> : null}
         </div> : <div className="trace-waterfall trace-waterfall--empty">No matching trace selected.</div>}
       </div>
     </section>

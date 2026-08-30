@@ -11,7 +11,7 @@ describe('DBML adapter', () => {
       name: 'orders', estimatedRows: 10_000_000, estimatedRowBytes: 512, primaryKey: expect.objectContaining({ columnIds: ['id'] }),
     })
     expect(imported.tables[0]!.columns.map(({ name, type, nullable }) => ({ name, type, nullable }))).toEqual(original.tables[0]!.columns.map(({ name, type, nullable }) => ({ name, type, nullable })))
-    expect(imported.tables[0]!.indexes).toEqual([expect.objectContaining({ id: 'ix-customer', name: 'orders_customer', columnIds: ['customer-id'], includedColumnIds: ['id', 'status'], unique: false })])
+    expect(imported.tables[0]!.indexes).toEqual([expect.objectContaining({ id: 'ix-customer', name: 'orders_customer', columnIds: ['customer-id', 'created-at'], includedColumnIds: ['id', 'status', 'total'], unique: false })])
   })
 
   it('rejects unsupported types and tables without primary keys', () => {

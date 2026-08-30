@@ -53,6 +53,7 @@ export interface ActionTelemetryAggregate {
   totalDurationMs: number
   recordsExamined: number
   bytesProcessed: number
+  explanation?: string
 }
 
 export class RuntimeEventSink {
@@ -135,6 +136,7 @@ export class RuntimeEventSink {
       action.totalDurationMs += input.durationMs ?? 0
       action.recordsExamined += Number(input.attributes?.recordsExamined ?? 0)
       action.bytesProcessed += Number(input.attributes?.bytesProcessed ?? 0)
+      if (typeof input.attributes?.explanation === 'string' && input.attributes.explanation) action.explanation = input.attributes.explanation
       this.actions.set(key, action)
     }
     if (input.nodeId && input.requestId && input.spanId) {

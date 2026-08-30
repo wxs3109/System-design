@@ -8,7 +8,7 @@ describe('ProjectFile v3', () => {
     const fixture = createOrderSystemContractFixture()
     expect(parseProjectFile(JSON.parse(JSON.stringify(fixture)))).toEqual(fixture)
     expect(fixture.definitions.dataModels.map((model) => model.kind)).toEqual(['relational', 'document', 'key-value'])
-    expect(fixture.definitions.interactions[0]?.actions.map((action) => action.kind)).toEqual(['api-call', 'data-access', 'cache-access', 'event-publish', 'event-consume'])
+    expect(fixture.definitions.interactions[0]?.actions.map((action) => action.kind)).toEqual(['api-call', 'data-access', 'data-access', 'cache-access', 'event-publish', 'event-consume'])
     expect(fixture.experiments[0]?.operationWorkloads[0]?.phases).toHaveLength(2)
   })
 
@@ -35,8 +35,8 @@ describe('ProjectFile v3', () => {
     ['schema', (project: ReturnType<typeof createOrderSystemContractFixture>) => { project.definitions.apis[0]!.operations[0]!.request!.schema.schemaId = 'missing-schema' }],
     ['owner node', (project: ReturnType<typeof createOrderSystemContractFixture>) => { project.definitions.apis[0]!.ownerNodeId = 'missing-service' }],
     ['operation', (project: ReturnType<typeof createOrderSystemContractFixture>) => { project.definitions.interactions[0]!.entryOperation.operationId = 'missing-operation' }],
-    ['event', (project: ReturnType<typeof createOrderSystemContractFixture>) => { const action = project.definitions.interactions[0]!.actions[3]!; if (action.kind === 'event-publish') action.event.eventId = 'missing-event' }],
-    ['cache key', (project: ReturnType<typeof createOrderSystemContractFixture>) => { const action = project.definitions.interactions[0]!.actions[2]!; if (action.kind === 'cache-access') action.key.cacheKeyId = 'missing-cache-key' }],
+    ['event', (project: ReturnType<typeof createOrderSystemContractFixture>) => { const action = project.definitions.interactions[0]!.actions[4]!; if (action.kind === 'event-publish') action.event.eventId = 'missing-event' }],
+    ['cache key', (project: ReturnType<typeof createOrderSystemContractFixture>) => { const action = project.definitions.interactions[0]!.actions[3]!; if (action.kind === 'cache-access') action.key.cacheKeyId = 'missing-cache-key' }],
     ['interaction', (project: ReturnType<typeof createOrderSystemContractFixture>) => { project.experiments[0]!.operationWorkloads[0]!.operationMix[0]!.interaction.interactionId = 'missing-interaction' }],
   ] as const)('rejects a broken %s reference', (_label, mutate) => {
     const fixture = createOrderSystemContractFixture()

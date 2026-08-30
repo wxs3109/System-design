@@ -11,6 +11,7 @@ describe('operation-aware compiler', () => {
     expect(plan.actions.map((action) => ({ id: action.id, edges: action.edgeIds }))).toEqual([
       { id: 'call-api', edges: ['client-to-orders'] },
       { id: 'write-order', edges: ['orders-to-db'] },
+      { id: 'write-order-items', edges: ['orders-to-db'] },
       { id: 'cache-order', edges: ['orders-to-cache'] },
       { id: 'publish-order', edges: ['orders-to-stream'] },
       { id: 'consume-order', edges: ['stream-to-worker'] },
@@ -34,7 +35,8 @@ describe('operation-aware compiler', () => {
     project.experiments[0]!.operationWorkloads.push(second)
 
     const compiled = compileSimulationInput(project)
-    expect(compiled.operations.plans).toHaveLength(2)
+    expect(compiled.operations.plans).toHaveLength(6)
+    expect([...compiled.operations.plans.values()].filter((plan) => plan.operation.operationId === 'create-order')).toHaveLength(2)
     expect(compiled.operations.phases.find((phase) => phase.workloadId === 'order-operations')!.plans[0]!.plan.requestBytes).toBe(1_024)
     expect(compiled.operations.phases.find((phase) => phase.workloadId === second.id)!.plans[0]!.plan).toMatchObject({
       requestBytes: 8_192,

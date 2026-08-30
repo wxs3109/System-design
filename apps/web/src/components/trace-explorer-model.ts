@@ -5,6 +5,7 @@ export type TraceStatus = 'ok' | 'error'
 export interface TraceRecord {
   traceId: string
   requestId: string
+  operationId?: string
   startedAtMs: number
   endedAtMs: number
   durationMs: number
@@ -80,6 +81,7 @@ export function buildTraceRecords(result: Pick<SimulationResult, 'events' | 'spa
     const failedSpan = [...spans].reverse().find((span) => span.status === 'error')
     const status: TraceStatus = terminal ? (terminal.status === 'ok' ? 'ok' : 'error') : failedSpan ? 'error' : 'ok'
     const reason = terminal ? terminal.reason : failedSpan?.reason ?? 'none'
+    const operationId = terminal?.operationId ?? generated?.operationId ?? spans.find((span) => span.operationId)?.operationId
     const reasonCodes = [...new Set([
       reason,
       ...spans.map((span) => span.reason),
@@ -88,6 +90,7 @@ export function buildTraceRecords(result: Pick<SimulationResult, 'events' | 'spa
     return [{
       traceId,
       requestId: terminal?.requestId ?? generated?.requestId ?? spans[0]!.requestId,
+      ...(operationId === undefined ? {} : { operationId }),
       startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : spans[0]!.startedAtMs,
       endedAtMs,
       durationMs: Math.max(0, endedAtMs - (Number.isFinite(startedAtMs) ? startedAtMs : spans[0]!.startedAtMs)),
@@ -128,7 +131,7 @@ export function buildWaterfallLanes(trace: TraceRecord, nodeNames: ReadonlyMap<s
     .map(({ span, depth }) => ({
       span,
       depth,
-      label: `${'  '.repeat(depth)}${nodeNames.get(span.nodeId) ?? span.nodeId}${span.attempt > 1 ? ` · attempt ${span.attempt}` : ''}`,
+      label: `${'  '.repeat(depth)}${nodeNames.get(span.nodeId) ?? span.nodeId}${span.actionId ? ` · ${span.actionId}` : ''}${span.attempt > 1 ? ` · attempt ${span.attempt}` : ''}`,
       startOffsetMs: Math.max(0, span.startedAtMs - trace.startedAtMs),
       queueDurationMs: span.queueDurationMs,
       serviceDurationMs: Math.max(0, span.durationMs - span.queueDurationMs),

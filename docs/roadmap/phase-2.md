@@ -154,14 +154,16 @@ Deferred integration boundary: P2.4 does not yet compose edge retry/circuit-brea
 
 Deliverables:
 
-- [ ] model `POST /orders`, `GET /orders/{id}`, and an indexed customer-order query;
-- [ ] define Orders and OrderItems tables with typed columns, keys, relationships, cardinality, and indexes;
-- [ ] model order creation writes followed by `OrderCreated` publication and worker consumption;
-- [ ] model cache-aside order reads with explicit hit and miss actions;
-- [ ] compare indexed versus scan queries, uniform versus hot-customer keys, cache configurations, and different read/write mixes;
-- [ ] provide browser acceptance, deterministic runtime, result-explanation, import/export, and migration tests.
+- [x] model `POST /orders`, `GET /orders/{id}`, and an indexed customer-order query;
+- [x] define Orders and OrderItems tables with typed columns, keys, relationships, cardinality, and indexes;
+- [x] model order creation writes followed by `OrderCreated` publication and worker consumption;
+- [x] model cache-aside order reads with explicit hit and miss actions;
+- [x] compare indexed versus scan queries, uniform versus hot-customer keys, cache configurations, and different read/write mixes;
+- [x] provide browser acceptance, deterministic runtime, result-explanation, import/export, and migration tests.
 
 Exit criteria: the example is stored only as a normal v3 project fixture created from generic contracts. Every displayed result derives from runtime events. Removing the fixture leaves all editor and simulation capabilities intact.
+
+Status: complete. The normal order-system v3 project now contains three named operations, typed Orders and OrderItems tables with a foreign key and supporting indexes, creation/event and cache-aside interactions, and a weighted operation workload. Deterministic acceptance tests compare index versus scan cost, uniform versus hot keys, cache-aside versus direct database reads, and read-heavy versus write-heavy mixes. The browser loads the same fixture through the ordinary example picker and exposes operation/action identity, metrics, traces, and export/import behavior; no order-specific compiler, runtime, or editor dispatch exists.
 
 ### P2.6 — Reusable behavior expansion
 
@@ -244,7 +246,7 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 - [x] the palette follows category → variant → optional preset, with no separate preset shelf;
 - [x] ProjectFile v3 represents APIs, data models, events, interactions, and operation-aware workloads;
 - [x] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
-- [ ] the generic order-system acceptance project proves the end-to-end workflow;
+- [x] the generic order-system acceptance project proves the end-to-end workflow;
 - [ ] representative systems use shared behavior variants without case-specific runtime or editor branches;
 - [ ] at least one external package installs and runs through the public SDK;
 - [ ] plugin failures and unsupported versions fail safely;
@@ -254,4 +256,4 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 ## 8. Immediate execution order
 
-Implement P2.5 next and commit it independently. Do not add Scheduler, CDN, Search Index, or new role names before the operation-aware runtime passes the generic order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.
+Implement P2.6 next and commit each behavior wave independently. Scheduler, CDN, and Search Index must each add distinct executable semantics and result-changing tests; do not freeze a public SDK until these later behavior variants have exposed the extension points it actually needs.

@@ -17,6 +17,9 @@ const referenceName = (value: unknown) => {
   return typeof reference === 'string' && reference.startsWith('#/components/schemas/') ? decodeURIComponent(reference.slice('#/components/schemas/'.length)) : undefined
 }
 const positiveInteger = (value: unknown, fallback: number) => typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback
+const pathParameters = (path: string) => [...path.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\}/g)].map((match) => ({
+  name: match[1]!, in: 'path', required: true, schema: { type: 'string' },
+}))
 
 export async function importOpenApi(source: string, options: OpenApiImportOptions): Promise<OpenApiContracts> {
   const validation = await validate(source)
@@ -42,7 +45,7 @@ export async function importOpenApi(source: string, options: OpenApiImportOption
     return schema ? { schemaId: schema.id, schemaVersion: schema.version } : { schemaId: schemaIdFor(name), schemaVersion: 1 }
   }
   const paths = objectValue(document.paths) ?? {}
-  const operations: ApiDefinition['operations'] = []
+  const operations: Array<{ value: ApiDefinition['operations'][number]; order: number }> = []
   const methods = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options'])
   for (const [path, pathItemValue] of Object.entries(paths)) {
     const pathItem = objectValue(pathItemValue)
@@ -64,7 +67,7 @@ export async function importOpenApi(source: string, options: OpenApiImportOption
         if (media?.schema && !responseSchemaName) throw new Error(`${method.toUpperCase()} ${path} response ${statusCode} uses an inline schema; move it to components.schemas for lossless import.`)
         return { statusCode, ...(responseSchemaName ? { body: { schema: schemaReferenceForName(responseSchemaName), estimatedBytes: positiveInteger(media?.['x-estimated-bytes'], 1_024) } } : {}) }
       })
-      operations.push({
+      operations.push({ value: {
         id: contractId(typeof operation.operationId === 'string' ? operation.operationId : `${method}-${path}`, 'operation'),
         name: typeof operation.summary === 'string' ? operation.summary : typeof operation.operationId === 'string' ? operation.operationId : `${method.toUpperCase()} ${path}`,
         method: method.toUpperCase() as ApiDefinition['operations'][number]['method'], path,
@@ -72,12 +75,12 @@ export async function importOpenApi(source: string, options: OpenApiImportOption
         responses,
         ...(typeof operation['x-handler-time-ms'] === 'number' ? { handlerTimeMs: operation['x-handler-time-ms'] } : {}),
         ...(objectValue(operation['x-slo']) ? { slo: operation['x-slo'] as { latencyP95Ms?: number; availability?: number } } : {}),
-      })
+      }, order: typeof operation['x-system-design-order'] === 'number' ? operation['x-system-design-order'] : operations.length })
     }
   }
   return {
     schemas,
-    api: apiDefinitionSchema.parse({ id: contractId(options.apiId, 'api'), version: 1, name: typeof info.title === 'string' ? info.title : options.apiId, ownerNodeId: options.ownerNodeId, operations }),
+    api: apiDefinitionSchema.parse({ id: contractId(options.apiId, 'api'), version: 1, name: typeof info.title === 'string' ? info.title : options.apiId, ownerNodeId: options.ownerNodeId, operations: operations.sort((left, right) => left.order - right.order).map(({ value }) => value) }),
   }
 }
 
@@ -91,13 +94,15 @@ export async function exportOpenApi(contracts: OpenApiContracts): Promise<string
     return { $ref: `#/components/schemas/${encodeURIComponent(name)}` }
   }
   const paths: Record<string, Record<string, unknown>> = {}
-  for (const operation of api.operations) {
+  for (const [order, operation] of api.operations.entries()) {
     const responseEntries = operation.responses.map((response) => [response.statusCode, {
       description: response.statusCode === 'default' ? 'Default response' : `HTTP ${response.statusCode}`,
       ...(response.body ? { content: { 'application/json': { schema: schemaReference(response.body.schema), 'x-estimated-bytes': response.body.estimatedBytes } } } : {}),
     }])
     ;(paths[operation.path] ??= {})[operation.method.toLowerCase()] = {
       operationId: operation.id, summary: operation.name,
+      'x-system-design-order': order,
+      ...(pathParameters(operation.path).length === 0 ? {} : { parameters: pathParameters(operation.path) }),
       ...(operation.request ? { requestBody: { required: true, content: { 'application/json': { schema: schemaReference(operation.request.schema), 'x-estimated-bytes': operation.request.estimatedBytes } } } } : {}),
       responses: Object.fromEntries(responseEntries),
       ...(operation.handlerTimeMs === undefined ? {} : { 'x-handler-time-ms': operation.handlerTimeMs }),

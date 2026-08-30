@@ -22,7 +22,7 @@ describe('operation-aware runtime', () => {
     const first = await runSimulation(project, 'operation-run')
     const replay = await runSimulation(structuredClone(project), 'operation-run')
     expect(first.summary).toMatchObject({ generatedRequests: 1, completedRequests: 1, failedRequests: 0 })
-    expect(first.events.filter((event) => event.type === 'action-completed').map((event) => event.actionId).sort()).toEqual(['cache-order', 'call-api', 'consume-order', 'publish-order', 'write-order'])
+    expect(first.events.filter((event) => event.type === 'action-completed').map((event) => event.actionId).sort()).toEqual(['cache-order', 'call-api', 'consume-order', 'publish-order', 'write-order', 'write-order-items'])
     const operationCompleted = first.events.find((event) => event.type === 'operation-completed')!
     const publishCompleted = first.events.find((event) => event.type === 'action-completed' && event.actionId === 'publish-order')!
     expect(operationCompleted.timestampMs).toBeLessThanOrEqual(publishCompleted.timestampMs)

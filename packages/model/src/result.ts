@@ -58,6 +58,7 @@ export interface ActionMetrics {
   averageDurationMs: number
   recordsExamined: number
   bytesProcessed: number
+  explanation?: string
 }
 
 export interface SimulationResult {

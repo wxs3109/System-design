@@ -147,8 +147,9 @@ export const reduceActionMetrics = (events: readonly RuntimeEvent[], aggregate?:
   if (aggregate) return [...aggregate.actions.values()].map((value) => ({
     operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed,
     averageDurationMs: round(value.totalDurationMs / Math.max(1, value.completed + value.failed)), recordsExamined: value.recordsExamined, bytesProcessed: value.bytesProcessed,
+    ...(value.explanation === undefined ? {} : { explanation: value.explanation }),
   }))
-  const byAction = new Map<string, { operationId: string; actionId: string; actionKind: string; completed: number; failed: number; duration: number; records: number; bytes: number }>()
+  const byAction = new Map<string, { operationId: string; actionId: string; actionKind: string; completed: number; failed: number; duration: number; records: number; bytes: number; explanation?: string }>()
   for (const event of events) {
     if (event.type !== 'action-completed' || !event.operationId || !event.actionId) continue
     const key = `${event.operationId}:${event.actionId}`
@@ -158,7 +159,8 @@ export const reduceActionMetrics = (events: readonly RuntimeEvent[], aggregate?:
     value.duration += event.durationMs ?? 0
     value.records += Number(event.attributes.recordsExamined ?? 0)
     value.bytes += Number(event.attributes.bytesProcessed ?? 0)
+    if (typeof event.attributes.explanation === 'string' && event.attributes.explanation) value.explanation = event.attributes.explanation
     byAction.set(key, value)
   }
-  return [...byAction.values()].map((value) => ({ operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed, averageDurationMs: round(value.duration / Math.max(1, value.completed + value.failed)), recordsExamined: value.records, bytesProcessed: value.bytes }))
+  return [...byAction.values()].map((value) => ({ operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed, averageDurationMs: round(value.duration / Math.max(1, value.completed + value.failed)), recordsExamined: value.records, bytesProcessed: value.bytes, ...(value.explanation === undefined ? {} : { explanation: value.explanation }) }))
 }

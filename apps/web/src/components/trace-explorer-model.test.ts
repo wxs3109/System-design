@@ -102,6 +102,7 @@ describe('trace explorer projections', () => {
     ]))
 
     expect(records).toHaveLength(1)
-    expect(records[0]).toMatchObject({ traceId: 'operation-trace', requestId: '7', startedAtMs: 5, endedAtMs: 45, durationMs: 40, status: 'error', reason: 'queue_full', terminalNodeId: 'traffic' })
+    expect(records[0]).toMatchObject({ traceId: 'operation-trace', requestId: '7', operationId: 'create-order', startedAtMs: 5, endedAtMs: 45, durationMs: 40, status: 'error', reason: 'queue_full', terminalNodeId: 'traffic' })
+    expect(buildWaterfallLanes(records[0]!, new Map([['traffic', 'Client'], ['database', 'Orders DB']]))[1]?.label).toBe('  Orders DB · write')
   })
 })
