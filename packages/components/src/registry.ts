@@ -1,0 +1,172 @@
+import type { z } from 'zod'
+import type { Fault, Position, ProjectComponentNode } from '@system-design/model'
+
+export type PortProtocol = 'request' | 'response' | 'message' | 'data'
+export type PortDirection = 'input' | 'output'
+
+export interface ComponentPort {
+  id: string
+  label: string
+  direction: PortDirection
+  protocol: PortProtocol
+  required?: boolean
+  multiple?: boolean
+}
+
+export interface NumberConfigField {
+  kind: 'number'
+  key: string
+  label: string
+  min?: number
+  max?: number
+  step?: number
+  description?: string
+}
+
+export interface SelectConfigField {
+  kind: 'select'
+  key: string
+  label: string
+  options: readonly { value: string; label: string }[]
+  description?: string
+}
+
+export interface TextConfigField {
+  kind: 'text'
+  key: string
+  label: string
+  description?: string
+}
+
+export type ConfigField = NumberConfigField | SelectConfigField | TextConfigField
+
+export interface ComponentManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> {
+  type: string
+  version: number
+  label: string
+  description: string
+  category: 'traffic' | 'network' | 'compute' | 'data' | 'async'
+  iconToken: string
+  color: string
+  configSchema: z.ZodType<TConfig>
+  createDefaultConfig: (context: { nodeId: string; workloadId: string }) => TConfig
+  configFields: readonly ConfigField[]
+  ports: readonly ComponentPort[]
+  capabilities: readonly string[]
+  emittedMetrics: readonly string[]
+  supportedFaults: readonly Fault['type'][]
+  runtimeBehavior: string
+  describeConfig: (config: TConfig) => string
+}
+
+export interface RegistryNode {
+  id: string
+  name: string
+  type: string
+  componentVersion: number
+  position: Position
+  disabled?: boolean
+  config: Record<string, unknown>
+}
+
+const manifestKey = (type: string, version: number) => `${type}@${version}`
+
+export class ComponentRegistry {
+  private readonly manifests = new Map<string, ComponentManifest>()
+  private readonly latestVersions = new Map<string, number>()
+
+  constructor(manifests: readonly ComponentManifest[] = []) {
+    manifests.forEach((manifest) => this.register(manifest))
+  }
+
+  register<TConfig extends Record<string, unknown>>(manifest: ComponentManifest<TConfig>) {
+    if (!Number.isInteger(manifest.version) || manifest.version < 1) throw new Error(`Invalid component version for ${manifest.type}.`)
+    const key = manifestKey(manifest.type, manifest.version)
+    if (this.manifests.has(key)) throw new Error(`Component ${key} is already registered.`)
+    this.manifests.set(key, manifest as ComponentManifest)
+    this.latestVersions.set(manifest.type, Math.max(manifest.version, this.latestVersions.get(manifest.type) ?? 0))
+    return this
+  }
+
+  get(type: string, version = this.latestVersions.get(type)): ComponentManifest {
+    if (version === undefined) throw new Error(`Unknown component type: ${type}`)
+    const manifest = this.manifests.get(manifestKey(type, version))
+    if (!manifest) throw new Error(`Unknown component: ${manifestKey(type, version)}`)
+    return manifest
+  }
+
+  list(): ComponentManifest[] {
+    return [...this.latestVersions].map(([type, version]) => this.get(type, version))
+  }
+
+  createNode(type: string, id: string, position: Position, workloadId = `${id}-workload`): RegistryNode {
+    const manifest = this.get(type)
+    return {
+      id,
+      name: manifest.label,
+      type,
+      componentVersion: manifest.version,
+      position,
+      config: manifest.configSchema.parse(manifest.createDefaultConfig({ nodeId: id, workloadId })),
+    }
+  }
+
+  describeNode(node: Pick<RegistryNode, 'type' | 'componentVersion' | 'config'>): string {
+    const manifest = this.get(node.type, node.componentVersion)
+    return manifest.describeConfig(manifest.configSchema.parse(node.config))
+  }
+
+  canConnect(source: Pick<RegistryNode, 'id' | 'type' | 'componentVersion'> | undefined, target: Pick<RegistryNode, 'id' | 'type' | 'componentVersion'> | undefined) {
+    if (!source || !target) return { valid: false, reason: 'Both endpoints must exist.' }
+    if (source.id === target.id) return { valid: false, reason: 'A node cannot connect directly to itself.' }
+    const sourceManifest = this.get(source.type, source.componentVersion)
+    const targetManifest = this.get(target.type, target.componentVersion)
+    const outputs = sourceManifest.ports.filter((port) => port.direction === 'output')
+    const inputs = targetManifest.ports.filter((port) => port.direction === 'input')
+    const compatible = outputs.some((output) => inputs.some((input) => output.protocol === input.protocol || (output.protocol === 'request' && input.protocol === 'request')))
+    if (outputs.length === 0) return { valid: false, reason: `${sourceManifest.label} has no output port.` }
+    if (inputs.length === 0) return { valid: false, reason: `${targetManifest.label} has no input port.` }
+    if (!compatible) return { valid: false, reason: 'The selected ports use incompatible protocols.' }
+    return { valid: true }
+  }
+}
+
+export interface PolicyManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> {
+  type: string
+  version: number
+  label: string
+  description: string
+  targets: readonly ('node' | 'edge' | 'group')[]
+  configSchema: z.ZodType<TConfig>
+  defaultConfig: TConfig
+  configFields: readonly ConfigField[]
+  runtimeBehavior: string
+}
+
+export class PolicyRegistry {
+  private readonly policies = new Map<string, PolicyManifest>()
+
+  constructor(policies: readonly PolicyManifest[] = []) {
+    policies.forEach((policy) => this.register(policy))
+  }
+
+  register<TConfig extends Record<string, unknown>>(policy: PolicyManifest<TConfig>) {
+    const key = manifestKey(policy.type, policy.version)
+    if (this.policies.has(key)) throw new Error(`Policy ${key} is already registered.`)
+    policy.configSchema.parse(policy.defaultConfig)
+    this.policies.set(key, policy as PolicyManifest)
+    return this
+  }
+
+  get(type: string, version: number): PolicyManifest {
+    const policy = this.policies.get(manifestKey(type, version))
+    if (!policy) throw new Error(`Unknown policy: ${manifestKey(type, version)}`)
+    return policy
+  }
+
+  list(): PolicyManifest[] {
+    return [...this.policies.values()]
+  }
+}
+
+export type BuiltInComponentNode = ProjectComponentNode

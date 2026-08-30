@@ -1,59 +1,107 @@
 import type { Scenario, SimulationResult } from '@system-design/model'
 import type { SimulationWorkerRequest, SimulationWorkerResponse } from './protocol'
 
-interface PendingRun {
-  resolve: (result: SimulationResult) => void
+export interface WorkerLike {
+  onmessage: ((event: MessageEvent<SimulationWorkerResponse>) => void) | null
+  onerror: ((event: ErrorEvent) => void) | null
+  postMessage(message: SimulationWorkerRequest): void
+  terminate(): void
+}
+
+export type WorkerFactory = () => WorkerLike
+
+const defaultWorkerFactory: WorkerFactory = () => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+const abortError = () => new DOMException('Simulation cancelled.', 'AbortError')
+
+interface ActiveRun {
+  id: string
+  worker: WorkerLike
   reject: (error: Error) => void
+  removeAbortListener?: () => void
 }
 
 export class SimulationWorkerClient {
-  private readonly worker: Worker
-  private readonly pending = new Map<string, PendingRun>()
+  private active: ActiveRun | null = null
+  private disposed = false
 
-  constructor(worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })) {
-    this.worker = worker
-    this.worker.onmessage = this.onMessage
-    this.worker.onerror = this.onWorkerError
-  }
+  constructor(private readonly createWorker: WorkerFactory = defaultWorkerFactory) {}
 
-  run(scenario: Scenario): Promise<SimulationResult> {
-    const id = crypto.randomUUID()
+  get activeRunId() { return this.active?.id ?? null }
+
+  run(scenario: Scenario, options: { signal?: AbortSignal; runId?: string } = {}): Promise<SimulationResult> {
+    if (this.disposed) return Promise.reject(new Error('Simulation worker client is disposed.'))
+    if (this.active) this.cancelActive()
+    if (options.signal?.aborted) return Promise.reject(abortError())
+
+    const id = options.runId ?? crypto.randomUUID()
+    const worker = this.createWorker()
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      const message: SimulationWorkerRequest = { type: 'run', id, scenario }
-      this.worker.postMessage(message)
+      const cleanup = () => {
+        const current = this.active
+        if (!current || current.id !== id || current.worker !== worker) return false
+        current.removeAbortListener?.()
+        worker.onmessage = null
+        worker.onerror = null
+        worker.terminate()
+        this.active = null
+        return true
+      }
+      worker.onmessage = (event) => {
+        const message = event.data
+        if (message.id !== id || !cleanup()) return
+        if (message.type === 'result') resolve({ ...message.result, runId: id })
+        else {
+          const error = new Error(message.error.message)
+          error.name = message.error.name
+          reject(error)
+        }
+      }
+      worker.onerror = (event) => {
+        if (!cleanup()) return
+        reject(new Error(event.message || 'Simulation worker failed.'))
+      }
+      const onAbort = () => { if (this.active?.id === id) this.cancelActive() }
+      const removeAbortListener = options.signal
+        ? () => options.signal?.removeEventListener('abort', onAbort)
+        : undefined
+      options.signal?.addEventListener('abort', onAbort, { once: true })
+      this.active = { id, worker, reject, ...(removeAbortListener ? { removeAbortListener } : {}) }
+      try {
+        worker.postMessage({ type: 'run', id, scenario })
+      } catch (cause) {
+        cleanup()
+        reject(cause instanceof Error ? cause : new Error('Failed to start simulation worker.'))
+      }
     })
   }
 
   cancel(id: string) {
-    const message: SimulationWorkerRequest = { type: 'cancel', id }
-    this.worker.postMessage(message)
-    const pending = this.pending.get(id)
-    if (pending) {
-      pending.reject(new DOMException('Simulation cancelled.', 'AbortError'))
-      this.pending.delete(id)
-    }
+    if (this.active?.id === id) this.cancelActive()
+  }
+
+  cancelActive() {
+    const active = this.active
+    if (!active) return false
+    active.removeAbortListener?.()
+    active.worker.onmessage = null
+    active.worker.onerror = null
+    active.worker.terminate()
+    this.active = null
+    active.reject(abortError())
+    return true
   }
 
   dispose() {
-    this.worker.onmessage = null
-    this.worker.onerror = null
-    this.worker.terminate()
-    for (const pending of this.pending.values()) pending.reject(new Error('Simulation worker disposed.'))
-    this.pending.clear()
-  }
-
-  private onMessage = (event: MessageEvent<SimulationWorkerResponse>) => {
-    const message = event.data
-    const pending = this.pending.get(message.id)
-    if (!pending) return
-    this.pending.delete(message.id)
-    if (message.type === 'result') pending.resolve(message.result)
-    else pending.reject(new Error(message.error))
-  }
-
-  private onWorkerError = (event: ErrorEvent) => {
-    for (const pending of this.pending.values()) pending.reject(new Error(event.message || 'Simulation worker failed.'))
-    this.pending.clear()
+    if (this.disposed) return
+    const active = this.active
+    if (active) {
+      active.removeAbortListener?.()
+      active.worker.onmessage = null
+      active.worker.onerror = null
+      active.worker.terminate()
+      this.active = null
+      active.reject(new Error('Simulation worker disposed.'))
+    }
+    this.disposed = true
   }
 }

@@ -33,7 +33,7 @@ describe('discrete event simulation', () => {
   it('is deterministic for the same scenario and seed', async () => {
     const first = await runSimulation(directScenario())
     const second = await runSimulation(directScenario())
-    expect({ ...first, wallClockDurationMs: 0 }).toEqual({ ...second, wallClockDurationMs: 0 })
+    expect({ ...first, runId: '', wallClockDurationMs: 0 }).toEqual({ ...second, runId: '', wallClockDurationMs: 0 })
   })
 
   it('exposes queueing when a resource is saturated', async () => {
@@ -49,6 +49,70 @@ describe('discrete event simulation', () => {
     const serviceMetrics = result.nodes.find((node) => node.nodeId === 'service')!
     expect(serviceMetrics.maxQueueLength).toBe(100)
     expect(result.summary.failedRequests).toBeGreaterThan(0)
+  })
+
+  it('uses full configured capacity when no capacity fault is active', async () => {
+    const scenario = directScenario(150)
+    const service = scenario.nodes.find((node) => node.type === 'service')!
+    if (service.type === 'service') {
+      service.config.replicas = 2
+      service.config.concurrencyPerReplica = 1
+      service.config.serviceTimeMs = 10
+      service.config.jitterMs = 0
+      service.config.maxQueueSize = 0
+    }
+    const database = scenario.nodes.find((node) => node.type === 'database')!
+    if (database.type === 'database') database.config.errorRate = 0
+
+    const result = await runSimulation(scenario)
+    expect(result.summary.failedRequests).toBe(0)
+    expect(result.summary.completedRequests).toBeGreaterThan(1_480)
+  })
+
+  it('applies a scheduled capacity-drop fault to resource admission', async () => {
+    const baseline = directScenario(150)
+    const service = baseline.nodes.find((node) => node.type === 'service')!
+    if (service.type === 'service') {
+      service.config.replicas = 2
+      service.config.concurrencyPerReplica = 1
+      service.config.serviceTimeMs = 10
+      service.config.jitterMs = 0
+      service.config.maxQueueSize = 0
+    }
+    const database = baseline.nodes.find((node) => node.type === 'database')!
+    if (database.type === 'database') database.config.errorRate = 0
+    const degraded = structuredClone(baseline)
+    degraded.faults.push({
+      id: 'service-capacity-drop', targetNodeId: 'service', type: 'capacity-drop',
+      startAtSeconds: 0, durationSeconds: 10, factor: 0.5,
+    })
+
+    const [healthyResult, degradedResult] = await Promise.all([runSimulation(baseline), runSimulation(degraded)])
+    expect(healthyResult.summary.failedRequests).toBe(0)
+    expect(degradedResult.summary.failedRequests).toBeGreaterThan(400)
+    expect(degradedResult.summary.completedRequests).toBeLessThan(healthyResult.summary.completedRequests)
+  })
+
+  it('restores configured resource capacity after a capacity-drop window', async () => {
+    const baseline = directScenario(150)
+    const service = baseline.nodes.find((node) => node.type === 'service')!
+    if (service.type === 'service') {
+      service.config.replicas = 2
+      service.config.concurrencyPerReplica = 1
+      service.config.serviceTimeMs = 10
+      service.config.jitterMs = 0
+      service.config.maxQueueSize = 0
+    }
+    const database = baseline.nodes.find((node) => node.type === 'database')!
+    if (database.type === 'database') database.config.errorRate = 0
+    const partialFault = structuredClone(baseline)
+    partialFault.faults.push({ id: 'temporary-drop', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 0, durationSeconds: 5, factor: 0.5 })
+    const fullFault = structuredClone(baseline)
+    fullFault.faults.push({ id: 'full-drop', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 0, durationSeconds: 10, factor: 0.5 })
+
+    const [partial, full] = await Promise.all([runSimulation(partialFault), runSimulation(fullFault)])
+    expect(partial.summary.completedRequests).toBeGreaterThan(full.summary.completedRequests + 300)
+    expect(partial.summary.failedRequests).toBeLessThan(full.summary.failedRequests)
   })
 
   it('rejects a disconnected Traffic Generator', async () => {

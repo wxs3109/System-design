@@ -14,7 +14,7 @@ scope.onmessage = async (event: MessageEvent<SimulationWorkerRequest>) => {
   }
 
   try {
-    const result = await runSimulation(message.scenario)
+    const result = await runSimulation(message.scenario, message.id)
     if (cancelled.delete(message.id)) return
     const response: SimulationWorkerResponse = { type: 'result', id: message.id, result }
     scope.postMessage(response)
@@ -22,7 +22,13 @@ scope.onmessage = async (event: MessageEvent<SimulationWorkerRequest>) => {
     const response: SimulationWorkerResponse = {
       type: 'error',
       id: message.id,
-      error: error instanceof Error ? error.message : 'Unknown simulation error.',
+      error: {
+        name: error instanceof Error ? error.name : 'Error',
+        message: error instanceof Error ? error.message : 'Unknown simulation error.',
+        ...(error instanceof Error && 'problems' in error && Array.isArray(error.problems)
+          ? { problems: error.problems as string[] }
+          : {}),
+      },
     }
     scope.postMessage(response)
   }

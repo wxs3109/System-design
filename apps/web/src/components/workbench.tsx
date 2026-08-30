@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type OnConnect } from '@xyflow/react'
-import { componentCatalog, createEmptyScenario, scenarioSchema, type ComponentNode as ComponentNodeModel, type ComponentType, type SimulationResult } from '@system-design/model'
+import { builtInComponentTypes, componentRegistry, type ConfigField } from '@system-design/components'
+import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { Activity, ChevronDown, CircleAlert, Database, Download, FlaskConical, Globe2, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Server, Trash2, Upload } from 'lucide-react'
-import { ComponentNode } from './component-node'
+import { ChevronDown, CircleAlert, Download, FlaskConical, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Square, Trash2, Upload } from 'lucide-react'
+import { ComponentNode, componentIcons } from './component-node'
 import { MetricChart } from './metric-chart'
 import { createAsyncExample, createDirectExample } from '@/lib/examples'
-import { scenarioToEdges, scenarioToNodes, useWorkbenchStore } from '@/lib/store'
+import { getScenario, projectToEdges, projectToNodes, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 
 const nodeTypes = { component: ComponentNode }
-const icons = { traffic: Globe2, network: Activity, service: Server, queue: Layers3, database: Database }
-const orderedTypes: ComponentType[] = ['traffic', 'network', 'service', 'queue', 'database']
+const orderedTypes = builtInComponentTypes
 
 function Field({ label, value, min = 0, step = 1, onChange }: { label: string; value: number; min?: number; step?: number; onChange: (value: number) => void }) {
   return (
@@ -25,8 +25,8 @@ function Field({ label, value, min = 0, step = 1, onChange }: { label: string; v
 }
 
 function PaletteItem({ type, onAdd }: { type: ComponentType; onAdd: () => void }) {
-  const definition = componentCatalog[type]
-  const Icon = icons[type]
+  const definition = componentRegistry.get(type)
+  const Icon = componentIcons[definition.iconToken]!
   return (
     <button
       className="palette-item"
@@ -43,47 +43,31 @@ function PaletteItem({ type, onAdd }: { type: ComponentType; onAdd: () => void }
   )
 }
 
-function PropertiesPanel({ node }: { node: ComponentNodeModel | undefined }) {
+function ConfigFieldControl({ field, value, onChange }: { field: ConfigField; value: unknown; onChange: (value: number | string) => void }) {
+  if (field.kind === 'number') return <Field label={field.label} value={Number(value)} {...(field.min === undefined ? {} : { min: field.min })} {...(field.step === undefined ? {} : { step: field.step })} onChange={onChange} />
+  if (field.kind === 'select') return <label className="field"><span>{field.label}</span><select value={String(value)} onChange={(event) => onChange(event.target.value)}>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+  return <label className="field"><span>{field.label}</span><input value={String(value)} onChange={(event) => onChange(event.target.value)} /></label>
+}
+
+function PropertiesPanel({ node }: { node: ProjectNode | undefined }) {
   const updateNode = useWorkbenchStore((state) => state.updateSelectedNode)
   const deleteNode = useWorkbenchStore((state) => state.deleteSelectedNode)
-  const workload = useWorkbenchStore((state) => node?.type === 'traffic' ? state.scenario.workloads.find((item) => item.id === node.config.workloadId) : undefined)
+  const workload = useWorkbenchStore((state) => node?.type === 'traffic' ? getActiveExperiment(state.project).workloads.find((item) => item.id === node.config.workloadId) : undefined)
   const updateWorkload = useWorkbenchStore((state) => state.updateWorkload)
   if (!node) {
     return <div className="empty-properties"><MousePointer2 size={22} /><p>Select a component to configure its runtime behavior.</p></div>
   }
-  const setConfig = (key: string, value: number) => updateNode({ config: { [key]: value } })
+  const manifest = componentRegistry.get(node.type, node.componentVersion)
+  const setConfig = (key: string, value: number | string) => updateNode({ config: { [key]: value } })
   return (
     <div className="properties-form">
-      <div className="section-heading"><div><span>Selected component</span><strong>{componentCatalog[node.type].label}</strong></div><button className="icon-button danger" onClick={deleteNode} aria-label="Delete selected component"><Trash2 size={16} /></button></div>
+      <div className="section-heading"><div><span>Selected component</span><strong>{manifest.label}</strong></div><button className="icon-button danger" onClick={deleteNode} aria-label="Delete selected component"><Trash2 size={16} /></button></div>
       <label className="field"><span>Name</span><input value={node.name} onChange={(event) => updateNode({ name: event.target.value })} /></label>
       {node.type === 'traffic' && workload ? <>
         <Field label="Requests / second" value={workload.requestsPerSecond} min={0.1} step={10} onChange={(value) => updateWorkload({ requestsPerSecond: value })} />
         <label className="field"><span>Arrival pattern</span><select value={workload.pattern} onChange={(event) => updateWorkload({ pattern: event.target.value as 'constant' | 'poisson' })}><option value="poisson">Poisson</option><option value="constant">Constant</option></select></label>
       </> : null}
-      {node.type === 'network' ? <>
-        <Field label="Latency (ms)" value={node.config.latencyMs} step={1} onChange={(value) => setConfig('latencyMs', value)} />
-        <Field label="Jitter (ms)" value={node.config.jitterMs} step={1} onChange={(value) => setConfig('jitterMs', value)} />
-        <Field label="Bandwidth (Mbps)" value={node.config.bandwidthMbps} min={0.1} step={10} onChange={(value) => setConfig('bandwidthMbps', value)} />
-        <Field label="Packet loss (0–1)" value={node.config.packetLossRate} step={0.001} onChange={(value) => setConfig('packetLossRate', value)} />
-      </> : null}
-      {node.type === 'service' ? <>
-        <Field label="Replicas" value={node.config.replicas} min={1} onChange={(value) => setConfig('replicas', value)} />
-        <Field label="Concurrency / replica" value={node.config.concurrencyPerReplica} min={1} onChange={(value) => setConfig('concurrencyPerReplica', value)} />
-        <Field label="Service time (ms)" value={node.config.serviceTimeMs} min={0.1} step={1} onChange={(value) => setConfig('serviceTimeMs', value)} />
-        <Field label="Max queue" value={node.config.maxQueueSize} onChange={(value) => setConfig('maxQueueSize', value)} />
-        <Field label="Error rate (0–1)" value={node.config.errorRate} step={0.001} onChange={(value) => setConfig('errorRate', value)} />
-      </> : null}
-      {node.type === 'queue' ? <>
-        <Field label="Consumers" value={node.config.consumers} min={1} onChange={(value) => setConfig('consumers', value)} />
-        <Field label="Delivery time (ms)" value={node.config.deliveryTimeMs} min={0.1} onChange={(value) => setConfig('deliveryTimeMs', value)} />
-        <Field label="Max depth" value={node.config.maxDepth} min={1} onChange={(value) => setConfig('maxDepth', value)} />
-      </> : null}
-      {node.type === 'database' ? <>
-        <Field label="Max connections" value={node.config.maxConnections} min={1} onChange={(value) => setConfig('maxConnections', value)} />
-        <Field label="Query time (ms)" value={node.config.queryTimeMs} min={0.1} onChange={(value) => setConfig('queryTimeMs', value)} />
-        <Field label="Max queue" value={node.config.maxQueueSize} onChange={(value) => setConfig('maxQueueSize', value)} />
-        <Field label="Error rate (0–1)" value={node.config.errorRate} step={0.001} onChange={(value) => setConfig('errorRate', value)} />
-      </> : null}
+      {manifest.configFields.map((field) => <ConfigFieldControl key={field.key} field={field} value={(node.config as Record<string, unknown>)[field.key]} onChange={(value) => setConfig(field.key, value)} />)}
     </div>
   )
 }
@@ -106,19 +90,21 @@ function ResultsPanel({ result }: { result: SimulationResult | null }) {
 }
 
 function WorkbenchInner() {
-  const scenario = useWorkbenchStore((state) => state.scenario)
+  const project = useWorkbenchStore((state) => state.project)
+  const scenario = useMemo(() => getScenario(project), [project])
+  const experiment = getActiveExperiment(project)
   const selectedNodeId = useWorkbenchStore((state) => state.selectedNodeId)
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setScenario, addComponent, onNodesChange, onEdgesChange, connect, selectNode, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
-  const selectedNode = scenario.nodes.find((node) => node.id === selectedNodeId)
-  const reactFlow = useReactFlow<ReturnType<typeof scenarioToNodes>[number]>()
+  const { setProject, addComponent, onNodesChange, onEdgesChange, connect, selectNode, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
+  const reactFlow = useReactFlow<ReturnType<typeof projectToNodes>[number]>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const clientRef = useRef<SimulationWorkerClient | null>(null)
   const [exampleOpen, setExampleOpen] = useState(false)
-  const nodes = useMemo(() => scenarioToNodes(scenario).map((node) => ({ ...node, selected: node.id === selectedNodeId })), [scenario, selectedNodeId])
-  const edges = useMemo(() => scenarioToEdges(scenario), [scenario])
+  const nodes = useMemo(() => projectToNodes(project).map((node) => ({ ...node, selected: node.id === selectedNodeId })), [project, selectedNodeId])
+  const edges = useMemo(() => projectToEdges(project), [project])
 
   useEffect(() => () => clientRef.current?.dispose(), [])
 
@@ -141,35 +127,37 @@ function WorkbenchInner() {
   const run = async () => {
     setRunning(true); setError(null)
     try {
-      const parsed = scenarioSchema.parse(scenario)
-      const validation = validateScenarioForSimulation(parsed)
+      const validation = validateScenarioForSimulation(scenario)
       if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
       clientRef.current ??= new SimulationWorkerClient()
-      setResult(await clientRef.current.run(parsed))
+      setResult(await clientRef.current.run(scenario))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Simulation failed.')
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : 'Simulation failed.')
     } finally { setRunning(false) }
   }
 
-  const exportScenario = () => {
-    const blob = new Blob([JSON.stringify(scenario, null, 2)], { type: 'application/json' })
-    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${scenario.id}.json`; link.click(); URL.revokeObjectURL(link.href)
+  const cancelRun = () => clientRef.current?.cancelActive()
+
+  const exportProject = () => {
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${project.id}.json`; link.click(); URL.revokeObjectURL(link.href)
   }
 
-  const importScenario = async (file: File | undefined) => {
+  const importProject = async (file: File | undefined) => {
     if (!file) return
-    try { setScenario(scenarioSchema.parse(JSON.parse(await file.text()))) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid scenario file.') }
+    try { setProject(parseProjectFile(JSON.parse(await file.text()))) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid project file.') }
   }
 
   return (
     <main className="workbench">
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>System Design Simulator</strong><span>Build · Run · Break · Measure</span></div></div>
-        <div className="topbar-center"><span className="status-dot" /> Local simulation <span className="separator" /> <strong>{scenario.nodes.length}</strong> components <span className="separator" /> <strong>{scenario.edges.length}</strong> links</div>
+        <div className="topbar-center"><span className="status-dot" /> Local simulation <span className="separator" /> <strong>{project.topology.nodes.length}</strong> components <span className="separator" /> <strong>{project.topology.edges.length}</strong> links</div>
         <div className="top-actions">
           <button className="button subtle" onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Import</button>
-          <input ref={fileInputRef} hidden type="file" accept="application/json" onChange={(event) => void importScenario(event.target.files?.[0])} />
-          <button className="button subtle" onClick={exportScenario}><Download size={15} /> Export</button>
+          <input ref={fileInputRef} hidden type="file" accept="application/json" onChange={(event) => void importProject(event.target.files?.[0])} />
+          <button className="button subtle" onClick={exportProject}><Download size={15} /> Export</button>
+          {running ? <button className="button subtle" onClick={cancelRun}><Square size={14} fill="currentColor" /> Cancel</button> : null}
           <button className="button run" onClick={() => void run()} disabled={running}><Play size={15} fill="currentColor" /> {running ? 'Running…' : 'Run simulation'}</button>
         </div>
       </header>
@@ -189,9 +177,9 @@ function WorkbenchInner() {
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#334155" />
           <Controls position="bottom-left" showInteractive={false} />
-          <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentCatalog[(node.data as ComponentNodeModel).type].color} />
-          {scenario.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
-          <Panel position="top-left"><div className="canvas-toolbar"><button onClick={() => { setScenario(createEmptyScenario()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button onClick={() => { setScenario(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button onClick={() => { setScenario(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button></div> : null}</div></div></Panel>
+          <MiniMap pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
+          {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>Start with an empty canvas</strong><p>Drag any component here, connect it, configure load, then run the model.</p></div></Panel> : null}
+          <Panel position="top-left"><div className="canvas-toolbar"><button onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> Clear canvas</button><div className="example-picker"><button onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> Load example <ChevronDown size={13} /></button>{exampleOpen ? <div className="example-menu"><button onClick={() => { setProject(createDirectExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Direct service</strong><span>Traffic → Network → Service → DB</span></button><button onClick={() => { setProject(createAsyncExample()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>Async pipeline</strong><span>Traffic → API → Queue → Worker → DB</span></button></div> : null}</div></div></Panel>
         </ReactFlow>
         {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
       </section>
@@ -199,7 +187,7 @@ function WorkbenchInner() {
       <aside className="inspector">
         <div className="inspector-tabs"><span className="active">Properties</span></div>
         <PropertiesPanel node={selectedNode} />
-        <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={scenario.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={scenario.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
+        <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
       </aside>
 
       <section className="results"><div className="results-header"><div><span>Simulation output</span>{result ? <small>seed: {result.seed} · computed in {result.wallClockDurationMs} ms</small> : null}</div></div><ResultsPanel result={result} /></section>

@@ -1,4 +1,5 @@
 export * from './catalog'
 export * from './factories'
+export * from './project'
 export * from './result'
 export * from './schema'

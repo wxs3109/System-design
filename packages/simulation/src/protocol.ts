@@ -22,7 +22,11 @@ export interface SimulationSuccessMessage {
 export interface SimulationErrorMessage {
   type: 'error'
   id: string
-  error: string
+  error: {
+    name: string
+    message: string
+    problems?: string[]
+  }
 }
 
 export type SimulationWorkerResponse = SimulationSuccessMessage | SimulationErrorMessage

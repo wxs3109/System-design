@@ -195,13 +195,16 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 - [x] 支持 Traffic Generator、Network Link、Service、Queue、Database 五种通用组件。
 - [x] 支持吞吐量、延迟、错误率、队列长度和利用率。
 - [x] 支持随机种子和确定性重放。
-- [ ] 补齐场景版本迁移、本地历史版本、暂停、单步和加速。
+- [x] 完成 ProjectFile v2 与 Scenario v1 确定性迁移，并拆分拓扑和实验配置。
+- [ ] 补齐本地历史版本、暂停、单步和加速。
 
 Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空白画布搭出多种拓扑的通用编辑器。
 
 ### Phase 1：系统行为与故障实验
 
 详细执行方案：[Phase 1 Implementation Plan](docs/roadmap/phase-1.md)。
+
+当前进度：P1.0 基础加固已完成；P1.1 类型化执行与遥测待开始。
 
 - 增加负载均衡、缓存、消息流、对象存储、分片与副本。
 - 增加超时、重试、熔断、背压和流量控制策略。
@@ -241,7 +244,9 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 Phase 0 的首条通用纵切已经可运行：默认是空白画布，可以自由组合五类可执行组件，也可以加载 Direct Service 和 Async Pipeline 两种不同拓扑；场景经版本化 Schema 校验后，由 Web Worker 中的 SimScript 推进虚拟时间，并产生真实的吞吐量、延迟、错误率、队列和利用率指标。
 
-当前仍是早期 MVP。下一步应先完成场景迁移与本地历史、仿真控制、故障编辑器和更多通用组件，不能退回文档站或案例专用 Demo。
+Phase 1 的 P1.0 已完成：ProjectFile v2 将拓扑和实验分开，旧 Scenario v1 可确定性迁移；组件面板、配置表单和画布节点由 Component Registry manifest 驱动；Policy Registry 合同已建立；仿真已拆为编译、运行、组件行为、故障和遥测边界；每次运行具有 run ID，取消会终止 Worker，旧结果不会覆盖新运行。
+
+当前仍是早期平台。下一步是 P1.1 的类型化端口、显式路由、统一运行事件、span trace 和指标归约，不能退回文档站或案例专用 Demo。
 
 本地运行：
 

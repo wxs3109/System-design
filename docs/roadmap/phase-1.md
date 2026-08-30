@@ -1,6 +1,6 @@
 # Phase 1 Implementation Plan
 
-> Status: planned
+> Status: in progress — P1.0 complete
 >
 > Objective: evolve the Phase 0 workbench from “a topology can run” into a reusable system-behavior and failure laboratory.
 
@@ -328,12 +328,14 @@ Every added dependency must pass maintenance, license, browser bundle and Worker
 
 Deliverables:
 
-- [ ] fix normal and faulted capacity admission, including SimScript resource capacity;
-- [ ] split model, compiler, runtime, telemetry and UI responsibilities;
-- [ ] introduce Component Registry and Policy Registry contracts;
-- [ ] introduce ProjectFile v2 and tested Scenario v1 migration;
-- [ ] add run IDs and robust Worker error and cancel behavior;
-- [ ] preserve all Phase 0 behavior and examples.
+- [x] fix normal and faulted capacity admission, including SimScript resource capacity;
+- [x] split model, compiler, runtime, telemetry and UI responsibilities;
+- [x] introduce Component Registry and Policy Registry contracts;
+- [x] introduce ProjectFile v2 and tested Scenario v1 migration;
+- [x] add run IDs and robust Worker error and cancel behavior;
+- [x] preserve all Phase 0 behavior and examples.
+
+Status: complete. Verified by model and registry contract tests, simulation capacity/recovery tests, Worker lifecycle tests, production build, and browser acceptance tests for both Phase 0 examples and v1-to-v2 import/export.
 
 Exit criteria:
 

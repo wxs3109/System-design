@@ -40,6 +40,7 @@ export interface TraceStep {
 }
 
 export interface SimulationResult {
+  runId: string
   scenarioId: string
   seed: string
   simulatedDurationMs: number

@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@system-design/components": "workspace:*",
     "@system-design/model": "workspace:*",
     "@system-design/simulation": "workspace:*",
     "@xyflow/react": "^12.11.3",
