@@ -8,6 +8,7 @@ export interface StatefulRequest {
   key?: string
   operation?: 'read' | 'write'
   outgoingPort?: string
+  hotKeyProbabilityOverride?: number
 }
 
 export interface ComponentDomainEvent {
@@ -47,7 +48,7 @@ class CacheRuntime implements ComponentStateRuntime {
   }
 
   begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision {
-    const key = generatedKey(request, this.node.config.keySpaceSize, this.node.config.hotKeyProbability, random)
+    const key = generatedKey(request, this.node.config.keySpaceSize, request.hotKeyProbabilityOverride ?? this.node.config.hotKeyProbability, random)
     const read = this.cache.read(key, nowMs)
     const fill = read.outcome !== 'hit'
     this.pending.set(token(request), { key, fill })
@@ -163,7 +164,7 @@ class DatabaseRuntime implements ComponentStateRuntime {
   }
 
   begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision {
-    const key = generatedKey(request, this.node.config.keySpaceSize, this.node.config.hotKeyProbability, random)
+    const key = generatedKey(request, this.node.config.keySpaceSize, request.hotKeyProbabilityOverride ?? this.node.config.hotKeyProbability, random)
     const operation = request.operation ?? (random() < this.node.config.writeRatio ? 'write' : 'read')
     const route = operation === 'read' ? this.database.read(key, nowMs) : undefined
     this.pending.set(token(request), { key, operation, ...(route === undefined ? {} : { route }) })

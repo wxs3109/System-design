@@ -141,7 +141,20 @@ export const projectFileV2Schema = z.object({
     experiment.faults.forEach((fault, faultIndex) => {
       if (faultIds.has(fault.id)) addDuplicateIssue(context, ['experiments', experimentIndex, 'faults', faultIndex, 'id'], 'fault', fault.id)
       faultIds.add(fault.id)
-      if (!nodeIds.has(fault.targetNodeId)) context.addIssue({ code: 'custom', path: ['experiments', experimentIndex, 'faults', faultIndex, 'targetNodeId'], message: `Unknown fault target: ${fault.targetNodeId}` })
+      const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
+      if (!target) return
+      const targets = target.kind === 'node' ? nodeIds : target.kind === 'edge' ? edgeIds : target.kind === 'group' ? groupIds : workloadIds
+      if (!targets.has(target.id)) context.addIssue({ code: 'custom', path: ['experiments', experimentIndex, 'faults', faultIndex, 'target'], message: `Unknown ${target.kind} fault target: ${target.id}` })
+      const allowedTargets = fault.type === 'node-down' || fault.type === 'capacity-drop' ? ['node']
+        : fault.type === 'latency-spike' ? ['node', 'edge']
+          : fault.type === 'bandwidth-drop' || fault.type === 'packet-loss' ? ['edge']
+            : fault.type === 'traffic-spike' || fault.type === 'hot-key' ? ['workload']
+              : ['group']
+      if (!allowedTargets.includes(target.kind)) context.addIssue({ code: 'custom', path: ['experiments', experimentIndex, 'faults', faultIndex, 'target'], message: `${fault.type} cannot target a ${target.kind}.` })
+      if (fault.type === 'region-outage' && target.kind === 'group') {
+        const group = project.topology.groups.find((candidate) => candidate.id === target.id)
+        if (group?.kind !== 'region' && group?.kind !== 'zone') context.addIssue({ code: 'custom', path: ['experiments', experimentIndex, 'faults', faultIndex, 'target'], message: 'region-outage must target a region or zone.' })
+      }
     })
   })
 
@@ -236,7 +249,17 @@ export const projectToScenario = (input: ProjectFileV2, experimentId = input.act
     }),
     edges: project.topology.edges.map(({ sourceSemantic: _sourceSemantic, targetSemantic: _targetSemantic, routingMode: _routingMode, ...edge }) => ({ ...edge, sourcePort: 'out' as const, targetPort: 'in' as const })),
     workloads: experiment.workloads,
-    faults: experiment.faults,
+    faults: experiment.faults.flatMap((fault) => {
+      const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
+      if (target?.kind !== 'group') return [fault]
+      const members = project.topology.groups.find((group) => group.id === target.id)?.nodeIds ?? []
+      const memberSet = new Set(members)
+      const affectedEdges = project.topology.edges.filter((edge) => memberSet.has(edge.source) || memberSet.has(edge.target)).map((edge) => edge.id)
+      return [
+        ...members.map((nodeId, index) => ({ ...fault, id: `${fault.id}:node:${index}`, sourceFaultId: fault.id, type: 'region-outage' as const, target: { kind: 'node' as const, id: nodeId } })),
+        ...affectedEdges.map((edgeId, index) => ({ ...fault, id: `${fault.id}:edge:${index}`, sourceFaultId: fault.id, type: 'region-outage' as const, target: { kind: 'edge' as const, id: edgeId } })),
+      ]
+    }),
     simulation: experiment.simulation,
   })
 }

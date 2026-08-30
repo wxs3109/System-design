@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import '@xyflow/react/dist/style.css'
+import 'vis-timeline/styles/vis-timeline-graph2d.min.css'
 import './globals.css'
 
 export const metadata: Metadata = {

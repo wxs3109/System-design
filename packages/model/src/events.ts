@@ -18,6 +18,7 @@ export const reasonCodeSchema = z.enum([
   'none', 'timeout', 'queue_full', 'node_down', 'rate_limited', 'circuit_open', 'packet_loss',
   'intrinsic_error', 'hop_limit', 'missing_node', 'simulation_ended',
   'backpressure', 'dead_lettered', 'no_healthy_target',
+  'latency_spike', 'region_outage', 'capacity_reduced', 'bandwidth_reduced', 'traffic_spike', 'hot_key',
 ])
 export const eventAttributeValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean()])
 

@@ -25,6 +25,7 @@ export interface RequestState {
   key?: string
   operation?: 'read' | 'write'
   outgoingPort?: string
+  hotKeyProbabilityOverride?: number
   resumeNodeId?: string
   resumeOutgoingPort?: string
   resumeRequestSpanId?: string

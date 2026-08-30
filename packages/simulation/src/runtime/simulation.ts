@@ -1,10 +1,10 @@
 import { Entity, Queue as SimQueue, Simulation } from 'simscript'
 import seedrandom from 'seedrandom'
-import type { ComponentNode, Fault, ReasonCode, RuntimeEvent, Scenario, Workload } from '@system-design/model'
+import type { ComponentNode, Fault, FaultTarget, FaultType, ReasonCode, RuntimeEvent, Scenario, Workload } from '@system-design/model'
 import type { CompiledConnection, CompiledScenario } from '../compiler/compiler'
 import { getNodeBehavior } from '../components/behavior'
 import { createComponentStateRuntime, type ComponentDomainEvent } from '../components/data-runtime'
-import { applyCapacityFault, applyLatencyFault, resolveActiveFault } from '../faults/resolver'
+import { applyCapacityFaults, applyLatencyFaults, composeLossProbability, faultEndsAtMs, faultReason, faultStartsAtMs, resolveActiveFaults } from '../faults/resolver'
 import { round } from '../telemetry/math'
 import { RuntimeEventSink } from '../telemetry/event-sink'
 import { BackpressureGate, TokenBucket } from '../policies/delivery'
@@ -63,7 +63,7 @@ export class SystemDesignSimulation extends Simulation {
   onStarting() {
     super.onStarting()
     for (const fault of this.scenario.faults) {
-      if (fault.type === 'capacity-drop') this.activate(new CapacityFaultController(fault))
+      if (fault.enabled) this.activate(new FaultLifecycle(fault))
     }
     for (const workload of this.scenario.workloads) this.activate(new WorkloadGenerator(workload))
     this.activate(new MetricsSampler())
@@ -79,18 +79,42 @@ export class SystemDesignSimulation extends Simulation {
     })
   }
 
-  activeFault(nodeId: string, type: Fault['type']) {
-    return resolveActiveFault(this.scenario.faults, nodeId, type, this.timeNow)
+  activeFaults(kind: FaultTarget['kind'], targetId: string, type: FaultType) {
+    return resolveActiveFaults(this.scenario.faults, kind, targetId, type, this.timeNow)
+  }
+
+  activeFault(nodeId: string, type: FaultType) {
+    return this.activeFaults('node', nodeId, type)[0]
   }
 
   effectiveCapacity(node: ComponentNode) {
-    return applyCapacityFault(getNodeBehavior(node).capacity(node), this.activeFault(node.id, 'capacity-drop'))
+    return applyCapacityFaults(getNodeBehavior(node).capacity(node), this.activeFaults('node', node.id, 'capacity-drop'))
   }
 
   serviceTime(node: Exclude<ComponentNode, { type: 'traffic' }>, request: RequestState) {
     const behavior = getNodeBehavior(node)
-    const serviceTime = behavior.baseServiceTimeMs(node, request) + (this.random() * 2 - 1) * behavior.jitterMs(node)
-    return Math.max(0.001, applyLatencyFault(serviceTime, this.activeFault(node.id, 'latency-spike')))
+    let serviceTime = behavior.baseServiceTimeMs(node, request) + (this.random() * 2 - 1) * behavior.jitterMs(node)
+    serviceTime = applyLatencyFaults(serviceTime, this.activeFaults('node', node.id, 'latency-spike'))
+    if (request.incomingEdgeId) {
+      const edgeLatency = this.activeFaults('edge', request.incomingEdgeId, 'latency-spike')
+      serviceTime = applyLatencyFaults(serviceTime, edgeLatency)
+      const bandwidth = this.activeFaults('edge', request.incomingEdgeId, 'bandwidth-drop')
+      if (bandwidth.length > 0) {
+        const retainedBandwidth = Math.max(0.000_001, bandwidth.reduce((factor, fault) => factor * (fault.factor ?? 0.5), 1))
+        const edge = this.compiled.edges.find((candidate) => candidate.id === request.incomingEdgeId)
+        const source = edge ? this.nodes.get(edge.source) : undefined
+        const transferTime = source?.type === 'network' ? (request.bytes * 8) / (source.config.bandwidthMbps * 1_000) : 0
+        serviceTime += transferTime * (1 / retainedBandwidth - 1)
+      }
+    }
+    return Math.max(0.001, serviceTime)
+  }
+
+  failureReason(node: ComponentNode, request: RequestState): ReasonCode | undefined {
+    if (this.activeFault(node.id, 'region-outage')) return 'region_outage'
+    if (this.activeFault(node.id, 'node-down')) return 'node_down'
+    if (request.incomingEdgeId && this.activeFaults('edge', request.incomingEdgeId, 'region-outage').length > 0) return 'region_outage'
+    return undefined
   }
 
   chooseEdge(edges: CompiledConnection[]) {
@@ -165,18 +189,28 @@ export class SystemDesignSimulation extends Simulation {
   }
 }
 
-class CapacityFaultController extends Entity<SystemDesignSimulation> {
+class FaultLifecycle extends Entity<SystemDesignSimulation> {
   constructor(private readonly fault: Fault) { super() }
 
   async script() {
     const simulation = this.simulation
-    const startsAtMs = this.fault.startAtSeconds * 1_000
+    const startsAtMs = faultStartsAtMs(this.fault)
     if (startsAtMs > simulation.timeNow) await this.delay(startsAtMs - simulation.timeNow)
-    const runtime = simulation.runtimes.get(this.fault.targetNodeId)
-    if (!runtime) return
-    runtime.resource.capacity = simulation.effectiveCapacity(runtime.node)
-    await this.delay(this.fault.durationSeconds * 1_000)
-    runtime.resource.capacity = simulation.effectiveCapacity(runtime.node)
+    const target = this.fault.target ?? (this.fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: this.fault.targetNodeId })
+    if (!target) return
+    const eventTarget = target.kind === 'node' ? { nodeId: target.id } : target.kind === 'edge' ? { edgeId: target.id } : {}
+    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), ...eventTarget, type: 'fault-activated', status: 'error', reason: faultReason(this.fault.type), attributes: { faultId: this.fault.sourceFaultId ?? this.fault.id, executionFaultId: this.fault.id, faultType: this.fault.type, targetKind: target.kind, targetId: target.id, ...(this.fault.factor === undefined ? {} : { factor: this.fault.factor }) } })
+    if (target.kind === 'node' && this.fault.type === 'capacity-drop') {
+      const runtime = simulation.runtimes.get(target.id)
+      if (runtime) runtime.resource.capacity = simulation.effectiveCapacity(runtime.node)
+    }
+    const remainingMs = faultEndsAtMs(this.fault) - simulation.timeNow
+    if (remainingMs > 0) await this.delay(remainingMs)
+    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), ...eventTarget, type: 'fault-recovered', status: 'ok', reason: faultReason(this.fault.type), attributes: { faultId: this.fault.sourceFaultId ?? this.fault.id, executionFaultId: this.fault.id, faultType: this.fault.type, targetKind: target.kind, targetId: target.id } })
+    if (target.kind === 'node' && this.fault.type === 'capacity-drop') {
+      const runtime = simulation.runtimes.get(target.id)
+      if (runtime) runtime.resource.capacity = simulation.effectiveCapacity(runtime.node)
+    }
   }
 }
 
@@ -201,12 +235,15 @@ class WorkloadGenerator extends Entity<SystemDesignSimulation> {
     const startsAtMs = workload.startAtSeconds * 1_000
     const endsAtMs = Math.min(simulation.scenario.simulation.durationSeconds * 1_000, (workload.startAtSeconds + workload.durationSeconds) * 1_000)
     if (startsAtMs > simulation.timeNow) await this.delay(startsAtMs - simulation.timeNow)
-    const interval = 1_000 / workload.requestsPerSecond
     while (simulation.timeNow < endsAtMs && simulation.generated < simulation.scenario.simulation.maxRequests) {
       simulation.generated += 1
       simulation.requestId += 1
       const traceId = `trace-${simulation.requestId}`
-      simulation.activate(new RequestEntity({ id: simulation.requestId, createdAtMs: simulation.timeNow, bytes: workload.requestBytes, hops: 0, traceId, spanId: `${traceId}:0` }, workload.sourceNodeId))
+      const hotKeyFaults = simulation.activeFaults('workload', workload.id, 'hot-key')
+      const hotKeyProbabilityOverride = hotKeyFaults.length === 0 ? undefined : 1 - hotKeyFaults.reduce((remaining, fault) => remaining * (1 - (fault.factor ?? 0.8)), 1)
+      simulation.activate(new RequestEntity({ id: simulation.requestId, createdAtMs: simulation.timeNow, bytes: workload.requestBytes, hops: 0, traceId, spanId: `${traceId}:0`, ...(hotKeyProbabilityOverride === undefined ? {} : { hotKeyProbabilityOverride }) }, workload.sourceNodeId))
+      const trafficMultiplier = simulation.activeFaults('workload', workload.id, 'traffic-spike').reduce((value, fault) => value * (fault.factor ?? 3), 1)
+      const interval = 1_000 / (workload.requestsPerSecond * trafficMultiplier)
       const delay = workload.pattern === 'constant' ? interval : -Math.log(Math.max(Number.EPSILON, 1 - simulation.random())) * interval
       await this.delay(delay)
     }
@@ -470,7 +507,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.group.rootRequest.id), traceId: this.group.rootRequest.traceId, spanId: this.group.rootRequest.spanId, nodeId: node.id, type: this.group.failed ? 'request-failed' : 'request-completed', status: this.group.failed ? 'error' : 'ok', reason: this.group.failed ? this.group.failureReason ?? 'intrinsic_error' : 'none', bytes: this.group.rootRequest.bytes, attributes: { terminal: true, totalLatencyMs, routingMode: 'fan-out', ...terminalAttributes } })
   }
 
-  private failAfterService(node: ComponentNode, reason: 'node_down' | 'packet_loss' | 'intrinsic_error') {
+  private failAfterService(node: ComponentNode, reason: ReasonCode) {
     const simulation = this.simulation
     const durationMs = round(simulation.timeNow - (this.request.startedAtMs ?? simulation.timeNow))
     simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { durationMs, reason, attributes: { terminal: false, ...(this.request.branchPath === undefined ? {} : { branchPath: this.request.branchPath }) } })
@@ -522,7 +559,12 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
           simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId, ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, type: accepted ? 'rate-limit-accepted' : 'rate-limit-rejected', status: accepted ? 'ok' : 'rejected', reason: accepted ? 'none' : 'rate_limited', attributes: { tokensRemaining: rateLimit.available } })
           if (!accepted) { runtime.failed += 1; runtime.rejected += 1; this.completeDomain(runtime, false); simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'rate_limited', attributes: { terminal: false } }); this.finishBranch(false, node, 'rate_limited'); return }
         }
-        if (simulation.activeFault(node.id, 'node-down')) { runtime.failed += 1; this.completeDomain(runtime, false); simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { reason: 'node_down', attributes: { terminal: false } }); this.finishBranch(false, node, 'node_down'); return }
+        const arrivalFault = simulation.activeFault(node.id, 'region-outage') ? 'region_outage' as const
+          : simulation.activeFault(node.id, 'node-down') ? 'node_down' as const
+            : this.request.incomingEdgeId && simulation.activeFaults('edge', this.request.incomingEdgeId, 'region-outage').length > 0 ? 'region_outage' as const
+              : this.request.incomingEdgeId && (() => { const probability = composeLossProbability(simulation.activeFaults('edge', this.request.incomingEdgeId!, 'packet-loss')); return probability > 0 && simulation.random() < probability })() ? 'packet_loss' as const
+                : undefined
+        if (arrivalFault) { runtime.failed += 1; this.completeDomain(runtime, false); simulation.emitRequestEvent(this.request, node, 'request-failed', 'error', { reason: arrivalFault, attributes: { terminal: false } }); this.finishBranch(false, node, arrivalFault); return }
         const effectiveCapacity = simulation.effectiveCapacity(node)
         runtime.resource.capacity = effectiveCapacity
         const inUse = runtime.resource.unitsInUse
@@ -549,11 +591,12 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         this.leaveQueue(runtime.resource)
         this.heldResource = null
         runtime.processed += 1
-        if (simulation.activeFault(node.id, 'node-down') || simulation.random() < getNodeBehavior(node).intrinsicErrorRate(node)) {
-          const nodeDown = Boolean(simulation.activeFault(node.id, 'node-down'))
+        const faultFailureReason = simulation.failureReason(node, this.request)
+        const failureReason = faultFailureReason ?? (simulation.random() < getNodeBehavior(node).intrinsicErrorRate(node) ? (node.type === 'network' ? 'packet_loss' as const : 'intrinsic_error' as const) : undefined)
+        if (failureReason) {
           runtime.failed += 1
           this.completeDomain(runtime, false)
-          this.failAfterService(node, nodeDown ? 'node_down' : node.type === 'network' ? 'packet_loss' : 'intrinsic_error')
+          this.failAfterService(node, failureReason)
           return
         }
         this.completeDomain(runtime, true)

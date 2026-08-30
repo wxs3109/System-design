@@ -84,7 +84,7 @@ describe('discrete event simulation', () => {
     const degraded = structuredClone(baseline)
     degraded.faults.push({
       id: 'service-capacity-drop', targetNodeId: 'service', type: 'capacity-drop',
-      startAtSeconds: 0, durationSeconds: 10, factor: 0.5,
+      startAtSeconds: 0, durationSeconds: 10, factor: 0.5, enabled: true,
     })
 
     const [healthyResult, degradedResult] = await Promise.all([runSimulation(baseline), runSimulation(degraded)])
@@ -106,9 +106,9 @@ describe('discrete event simulation', () => {
     const database = baseline.nodes.find((node) => node.type === 'database')!
     if (database.type === 'database') database.config.errorRate = 0
     const partialFault = structuredClone(baseline)
-    partialFault.faults.push({ id: 'temporary-drop', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 0, durationSeconds: 5, factor: 0.5 })
+    partialFault.faults.push({ id: 'temporary-drop', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 0, durationSeconds: 5, factor: 0.5, enabled: true })
     const fullFault = structuredClone(baseline)
-    fullFault.faults.push({ id: 'full-drop', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 0, durationSeconds: 10, factor: 0.5 })
+    fullFault.faults.push({ id: 'full-drop', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 0, durationSeconds: 10, factor: 0.5, enabled: true })
 
     const [partial, full] = await Promise.all([runSimulation(partialFault), runSimulation(fullFault)])
     expect(partial.summary.completedRequests).toBeGreaterThan(full.summary.completedRequests + 300)

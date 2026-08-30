@@ -1,6 +1,6 @@
 # Phase 1 Implementation Plan
 
-> Status: in progress — P1.0 through P1.3 complete
+> Status: in progress — P1.0 through P1.4 complete
 >
 > Objective: evolve the Phase 0 workbench from “a topology can run” into a reusable system-behavior and failure laboratory.
 
@@ -406,11 +406,13 @@ Exit criteria:
 
 Deliverables:
 
-- [ ] editable fault timeline;
-- [ ] node, link, workload and region fault targets;
-- [ ] deterministic overlap and recovery rules;
-- [ ] fault state on nodes, edges, charts and traces;
-- [ ] undo, redo, local project revisions and run history.
+- [x] editable fault timeline;
+- [x] node, link, workload and region fault targets;
+- [x] deterministic overlap and recovery rules;
+- [x] fault state on nodes, edges, charts and traces;
+- [x] undo, redo, local project revisions and run history.
+
+Status: complete. Verified by target-validation and region-expansion tests, exact virtual-time activation/recovery assertions, overlapping-capacity and independent-loss composition tests, editable timeline projections, topology highlighting, ECharts fault-window overlays, event-backed trace evidence, validated undo/redo snapshots, IndexedDB revision/run retention tests, refresh restore, production build, and browser end-to-end acceptance.
 
 Exit criteria:
 

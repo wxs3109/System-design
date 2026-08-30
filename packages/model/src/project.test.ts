@@ -19,7 +19,7 @@ const scenarioV1 = () => {
   scenario.nodes.push(traffic, service)
   scenario.edges.push({ id: 'edge', source: 'traffic', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1 })
   scenario.workloads.push({ id: 'workload', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 25, startAtSeconds: 0, durationSeconds: 10, pattern: 'constant', requestBytes: 512 })
-  scenario.faults.push({ id: 'fault', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 2, durationSeconds: 3, factor: 0.5 })
+  scenario.faults.push({ id: 'fault', targetNodeId: 'service', type: 'capacity-drop', startAtSeconds: 2, durationSeconds: 3, factor: 0.5, enabled: true })
   return scenario
 }
 
@@ -78,6 +78,26 @@ describe('ProjectFile v2', () => {
     const project = migrateScenarioV1ToProjectV2(scenarioV1())
     project.experiments[0]!.faults[0]!.targetNodeId = 'missing'
     expect(projectFileV2Schema.safeParse(project).success).toBe(false)
+  })
+
+  it('validates typed fault targets and expands regions deterministically', () => {
+    const project = migrateScenarioV1ToProjectV2(scenarioV1())
+    project.topology.groups = [{ id: 'region-a', name: 'Region A', kind: 'region', nodeIds: ['service'] }]
+    project.experiments[0]!.faults = [{ id: 'outage', type: 'region-outage', target: { kind: 'group', id: 'region-a' }, startAtSeconds: 2, durationSeconds: 3, enabled: true }]
+    expect(projectFileV2Schema.safeParse(project).success).toBe(true)
+    expect(projectToScenario(project).faults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'outage:node:0', sourceFaultId: 'outage', type: 'region-outage', target: { kind: 'node', id: 'service' } }),
+      expect.objectContaining({ id: 'outage:edge:0', sourceFaultId: 'outage', type: 'region-outage', target: { kind: 'edge', id: 'edge' } }),
+    ]))
+
+    project.experiments[0]!.faults[0] = { id: 'invalid', type: 'packet-loss', target: { kind: 'node', id: 'service' }, startAtSeconds: 0, durationSeconds: 1, factor: 0.5, enabled: true }
+    expect(projectFileV2Schema.safeParse(project).success).toBe(false)
+  })
+
+  it('preserves disabled faults in executable scenarios without applying them', () => {
+    const project = migrateScenarioV1ToProjectV2(scenarioV1())
+    project.experiments[0]!.faults[0] = { ...project.experiments[0]!.faults[0]!, enabled: false }
+    expect(projectToScenario(project).faults).toEqual([expect.objectContaining({ id: 'fault', enabled: false })])
   })
 
   it('keeps topology independent while switching experiments', () => {

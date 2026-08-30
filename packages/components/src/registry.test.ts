@@ -30,6 +30,10 @@ describe('component registry', () => {
     expect(componentRegistry.get('database', 1).runtimeBehavior).toBe('database-v1')
   })
 
+  it('advertises executable network fault modes', () => {
+    expect(componentRegistry.get('network').supportedFaults).toEqual(expect.arrayContaining(['bandwidth-drop', 'packet-loss', 'region-outage']))
+  })
+
   it('rejects unknown component versions and invalid configs before rendering', () => {
     const project = {
       schemaVersion: 2 as const, id: 'project', name: 'Project', activeExperimentId: 'experiment',

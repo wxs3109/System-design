@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canConnect, createEmptyScenario, createNode, scenarioSchema } from './index'
+import { canConnect, createEmptyScenario, createNode, faultSchema, scenarioSchema } from './index'
 
 const buildScenario = () => {
   const scenario = createEmptyScenario('round-trip')
@@ -55,5 +55,13 @@ describe('scenario schema', () => {
     loadBalancer.config.algorithm = 'health-aware'
     loadBalancer.config.failureThreshold = 3
     expect(scenarioSchema.shape.nodes.element.parse(loadBalancer)).toEqual(loadBalancer)
+  })
+
+  it('validates fault-specific factor bounds', () => {
+    const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
+    expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)
+    expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 2 }).success).toBe(false)
+    expect(faultSchema.safeParse({ ...base, type: 'latency-spike', factor: 0.5 }).success).toBe(false)
+    expect(faultSchema.safeParse({ ...base, type: 'node-down', factor: 1 }).success).toBe(false)
   })
 })

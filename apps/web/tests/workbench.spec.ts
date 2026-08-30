@@ -163,3 +163,88 @@ test('builds and configures Phase 1 data components from the shared palette', as
     expect.objectContaining({ type: 'database', componentVersion: 2, config: expect.objectContaining({ shardCount: 4, replicasPerShard: 2, readPreference: 'replica-preferred' }) }),
   ]))
 })
+
+test('schedules and edits a typed fault on the virtual-time timeline', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Direct service/ }).click()
+
+  await page.getByRole('button', { name: 'Add fault' }).click()
+  const editor = page.getByRole('region', { name: 'Fault laboratory' }).getByLabel('Selected fault editor')
+  await expect(editor).toBeVisible()
+  await expect(page.locator('.fault-timeline .vis-item')).toHaveCount(1)
+
+  await editor.getByLabel('Fault type').selectOption('latency-spike')
+  await editor.getByLabel('Target kind').selectOption('edge')
+  await editor.getByLabel('Fault target').selectOption('edge-direct-2')
+  await editor.getByLabel('Start (seconds)').fill('4')
+  await editor.getByLabel('Duration (seconds)').fill('8')
+  await editor.getByLabel('Latency multiplier').fill('5')
+  await expect(page.getByTestId('rf__edge-edge-direct-2')).toHaveClass(/is-fault-target/)
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const download = await downloadPromise
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.experiments[0].faults).toEqual([expect.objectContaining({
+    type: 'latency-spike', target: { kind: 'edge', id: 'edge-direct-2' }, startAtSeconds: 4, durationSeconds: 8, factor: 5, enabled: true,
+  })])
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByRole('img', { name: 'Throughput over simulated time with 1 fault window' })).toBeVisible({ timeout: 15_000 })
+  const evidence = page.getByRole('region', { name: 'Fault and trace evidence' })
+  await expect(evidence).toContainText('4s started latency spike')
+  await expect(evidence).toContainText('12s recovered latency spike')
+})
+
+test('creates a region in the workbench and schedules a region outage', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Direct service/ }).click()
+
+  const regions = page.getByRole('region', { name: 'Regions and zones' })
+  await regions.getByRole('button', { name: 'Add zone' }).click()
+  await regions.getByRole('textbox', { name: 'Region / zone name' }).last().fill('Failover zone')
+  await regions.getByLabel('Kind').last().selectOption('region')
+  await regions.getByText('Service', { exact: true }).last().click()
+
+  await page.getByRole('button', { name: 'Add fault' }).click()
+  const editor = page.getByLabel('Selected fault editor')
+  await editor.getByLabel('Fault type').selectOption('region-outage')
+  await expect(editor.getByLabel('Target kind')).toHaveValue('group')
+  await editor.getByLabel('Fault target').selectOption({ label: 'Failover zone' })
+  await expect(page.getByTestId('rf__node-service-direct')).toHaveClass(/is-fault-target/)
+})
+
+test('undoes edits and restores local project and run history after refresh', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Direct service/ }).click()
+  await expect(page.getByText('4 components')).toBeVisible()
+
+  const serviceNode = page.getByTestId('rf__node-service-direct')
+  await serviceNode.dispatchEvent('click')
+  const name = page.getByRole('textbox', { name: 'Name', exact: true })
+  await name.fill('Edited API')
+  await expect(serviceNode).toContainText('Edited API')
+  await page.getByRole('button', { name: 'Undo project change' }).click()
+  await expect(serviceNode).toContainText('Service')
+  await page.getByRole('button', { name: 'Redo project change' }).click()
+  await expect(serviceNode).toContainText('Edited API')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'History' }).click()
+  await expect(page.getByRole('dialog', { name: 'Local project history' })).toContainText('Simulation runs')
+  await expect(page.getByRole('dialog', { name: 'Local project history' }).getByText(/completed ·/)).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByText('4 components')).toBeVisible()
+  await expect(page.getByTestId('rf__node-service-direct')).toContainText('Edited API')
+  await page.getByRole('button', { name: 'History' }).click()
+  await page.getByRole('dialog', { name: 'Local project history' }).getByText(/completed ·/).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible()
+})

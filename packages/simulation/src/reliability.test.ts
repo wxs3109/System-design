@@ -51,7 +51,7 @@ describe('reliability policies in virtual time', () => {
   it('opens the circuit and later probes half-open before closing', async () => {
     const project = reliabilityProject(1)
     project.experiments[0]!.workloads[0] = { ...project.experiments[0]!.workloads[0]!, requestsPerSecond: 100, durationSeconds: 0.2 }
-    project.experiments[0]!.faults = [{ id: 'temporary-outage', targetNodeId: 'dependency', type: 'node-down', startAtSeconds: 0, durationSeconds: 0.03 }]
+    project.experiments[0]!.faults = [{ id: 'temporary-outage', targetNodeId: 'dependency', type: 'node-down', startAtSeconds: 0, durationSeconds: 0.03, enabled: true }]
     project.topology.policies = [{ id: 'circuit', type: 'circuit-breaker', version: 1, target: { kind: 'edge', id: 'dependency' }, order: 0, enabled: true, config: { failureThreshold: 1, openDurationMs: 20, halfOpenMaxProbes: 1 } }]
     const result = await runSimulation(project, 'circuit-transitions')
     const transitions = result.events.filter((event) => event.type.startsWith('circuit-')).map((event) => event.type)

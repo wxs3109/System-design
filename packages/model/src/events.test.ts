@@ -28,4 +28,8 @@ describe('runtime telemetry contracts', () => {
   it.each(['cache-hit', 'stream-record-appended', 'object-read', 'database-written'] as const)('accepts the %s domain event', (type) => {
     expect(runtimeEventSchema.parse({ runId: 'run', timestampMs: 1, sequence: 0, requestId: '1', traceId: 'trace', spanId: 'span', nodeId: 'data', type, status: 'ok' }).type).toBe(type)
   })
+
+  it.each(['node_down', 'packet_loss', 'latency_spike', 'region_outage'] as const)('accepts the %s fault reason', (reason) => {
+    expect(runtimeEventSchema.parse({ runId: 'run', timestampMs: 1, sequence: 0, type: 'fault-activated', status: 'error', reason }).reason).toBe(reason)
+  })
 })

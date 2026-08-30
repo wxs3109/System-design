@@ -6,11 +6,14 @@ import { builtInComponentTypes, componentRegistry, policyRegistry, type ConfigFi
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, Layers3, MousePointer2, Play, Plus, RotateCcw, Save, Square, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Download, FlaskConical, History, Layers3, MousePointer2, Play, Plus, Redo2, RotateCcw, Save, Square, Trash2, Undo2, Upload } from 'lucide-react'
 import { ComponentNode, componentIcons } from './component-node'
+import { FaultLaboratory } from './fault-laboratory'
+import { affectedTopology } from './fault-topology'
 import { MetricChart } from './metric-chart'
 import { createAsyncExample, createDataPlatformExample, createDirectExample } from '@/lib/examples'
-import { projectToEdges, projectToNodes, useWorkbenchStore, type ProjectNode } from '@/lib/store'
+import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
+import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
@@ -99,6 +102,26 @@ function PolicySection({ target }: { target: PolicyAttachment['target'] }) {
   )
 }
 
+function RegionSection() {
+  const project = useWorkbenchStore((state) => state.project)
+  const addRegion = useWorkbenchStore((state) => state.addRegion)
+  const updateRegion = useWorkbenchStore((state) => state.updateRegion)
+  const deleteRegion = useWorkbenchStore((state) => state.deleteRegion)
+  const regions = project.topology.groups.filter((group) => group.kind === 'region' || group.kind === 'zone')
+  return (
+    <section className="region-section" aria-label="Regions and zones">
+      <div className="policy-section__heading"><span>Regions / zones</span><small>Group nodes for outage experiments</small></div>
+      {regions.map((region) => <div className="region-editor" key={region.id}>
+        <label className="field"><span>Region / zone name</span><input value={region.name} onChange={(event) => updateRegion(region.id, { name: event.target.value })} /></label>
+        <label className="field"><span>Kind</span><select value={region.kind} onChange={(event) => updateRegion(region.id, { kind: event.target.value as 'region' | 'zone' })}><option value="region">Region</option><option value="zone">Availability zone</option></select></label>
+        <div className="region-members">{project.topology.nodes.map((node) => <label key={node.id} className="policy-toggle"><input type="checkbox" checked={region.nodeIds.includes(node.id)} onChange={(event) => updateRegion(region.id, { nodeIds: event.target.checked ? [...region.nodeIds, node.id] : region.nodeIds.filter((id) => id !== node.id) })} /><span>{node.name}</span></label>)}</div>
+        <button type="button" className="icon-button danger" aria-label={`Delete ${region.name}`} onClick={() => deleteRegion(region.id)}><Trash2 size={14} /></button>
+      </div>)}
+      <div className="region-actions"><button type="button" className="button" onClick={() => addRegion('region')}><Plus size={14} /> Add region</button><button type="button" className="button" onClick={() => addRegion('zone')}><Plus size={14} /> Add zone</button></div>
+    </section>
+  )
+}
+
 function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: ProjectConnection | undefined }) {
   const updateNode = useWorkbenchStore((state) => state.updateSelectedNode)
   const deleteNode = useWorkbenchStore((state) => state.deleteSelectedNode)
@@ -137,6 +160,22 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
   )
 }
 
+const runtimeFaultReasons = new Set(['node_down', 'packet_loss', 'latency_spike', 'region_outage', 'capacity_reduced', 'bandwidth_reduced', 'traffic_spike', 'hot_key'])
+const humanizeReason = (reason: string) => reason.replaceAll('_', ' ')
+
+function FaultTraceEvidence({ result }: { result: SimulationResult }) {
+  const lifecycle = result.events.filter((event) => event.type === 'fault-activated' || event.type === 'fault-recovered')
+  if (lifecycle.length === 0) return null
+  const affectedTraces = result.events.filter((event) => event.type === 'request-failed' && event.traceId && runtimeFaultReasons.has(event.reason))
+  return (
+    <section className="fault-evidence" aria-label="Fault and trace evidence">
+      <div className="fault-evidence__heading"><strong>Fault &amp; trace evidence</strong><span>{lifecycle.filter((event) => event.type === 'fault-activated').length} activated · {affectedTraces.length} affected request events</span></div>
+      <div className="fault-evidence__events">{lifecycle.slice(0, 8).map((event) => <span key={event.sequence} className={event.type === 'fault-activated' ? 'is-active' : 'is-recovered'}><b>{event.timestampMs / 1_000}s</b> {event.type === 'fault-activated' ? 'started' : 'recovered'} {humanizeReason(event.reason)}</span>)}</div>
+      {affectedTraces.length > 0 ? <div className="fault-evidence__traces">{affectedTraces.slice(0, 6).map((event) => <span key={event.sequence}><code>{event.traceId}</code><b>{humanizeReason(event.reason)}</b><small>{event.timestampMs / 1_000}s · {event.nodeId ?? event.edgeId ?? 'workload'}</small></span>)}</div> : null}
+    </section>
+  )
+}
+
 function ResultsPanel({ result, progress, running }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean }) {
   if (!result && running) {
     const simulatedTimeMs = progress?.simulatedTimeMs ?? 0
@@ -153,8 +192,9 @@ function ResultsPanel({ result, progress, running }: { result: SimulationResult 
         <div><span>Error rate</span><strong>{(result.summary.errorRate * 100).toFixed(2)}<small>%</small></strong></div>
         <div><span>Completed</span><strong>{result.summary.completedRequests.toLocaleString()}</strong></div>
       </div>
-      <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run</span></div><MetricChart points={result.timeSeries} /></div>
+      <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run · shaded fault windows</span></div><MetricChart points={result.timeSeries} events={result.events} simulatedDurationMs={result.simulatedDurationMs} /></div>
       <div className="node-table-wrap"><table className="node-table"><thead><tr><th>Component</th><th>Util.</th><th>Avg queue</th><th>Max queue</th><th>Domain metrics</th></tr></thead><tbody>{result.nodes.map((node) => <tr key={node.nodeId}><td><strong>{node.nodeName}</strong><span>{node.nodeType}</span></td><td>{(node.utilization * 100).toFixed(1)}%</td><td>{node.averageQueueLength.toFixed(1)}</td><td>{node.maxQueueLength}</td><td><span className="domain-metrics">{formatDomainMetrics(node.details)}</span></td></tr>)}</tbody></table></div>
+      <FaultTraceEvidence result={result} />
       {result.warnings.length ? <div className="warnings"><CircleAlert size={15} /> {result.warnings.join(' ')}</div> : null}
     </>
   )
@@ -180,22 +220,59 @@ function WorkbenchInner() {
   const experiment = getActiveExperiment(project)
   const selectedNodeId = useWorkbenchStore((state) => state.selectedNodeId)
   const selectedEdgeId = useWorkbenchStore((state) => state.selectedEdgeId)
+  const selectedFaultId = useWorkbenchStore((state) => state.selectedFaultId)
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setProject, addComponent, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const { setProject, restoreProject, addComponent, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const canUndo = useCanUndo()
+  const canRedo = useCanRedo()
   const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
   const selectedEdge = project.topology.edges.find((edge) => edge.id === selectedEdgeId)
+  const selectedFault = experiment.faults.find((fault) => fault.id === selectedFaultId)
+  const affected = useMemo(() => affectedTopology(selectedFault, project), [project, selectedFault])
   const reactFlow = useReactFlow<ReturnType<typeof projectToNodes>[number]>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const clientRef = useRef<SimulationWorkerClient | null>(null)
   const [exampleOpen, setExampleOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [revisions, setRevisions] = useState<ProjectRevisionRecord[]>([])
+  const [runs, setRuns] = useState<SimulationRunRecord[]>([])
+  const [historyReady, setHistoryReady] = useState(false)
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const topologyNodes = project.topology.nodes
-  const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId })), [topologyNodes, selectedNodeId])
-  const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId })), [project, selectedEdgeId])
+  const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => ({ ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(affected.nodes.has(node.id) ? { className: 'is-fault-target' } : {}) })), [affected.nodes, topologyNodes, selectedNodeId])
+  const edges = useMemo(() => projectToEdges(project).map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(affected.edges.has(edge.id) ? { className: 'is-fault-target' } : {}) })), [affected.edges, project, selectedEdgeId])
 
-  useEffect(() => () => clientRef.current?.dispose(), [])
+  const refreshHistory = useCallback(async (projectId: string) => {
+    const repository = getLocalHistoryRepository()
+    const [savedRevisions, savedRuns] = await Promise.all([repository.listProjectRevisions(projectId), repository.listSimulationRuns(projectId)])
+    setRevisions(savedRevisions)
+    setRuns(savedRuns)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const saved = await getLocalHistoryRepository().loadActiveProject()
+        if (active && saved) restoreProject(componentRegistry.validateProject(saved.project))
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? `Could not restore local project: ${cause.message}` : 'Could not restore local project.')
+      } finally {
+        if (active) setHistoryReady(true)
+      }
+    })()
+    return () => { active = false; clientRef.current?.dispose() }
+  }, [restoreProject, setError])
+
+  useEffect(() => {
+    if (!historyReady) return
+    const timer = window.setTimeout(() => {
+      void getLocalHistoryRepository().saveProjectRevision(project).then(() => refreshHistory(project.id)).catch((cause) => setError(cause instanceof Error ? `Could not save local revision: ${cause.message}` : 'Could not save local revision.'))
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [historyReady, project, refreshHistory, setError])
 
   const addAtCenter = useCallback((type: ComponentType) => {
     const viewport = reactFlow.getViewport()
@@ -219,7 +296,12 @@ function WorkbenchInner() {
       const validation = validateScenarioForSimulation(project)
       if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
       clientRef.current ??= new SimulationWorkerClient()
-      setResult(await clientRef.current.run(project, { onProgress: setProgress }))
+      const completed = await clientRef.current.run(project, { onProgress: setProgress })
+      setResult(completed)
+      const repository = getLocalHistoryRepository()
+      const revision = await repository.saveProjectRevision(project)
+      await repository.saveSimulationRun(project, completed, revision.revisionId)
+      await refreshHistory(project.id)
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : 'Simulation failed.')
     } finally { setRunning(false) }
@@ -234,7 +316,32 @@ function WorkbenchInner() {
 
   const importProject = async (file: File | undefined) => {
     if (!file) return
-    try { setProject(componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())))) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid project file.') }
+    try {
+      const imported = componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())))
+      setProject(imported)
+      await getLocalHistoryRepository().saveProjectRevision(imported, 'import')
+      await refreshHistory(imported.id)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid project file.') }
+  }
+
+  const restoreRevision = async (revisionId: string) => {
+    try {
+      const saved = await getLocalHistoryRepository().loadProjectRevision(revisionId)
+      if (!saved) throw new Error('The selected revision no longer exists.')
+      restoreProject(componentRegistry.validateProject(saved.project))
+      await getLocalHistoryRepository().saveProjectRevision(saved.project, 'restore')
+      await refreshHistory(saved.projectId)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore project revision.') }
+  }
+
+  const restoreRun = async (savedRun: SimulationRunRecord) => {
+    try {
+      const revision = await getLocalHistoryRepository().loadProjectRevision(savedRun.projectRevisionId)
+      if (!revision) throw new Error('The project revision for this run no longer exists.')
+      restoreProject(componentRegistry.validateProject(revision.project))
+      setResult(structuredClone(savedRun.result))
+      setHistoryOpen(false)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore simulation run.') }
   }
 
   return (
@@ -243,6 +350,15 @@ function WorkbenchInner() {
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>System Design Simulator</strong><span>Build · Run · Break · Measure</span></div></div>
         <div className="topbar-center"><span className="status-dot" /> Local simulation <span className="separator" /> <strong>{project.topology.nodes.length}</strong> components <span className="separator" /> <strong>{project.topology.edges.length}</strong> links</div>
         <div className="top-actions">
+          <button className="button subtle icon-only" aria-label="Undo project change" title="Undo project change" disabled={!canUndo || running} onClick={undoProject}><Undo2 size={15} /></button>
+          <button className="button subtle icon-only" aria-label="Redo project change" title="Redo project change" disabled={!canRedo || running} onClick={redoProject}><Redo2 size={15} /></button>
+          <div className="history-picker">
+            <button className="button subtle" aria-expanded={historyOpen} onClick={() => { const next = !historyOpen; setHistoryOpen(next); if (next) void refreshHistory(project.id) }}><History size={15} /> History</button>
+            {historyOpen ? <div className="history-menu" role="dialog" aria-label="Local project history">
+              <div className="history-section"><strong>Project revisions</strong>{revisions.length ? revisions.slice(0, 8).map((revision) => <button key={revision.revisionId} onClick={() => void restoreRevision(revision.revisionId)}><span>{revision.projectName}</span><small>{revision.source} · {new Date(revision.createdAt).toLocaleString()}</small></button>) : <p>No saved revisions yet.</p>}</div>
+              <div className="history-section"><strong>Simulation runs</strong>{runs.length ? runs.slice(0, 8).map((savedRun) => <button key={savedRun.runId} onClick={() => void restoreRun(savedRun)}><span>{savedRun.result.summary.completedRequests.toLocaleString()} completed · {(savedRun.result.summary.errorRate * 100).toFixed(1)}% errors</span><small>{new Date(savedRun.createdAt).toLocaleString()} · seed {savedRun.result.seed}</small></button>) : <p>No saved runs yet.</p>}</div>
+            </div> : null}
+          </div>
           <button className="button subtle" onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Import</button>
           <input ref={fileInputRef} hidden type="file" accept="application/json" onChange={(event) => void importProject(event.target.files?.[0])} />
           <button className="button subtle" onClick={exportProject}><Download size={15} /> Export</button>
@@ -260,7 +376,7 @@ function WorkbenchInner() {
       <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
         <ReactFlow
           nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-          onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onEdgeClick={(_, edge) => selectEdge(edge.id)} onPaneClick={() => { selectNode(null); selectEdge(null) }}
+          onConnect={onConnect} onNodeClick={(_, node) => selectNode(node.id)} onEdgeClick={(_, edge) => selectEdge(edge.id)} onPaneClick={() => { selectNode(null); selectEdge(null); selectFault(null) }}
           deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
@@ -273,9 +389,12 @@ function WorkbenchInner() {
         {error ? <div className="error-toast" role="alert"><CircleAlert size={16} /><span>{error}</span><button onClick={() => setError(null)} aria-label="Dismiss error">×</button></div> : null}
       </section>
 
+      <FaultLaboratory experiment={experiment} project={project} selectedFaultId={selectedFaultId} onSelectFault={selectFault} onAddFault={addFault} onUpdateFault={updateFault} onDeleteFault={deleteFault} />
+
       <aside className="inspector">
         <div className="inspector-tabs"><span className="active">Properties</span></div>
         <PropertiesPanel node={selectedNode} edge={selectedEdge} />
+        <RegionSection />
         <div className="run-settings"><div className="panel-header"><span>Run settings</span><small>Virtual time</small></div><Field label="Duration (seconds)" value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>Random seed</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div>
       </aside>
 

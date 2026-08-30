@@ -201,13 +201,47 @@ export const workloadSchema = z.object({
   requestBytes: positiveIntegerSchema.max(1_000_000_000).default(1_024),
 })
 
+export const faultTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('node'), id: idSchema }),
+  z.object({ kind: z.literal('edge'), id: idSchema }),
+  z.object({ kind: z.literal('workload'), id: idSchema }),
+  z.object({ kind: z.literal('group'), id: idSchema }),
+])
+
+export const faultTypeSchema = z.enum([
+  'node-down',
+  'latency-spike',
+  'capacity-drop',
+  'bandwidth-drop',
+  'packet-loss',
+  'traffic-spike',
+  'hot-key',
+  'region-outage',
+])
+
 export const faultSchema = z.object({
   id: idSchema,
-  targetNodeId: idSchema,
-  type: z.enum(['node-down', 'latency-spike', 'capacity-drop']),
+  sourceFaultId: idSchema.optional(),
+  name: z.union([z.string().trim().min(1).max(80), z.literal('').transform(() => undefined)]).optional(),
+  target: faultTargetSchema.optional(),
+  targetNodeId: idSchema.optional(),
+  type: faultTypeSchema,
   startAtSeconds: nonNegativeSchema,
   durationSeconds: positiveSchema,
   factor: positiveSchema.optional(),
+  enabled: z.boolean().default(true),
+}).superRefine((fault, context) => {
+  if (fault.target === undefined && fault.targetNodeId === undefined) context.addIssue({ code: 'custom', path: ['target'], message: 'A fault target is required.' })
+  if (fault.target !== undefined && fault.targetNodeId !== undefined) context.addIssue({ code: 'custom', path: ['target'], message: 'Use either target or legacy targetNodeId, not both.' })
+  if ((fault.type === 'capacity-drop' || fault.type === 'bandwidth-drop' || fault.type === 'packet-loss' || fault.type === 'hot-key') && fault.factor !== undefined && fault.factor > 1) {
+    context.addIssue({ code: 'custom', path: ['factor'], message: `${fault.type} factor must be at most 1.` })
+  }
+  if ((fault.type === 'latency-spike' || fault.type === 'traffic-spike') && fault.factor !== undefined && fault.factor < 1) {
+    context.addIssue({ code: 'custom', path: ['factor'], message: `${fault.type} factor must be at least 1.` })
+  }
+  if ((fault.type === 'node-down' || fault.type === 'region-outage') && fault.factor !== undefined) {
+    context.addIssue({ code: 'custom', path: ['factor'], message: `${fault.type} does not accept a factor.` })
+  }
 })
 
 export const simulationConfigSchema = z.object({
@@ -285,9 +319,11 @@ export const scenarioSchema = z.object({
       context.addIssue({ code: 'custom', message: `Duplicate fault id: ${fault.id}`, path: ['faults', index, 'id'] })
     }
     faultIds.add(fault.id)
-    if (!nodeIds.has(fault.targetNodeId)) {
-      context.addIssue({ code: 'custom', message: `Unknown fault target: ${fault.targetNodeId}`, path: ['faults', index, 'targetNodeId'] })
-    }
+    const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
+    if (!target) return
+    const targets = target.kind === 'node' ? nodeIds : target.kind === 'edge' ? edgeIds : target.kind === 'workload' ? workloadIds : undefined
+    if (!targets?.has(target.id)) context.addIssue({ code: 'custom', message: `Unknown ${target.kind} fault target: ${target.id}`, path: ['faults', index, 'target'] })
+    if (target.kind === 'group') context.addIssue({ code: 'custom', message: 'Executable scenarios must expand group faults to node and edge targets.', path: ['faults', index, 'target'] })
   })
 })
 
@@ -296,5 +332,7 @@ export type ComponentNode = z.infer<typeof componentNodeSchema>
 export type Connection = z.infer<typeof connectionSchema>
 export type Workload = z.infer<typeof workloadSchema>
 export type Fault = z.infer<typeof faultSchema>
+export type FaultTarget = z.infer<typeof faultTargetSchema>
+export type FaultType = z.infer<typeof faultTypeSchema>
 export type SimulationConfig = z.infer<typeof simulationConfigSchema>
 export type Scenario = z.infer<typeof scenarioSchema>

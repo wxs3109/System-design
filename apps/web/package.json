@@ -16,11 +16,15 @@
     "@system-design/model": "workspace:*",
     "@system-design/simulation": "workspace:*",
     "@xyflow/react": "^12.11.3",
+    "dexie": "^4.4.5",
     "echarts": "^6.0.0",
     "lucide-react": "^0.468.0",
     "next": "^16.1.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "vis-data": "^8.0.5",
+    "vis-timeline": "^8.5.4",
+    "zundo": "^2.3.0",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
@@ -30,6 +34,7 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

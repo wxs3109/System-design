@@ -44,7 +44,7 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'parallelism', label: 'Parallelism', min: 1, step: 1 },
       { kind: 'number', key: 'packetLossRate', label: 'Packet loss (0–1)', min: 0, max: 1, step: 0.001 },
       { kind: 'number', key: 'maxQueueSize', label: 'Max queue', min: 0, step: 1 },
-    ], ports: [requestInput, requestOutput], capabilities: ['network'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], runtimeBehavior: 'network-v1',
+    ], ports: [requestInput, requestOutput], capabilities: ['network'], emittedMetrics: ['latency', 'utilization', 'queue'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop', 'bandwidth-drop', 'packet-loss', 'region-outage'], runtimeBehavior: 'network-v1',
     describeConfig: (config) => `${config.latencyMs} ms · ${config.bandwidthMbps} Mbps`,
   },
   {
