@@ -170,20 +170,18 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 - 默认在浏览器的 Web Worker 中运行 SimScript，保证本地优先、无需登录即可实验。
 - 大型批量仿真可以把同一个 Scenario 发送给服务端 Runner；结果协议与浏览器模式保持一致。
 
-## 内置组件的起始范围
+## 组件分为两类
 
-第一批组件是通用积木，不是某一道题的答案：
+组件面板不会把所有架构名词都实现成一套新运行逻辑：
 
-- 流量：Client、Traffic Generator、Cron / Batch Producer。
-- 网络：Network Link、DNS、CDN、Region、Availability Zone。
-- 路由：Load Balancer、API Gateway、Router。
-- 计算：Service、Worker、Function、Scheduler。
-- 数据：Cache、SQL / NoSQL Store、Object Store、Search Index。
-- 异步：Queue、Stream、Topic、Consumer Group。
-- 可靠性：Retry、Timeout、Circuit Breaker、Rate Limiter、Dead-letter Queue。
-- 观测：Probe、Counter、Trace Sink。
+1. **行为组件**拥有独立仿真语义、状态、事件、指标和确定性测试，真正扩展平台能模拟的行为。
+2. **角色预设**复用一个已有行为组件，只提供更符合架构角色的名称、图标、说明、合法默认参数和可选的现有策略组合。它不拥有另一套运行时，也不能被算作新的仿真能力。
 
-这些名称只定义角色。具体算法和产品差异由可选策略实现，例如负载均衡策略、缓存淘汰策略、队列纪律、复制方式和一致性模型。
+Phase 1 已实现九个行为类型：Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和 Database。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
+
+Phase 2 首批角色预设计划为 Client、API Gateway（仅路由边界）、Worker、SQL Store 和 NoSQL Store。它们必须在界面中明确标出底层行为。下一批真正需要新语义的行为组件是 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router。Function 只有在实现冷启动、缩容到零或计费等语义后才升级为行为组件。
+
+详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
 ## 开发阶段
 
@@ -216,10 +214,14 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 ### Phase 2：开放式平台
 
-- 发布组件 SDK、版本兼容规则和插件沙箱。
-- 支持自定义策略、组合组件和团队组件包。
-- 支持服务端批量实验、参数扫描和容量边界搜索。
-- 支持场景分享、协作和可选的真实服务适配器。
+详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
+
+当前进度：P2.0 组件覆盖与两类合同规划已完成；下一步是 P2.1 角色预设 Registry。
+
+- 区分具有独立运行语义的行为组件与复用行为的角色预设。
+- 用通用行为补齐 Scheduler、CDN、Search、Topic、Realtime、Workflow 和 Global Routing。
+- 在真实内置组件验证合同后发布 SDK、版本规则和插件沙箱。
+- 支持批量实验、参数扫描、容量边界搜索、分享和可选适配器。
 
 ### Phase 3：学习体验
 
