@@ -4,7 +4,7 @@ export interface ComponentDefinition {
   type: ComponentType
   label: string
   description: string
-  category: 'traffic' | 'network' | 'routing' | 'compute' | 'data' | 'async'
+  category: 'traffic' | 'network' | 'gateway' | 'service' | 'cache' | 'database' | 'object-storage' | 'messaging'
   color: string
   acceptsInput: boolean
   emitsOutput: boolean
@@ -21,31 +21,31 @@ export const componentCatalog = {
   },
   'load-balancer': {
     type: 'load-balancer', label: 'Load Balancer', description: 'Routes requests across weighted, round-robin or healthy targets.',
-    category: 'routing', color: '#ec4899', acceptsInput: true, emitsOutput: true,
+    category: 'gateway', color: '#ec4899', acceptsInput: true, emitsOutput: true,
   },
   service: {
     type: 'service', label: 'Service', description: 'A replicated concurrent request processor.',
-    category: 'compute', color: '#3b82f6', acceptsInput: true, emitsOutput: true,
+    category: 'service', color: '#3b82f6', acceptsInput: true, emitsOutput: true,
   },
   queue: {
     type: 'queue', label: 'Queue', description: 'Buffers work and delivers it through consumers.',
-    category: 'async', color: '#f59e0b', acceptsInput: true, emitsOutput: true,
+    category: 'messaging', color: '#f59e0b', acceptsInput: true, emitsOutput: true,
   },
   cache: {
     type: 'cache', label: 'Cache', description: 'Stores key-aware entries with bounded capacity, TTL and deterministic eviction.',
-    category: 'data', color: '#14b8a6', acceptsInput: true, emitsOutput: true,
+    category: 'cache', color: '#14b8a6', acceptsInput: true, emitsOutput: true,
   },
   stream: {
     type: 'stream', label: 'Stream', description: 'Partitions published messages and tracks consumer-group delivery lag.',
-    category: 'async', color: '#f97316', acceptsInput: true, emitsOutput: true,
+    category: 'messaging', color: '#f97316', acceptsInput: true, emitsOutput: true,
   },
   'object-storage': {
     type: 'object-storage', label: 'Object Storage', description: 'Models concurrent object reads, writes and byte throughput.',
-    category: 'data', color: '#6366f1', acceptsInput: true, emitsOutput: true,
+    category: 'object-storage', color: '#6366f1', acceptsInput: true, emitsOutput: true,
   },
   database: {
     type: 'database', label: 'Database', description: 'Routes keyed reads and writes across shards, primaries and replicas.',
-    category: 'data', color: '#10b981', acceptsInput: true, emitsOutput: true,
+    category: 'database', color: '#10b981', acceptsInput: true, emitsOutput: true,
   },
 } satisfies Record<ComponentType, ComponentDefinition>
 

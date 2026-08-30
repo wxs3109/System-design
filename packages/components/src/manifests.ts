@@ -18,7 +18,7 @@ import {
   type ComponentType,
   type Position,
 } from '@system-design/model'
-import { ComponentRegistry, PolicyRegistry, RolePresetRegistry, type BuiltInComponentNode, type ComponentManifest, type PolicyManifest, type RolePresetManifest } from './registry'
+import { ComponentCatalog, ComponentCategoryRegistry, ComponentPresetRegistry, ComponentRegistry, PolicyRegistry, type BuiltInComponentNode, type ComponentCategoryManifest, type ComponentManifest, type ComponentPresetManifest, type PolicyManifest } from './registry'
 
 const requestInput = { id: 'in', label: 'Request', direction: 'input', semantic: 'request', multiple: true } as const
 const requestOutput = { id: 'out', label: 'Request', direction: 'output', semantic: 'request', multiple: true } as const
@@ -26,6 +26,19 @@ const messageInput = { id: 'consume', label: 'Consume', direction: 'input', sema
 const messageOutput = { id: 'publish', label: 'Publish', direction: 'output', semantic: 'publish', multiple: true } as const
 const cacheHitOutput = { id: 'hit', label: 'Hit', direction: 'output', semantic: 'hit', multiple: true } as const
 const cacheMissOutput = { id: 'miss', label: 'Miss', direction: 'output', semantic: 'miss', multiple: true } as const
+
+export const builtInComponentCategoryManifests = [
+  { id: 'traffic', label: 'Traffic', description: 'Request and workload sources.', iconToken: 'globe', color: '#8b5cf6', order: 10 },
+  { id: 'network', label: 'Network', description: 'Transfer boundaries and network conditions.', iconToken: 'activity', color: '#06b6d4', order: 20 },
+  { id: 'gateway', label: 'Gateway & Routing', description: 'Request routing and distribution boundaries.', iconToken: 'git-fork', color: '#ec4899', order: 30 },
+  { id: 'service', label: 'Service', description: 'Synchronous and background request processing.', iconToken: 'server', color: '#3b82f6', order: 40 },
+  { id: 'cache', label: 'Cache', description: 'Key-aware cached data and eviction.', iconToken: 'hard-drive', color: '#14b8a6', order: 50 },
+  { id: 'database', label: 'Database', description: 'Persistent keyed data, shards, and replicas.', iconToken: 'database', color: '#10b981', order: 60 },
+  { id: 'object-storage', label: 'Object Storage', description: 'Large-object reads, writes, and byte throughput.', iconToken: 'archive', color: '#6366f1', order: 70 },
+  { id: 'messaging', label: 'Messaging', description: 'Queues, streams, and asynchronous delivery.', iconToken: 'layers', color: '#f59e0b', order: 80 },
+] as const satisfies readonly ComponentCategoryManifest[]
+
+export const componentCategoryRegistry = new ComponentCategoryRegistry(builtInComponentCategoryManifests)
 
 export const builtInComponentManifests = [
   {
@@ -48,7 +61,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.latencyMs} ms · ${config.bandwidthMbps} Mbps`,
   },
   {
-    type: 'load-balancer', version: 1, label: 'Load Balancer', description: 'Selects a target using weighted, round-robin or health-aware routing.', category: 'routing', iconToken: 'git-fork', color: '#ec4899',
+    type: 'load-balancer', version: 1, label: 'Load Balancer', description: 'Selects a target using weighted, round-robin or health-aware routing.', category: 'gateway', iconToken: 'git-fork', color: '#ec4899',
     configSchema: loadBalancerConfigSchema, createDefaultConfig: () => ({ algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 }),
     configFields: [
       { kind: 'select', key: 'algorithm', label: 'Routing algorithm', options: [
@@ -65,7 +78,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.algorithm} · ${config.capacity} concurrent`,
   },
   {
-    type: 'service', version: 1, label: 'Service', description: 'A replicated concurrent request processor.', category: 'compute', iconToken: 'server', color: '#3b82f6',
+    type: 'service', version: 1, label: 'Service', description: 'A replicated concurrent request processor; API contracts are not modeled yet.', category: 'service', iconToken: 'server', color: '#3b82f6',
     configSchema: serviceConfigSchema, createDefaultConfig: () => ({ replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 }),
     configFields: [
       { kind: 'number', key: 'replicas', label: 'Replicas', min: 1, step: 1 },
@@ -78,7 +91,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.replicas} × ${config.concurrencyPerReplica} concurrent`,
   },
   {
-    type: 'queue', version: 1, label: 'Queue', description: 'Buffers work and delivers it through consumers.', category: 'async', iconToken: 'layers', color: '#f59e0b',
+    type: 'queue', version: 1, label: 'Queue', description: 'Buffers work and delivers it through consumers.', category: 'messaging', iconToken: 'layers', color: '#f59e0b',
     configSchema: queueConfigSchema, createDefaultConfig: () => ({ consumers: 4, deliveryTimeMs: 10, jitterMs: 2, maxDepth: 10_000, errorRate: 0 }),
     configFields: [
       { kind: 'number', key: 'consumers', label: 'Consumers', min: 1, step: 1 },
@@ -90,7 +103,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.consumers} consumers · ${config.maxDepth} max`,
   },
   {
-    type: 'cache', version: 1, label: 'Cache', description: 'Stores key-aware entries with bounded capacity, virtual-time TTL and deterministic eviction.', category: 'data', iconToken: 'hard-drive', color: '#14b8a6',
+    type: 'cache', version: 1, label: 'Cache', description: 'Stores key-aware entries with bounded capacity, virtual-time TTL and deterministic eviction.', category: 'cache', iconToken: 'hard-drive', color: '#14b8a6',
     configSchema: cacheConfigSchema, createDefaultConfig: () => ({ capacityEntries: 10_000, ttlMs: 60_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 1_000, operationTimeMs: 1, jitterMs: 0.2, errorRate: 0, maxQueueSize: 10_000 }),
     configFields: [
       { kind: 'number', key: 'capacityEntries', label: 'Capacity (entries)', min: 1, step: 1 },
@@ -107,7 +120,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.capacityEntries} entries · ${config.ttlMs} ms TTL · ${String(config.evictionPolicy).toUpperCase()}`,
   },
   {
-    type: 'stream', version: 1, label: 'Stream', description: 'Partitions messages and tracks acknowledged delivery independently for each consumer group.', category: 'async', iconToken: 'radio-tower', color: '#f97316',
+    type: 'stream', version: 1, label: 'Stream', description: 'Partitions messages and tracks acknowledged delivery independently for each consumer group.', category: 'messaging', iconToken: 'radio-tower', color: '#f97316',
     configSchema: streamConfigSchema, createDefaultConfig: () => ({ partitions: 12, producerCapacity: 1_000, consumerGroups: 1, consumersPerGroup: 4, batchSize: 100, acknowledgement: 'explicit', publishTimeMs: 2, consumeTimeMs: 10, jitterMs: 1, maxDepth: 1_000_000, errorRate: 0 }),
     configFields: [
       { kind: 'number', key: 'partitions', label: 'Partitions', min: 1, step: 1 },
@@ -125,7 +138,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.partitions} partitions · ${config.consumerGroups} groups · batch ${config.batchSize}`,
   },
   {
-    type: 'object-storage', version: 1, label: 'Object Storage', description: 'Models bounded object reads and writes with byte-dependent transfer time.', category: 'data', iconToken: 'archive', color: '#6366f1',
+    type: 'object-storage', version: 1, label: 'Object Storage', description: 'Models bounded object reads and writes with byte-dependent transfer time.', category: 'object-storage', iconToken: 'archive', color: '#6366f1',
     configSchema: objectStorageConfigSchema, createDefaultConfig: () => ({ maxConcurrentRequests: 1_000, defaultObjectSizeBytes: 1_048_576, readRatio: 0.8, baseLatencyMs: 20, jitterMs: 3, readThroughputMbps: 1_000, writeThroughputMbps: 500, errorRate: 0.001, maxQueueSize: 100_000 }),
     configFields: [
       { kind: 'number', key: 'maxConcurrentRequests', label: 'Concurrent requests', min: 1, step: 1 },
@@ -141,7 +154,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.maxConcurrentRequests} concurrent · ${config.readThroughputMbps}/${config.writeThroughputMbps} Mbps read/write`,
   },
   {
-    type: 'database', version: 1, label: 'Database', description: 'A bounded connection pool and query resource.', category: 'data', iconToken: 'database', color: '#10b981',
+    type: 'database', version: 1, label: 'Capacity Database', description: 'A bounded connection pool and query resource.', category: 'database', iconToken: 'database', color: '#10b981',
     configSchema: databaseV1ConfigSchema, createDefaultConfig: () => ({ maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000 }),
     configFields: [
       { kind: 'number', key: 'maxConnections', label: 'Max connections', min: 1, step: 1 },
@@ -153,7 +166,7 @@ export const builtInComponentManifests = [
     describeConfig: (config) => `${config.maxConnections} connections · ${config.queryTimeMs} ms`,
   },
   {
-    type: 'database', version: 2, label: 'Database', description: 'Routes keyed reads and writes across shards, primaries and delayed replicas.', category: 'data', iconToken: 'database', color: '#10b981',
+    type: 'database', version: 2, label: 'Database', description: 'Routes generic keyed reads and writes across shards and replicas; table, SQL, and document schemas are not modeled yet.', category: 'database', iconToken: 'database', color: '#10b981',
     configSchema: databaseConfigSchema, createDefaultConfig: () => ({ maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000, shardCount: 1, replicasPerShard: 0, readPreference: 'primary', replicationDelayMs: 100, writeRatio: 0.2, keySpaceSize: 1_000_000, hotKeyProbability: 0 }),
     configFields: [
       { kind: 'number', key: 'maxConnections', label: 'Connections / node', min: 1, step: 1 },
@@ -175,15 +188,22 @@ export const builtInComponentManifests = [
 
 export const componentRegistry = new ComponentRegistry(builtInComponentManifests)
 
-export const builtInRolePresetManifests = [
+export const builtInComponentPresetManifests = [
   { id: 'client', version: 1, label: 'Client', description: 'A named request source using the Traffic Generator behavior.', iconToken: 'globe', behavior: { type: 'traffic', version: 1 }, configOverrides: {} },
-  { id: 'api-gateway', version: 1, label: 'API Gateway', description: 'A routing boundary using the Load Balancer behavior.', iconToken: 'git-fork', behavior: { type: 'load-balancer', version: 1 }, configOverrides: { algorithm: 'weighted', capacity: 2_000, routingTimeMs: 1, maxQueueSize: 10_000 } },
+  { id: 'api-gateway', version: 1, label: 'Gateway routing template', description: 'Legacy capacity template using Load Balancer behavior; it does not model API contracts.', iconToken: 'git-fork', behavior: { type: 'load-balancer', version: 1 }, configOverrides: { algorithm: 'weighted', capacity: 2_000, routingTimeMs: 1, maxQueueSize: 10_000 }, availability: 'legacy' },
   { id: 'worker', version: 1, label: 'Worker', description: 'A background processor using the Service behavior.', iconToken: 'server', behavior: { type: 'service', version: 1 }, configOverrides: { replicas: 4, concurrencyPerReplica: 1, serviceTimeMs: 50, jitterMs: 5, maxQueueSize: 1_000, errorRate: 0 } },
-  { id: 'sql-store', version: 1, label: 'SQL Store', description: 'A relational storage role using the Database behavior.', iconToken: 'database', behavior: { type: 'database', version: 2 }, configOverrides: { shardCount: 1, replicasPerShard: 1, readPreference: 'primary', writeRatio: 0.5 } },
-  { id: 'nosql-store', version: 1, label: 'NoSQL Store', description: 'A horizontally partitioned role using the Database behavior.', iconToken: 'database', behavior: { type: 'database', version: 2 }, configOverrides: { shardCount: 8, replicasPerShard: 2, readPreference: 'replica-preferred', writeRatio: 0.2 } },
-] as const satisfies readonly RolePresetManifest[]
+  { id: 'sql-store', version: 1, label: 'Legacy SQL capacity template', description: 'Legacy Database configuration; it does not model relational tables, indexes, or SQL.', iconToken: 'database', behavior: { type: 'database', version: 2 }, configOverrides: { shardCount: 1, replicasPerShard: 1, readPreference: 'primary', writeRatio: 0.5 }, availability: 'legacy' },
+  { id: 'nosql-store', version: 1, label: 'Legacy NoSQL capacity template', description: 'Legacy Database configuration; it does not model document or key-value schemas.', iconToken: 'database', behavior: { type: 'database', version: 2 }, configOverrides: { shardCount: 8, replicasPerShard: 2, readPreference: 'replica-preferred', writeRatio: 0.2 }, availability: 'legacy' },
+] as const satisfies readonly ComponentPresetManifest[]
 
-export const rolePresetRegistry = new RolePresetRegistry(componentRegistry, builtInRolePresetManifests)
+export const componentPresetRegistry = new ComponentPresetRegistry(componentRegistry, builtInComponentPresetManifests)
+
+export const componentCatalog = new ComponentCatalog(componentCategoryRegistry, componentRegistry, componentPresetRegistry)
+
+/** @deprecated ProjectFile v2 calls these role presets. Use builtInComponentPresetManifests. */
+export const builtInRolePresetManifests = builtInComponentPresetManifests
+/** @deprecated ProjectFile v2 calls these role presets. Use componentPresetRegistry. */
+export const rolePresetRegistry = componentPresetRegistry
 
 export const builtInPolicyManifests = [
   {
@@ -240,7 +260,7 @@ export const createRegisteredNode = (type: ComponentType, id: string, position: 
 }
 
 export const createRolePresetNode = (presetId: string, version: number, id: string, position: Position, workloadId = `${id}-workload`): BuiltInComponentNode => {
-  return rolePresetRegistry.createNode(presetId, version, id, position, workloadId) as BuiltInComponentNode
+  return componentPresetRegistry.createNode(presetId, version, id, position, workloadId) as BuiltInComponentNode
 }
 
 export const asLegacyNode = ({ componentVersion, ...node }: BuiltInComponentNode, workloadId = `${node.id}-workload`): ComponentNode => {

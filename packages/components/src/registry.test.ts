@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
-import { ComponentRegistry, PolicyRegistry, RolePresetRegistry, componentRegistry, policyRegistry, rolePresetRegistry } from './index'
+import { ComponentCatalog, ComponentCategoryRegistry, ComponentPresetRegistry, ComponentRegistry, PolicyRegistry, componentCatalog, componentCategoryRegistry, componentPresetRegistry, componentRegistry, policyRegistry, rolePresetRegistry } from './index'
 
 describe('component registry', () => {
   it('creates and describes all built-in nodes from manifests', () => {
@@ -47,7 +47,7 @@ describe('component registry', () => {
   it('adds a component without changing registry dispatch code', () => {
     const registry = new ComponentRegistry()
     registry.register({
-      type: 'test-sink', version: 1, label: 'Test sink', description: 'Test-only terminal.', category: 'data', iconToken: 'test', color: '#000000',
+      type: 'test-sink', version: 1, label: 'Test sink', description: 'Test-only terminal.', category: 'database', iconToken: 'test', color: '#000000',
       configSchema: z.object({ latencyMs: z.number().nonnegative() }), createDefaultConfig: () => ({ latencyMs: 5 }),
       configFields: [{ kind: 'number', key: 'latencyMs', label: 'Latency', min: 0 }],
       ports: [{ id: 'in', label: 'Input', direction: 'input', semantic: 'request' }], capabilities: ['sink'],
@@ -74,15 +74,17 @@ describe('component registry', () => {
 
 describe('role preset registry', () => {
   it('resolves every built-in preset to an executable base behavior', () => {
-    const nodes = rolePresetRegistry.list().map((preset) => rolePresetRegistry.createNode(preset.id, preset.version, `${preset.id}-node`, { x: 0, y: 0 }))
-    expect(nodes.map((node) => node.rolePreset?.id)).toEqual(['client', 'api-gateway', 'worker', 'sql-store', 'nosql-store'])
-    expect(nodes.map((node) => node.type)).toEqual(['traffic', 'load-balancer', 'service', 'database', 'database'])
+    const nodes = componentPresetRegistry.list().filter((preset) => preset.availability !== 'legacy')
+      .map((preset) => componentPresetRegistry.createNode(preset.id, preset.version, `${preset.id}-node`, { x: 0, y: 0 }))
+    expect(nodes.map((node) => node.rolePreset?.id)).toEqual(['client', 'worker'])
+    expect(nodes.map((node) => node.type)).toEqual(['traffic', 'service'])
     for (const node of nodes) expect(() => componentRegistry.validateNode(node)).not.toThrow()
+    expect(() => componentPresetRegistry.createNode('sql-store', 1, 'new-sql', { x: 0, y: 0 })).toThrow('cannot create new components')
   })
 
   it('rejects duplicate IDs, invalid overrides, unknown versions, and mismatched references', () => {
     const components = new ComponentRegistry(componentRegistry.list())
-    const registry = new RolePresetRegistry(components)
+    const registry = new ComponentPresetRegistry(components)
     const preset = { id: 'test-worker', version: 1, label: 'Test worker', description: 'Test preset.', iconToken: 'server', behavior: { type: 'service', version: 1 }, configOverrides: { replicas: 2 } }
     registry.register(preset)
     expect(() => registry.register(preset)).toThrow('already registered')
@@ -104,6 +106,55 @@ describe('role preset registry', () => {
     const roundTripped = JSON.parse(JSON.stringify(project))
     expect(componentRegistry.validateProject(roundTripped, rolePresetRegistry).topology.nodes[0]).toEqual(worker)
     expect(componentRegistry.validateProject(roundTripped).topology.nodes[0]).toEqual(worker)
+  })
+})
+
+describe('component creation hierarchy', () => {
+  it('lists palette categories before executable variants and nested presets', () => {
+    expect(componentCatalog.listCategories().map((category) => category.id)).toEqual([
+      'traffic', 'network', 'gateway', 'service', 'cache', 'database', 'object-storage', 'messaging',
+    ])
+    expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['database'])
+    expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream'])
+    expect(componentCatalog.listPresets('service', 1).map((preset) => preset.id)).toEqual(['worker'])
+    expect(componentCatalog.listPresets('database', 2)).toEqual([])
+    expect(componentCatalog.listPresets('database', 2, { includeLegacy: true }).map((preset) => preset.id)).toEqual(['sql-store', 'nosql-store'])
+    expect(componentCatalog.getCategoryForVariant('database').id).toBe('database')
+  })
+
+  it('creates a resolved variant with or without a preset', () => {
+    const plain = componentCatalog.createNode('service', 'service', 'plain', { x: 0, y: 0 })
+    const worker = componentCatalog.createNode('service', 'service', 'worker', { x: 10, y: 20 }, {
+      version: 1, preset: { id: 'worker', version: 1 },
+    })
+    expect(plain).toMatchObject({ type: 'service', componentVersion: 1 })
+    expect(plain.rolePreset).toBeUndefined()
+    expect(worker).toMatchObject({ type: 'service', componentVersion: 1, rolePreset: { id: 'worker', version: 1 } })
+    expect(() => componentCatalog.createNode('database', 'service', 'wrong-category', { x: 0, y: 0 })).toThrow('does not belong to category database')
+    expect(() => componentCatalog.createNode('service', 'service', 'wrong-preset', { x: 0, y: 0 }, { preset: { id: 'client', version: 1 } })).toThrow('does not belong to behavior variant service@1')
+  })
+
+  it('rejects unknown categories and permits only presets owned by an exact variant', () => {
+    const categories = new ComponentCategoryRegistry([{ id: 'service', label: 'Service', description: 'Compute.', iconToken: 'server', color: '#000', order: 0 }])
+    const variants = new ComponentRegistry([{
+      type: 'test-service', version: 1, label: 'Test service', description: 'Test.', category: 'service', iconToken: 'server', color: '#000',
+      configSchema: z.object({ concurrency: z.number().positive() }), createDefaultConfig: () => ({ concurrency: 1 }), configFields: [], ports: [], capabilities: [], emittedMetrics: [], supportedFaults: [], runtimeBehavior: 'test-service-v1', describeConfig: () => 'test',
+    }])
+    const presets = new ComponentPresetRegistry(variants, [{ id: 'test-preset', version: 1, label: 'Test preset', description: 'Test.', iconToken: 'server', behavior: { type: 'test-service', version: 1 }, configOverrides: { concurrency: 2 } }])
+    expect(() => new ComponentCatalog(new ComponentCategoryRegistry(), variants, presets)).toThrow('Unknown component category: service')
+    expect(new ComponentCatalog(categories, variants, presets).listPresets('test-service')).toHaveLength(1)
+  })
+
+  it('keeps legacy presets resolvable for imports but unavailable for new creation', () => {
+    const variants = new ComponentRegistry(componentRegistry.list())
+    const presets = new ComponentPresetRegistry(variants, [{ id: 'old-worker', version: 1, label: 'Old worker', description: 'Compatibility only.', iconToken: 'server', behavior: { type: 'service', version: 1 }, configOverrides: {}, availability: 'legacy' }])
+    const catalog = new ComponentCatalog(componentCategoryRegistry, variants, presets)
+    const imported = { ...variants.createNodeAtVersion('service', 1, 'imported', { x: 0, y: 0 }), rolePreset: { id: 'old-worker', version: 1 } }
+    expect(presets.validateReference(imported)).toEqual(imported)
+    expect(() => presets.createNode('old-worker', 1, 'new', { x: 0, y: 0 })).toThrow('cannot create new components')
+    expect(catalog.listPresets('service', 1)).toEqual([])
+    expect(catalog.listPresets('service', 1, { includeLegacy: true })).toHaveLength(1)
+    expect(() => catalog.createNode('service', 'service', 'new', { x: 0, y: 0 }, { preset: { id: 'old-worker', version: 1 } })).toThrow('retained for compatibility')
   })
 })
 

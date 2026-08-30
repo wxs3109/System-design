@@ -185,7 +185,7 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 
 Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
 
-P2.1a 已实现 preset Registry 基础，但当前单独的 “Role presets” 面板和把 SQL/NoSQL 映射到同一通用 Database 行为只是过渡实现。P2.1b 会撤销独立面板并建立 category → variant → optional preset 层级。下一步再让 Service 定义 API、Database 定义数据模型、Workload 命中具体 operation，并让访问模式真正影响仿真；之后才增加 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router 等新行为。
+P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。下一步让 Service 定义 API、Database 定义数据模型、Workload 命中具体 operation，并让访问模式真正影响仿真；之后才增加 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router 等新行为。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -222,7 +222,7 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 初始覆盖审查与 P2.1a preset Registry 基础已完成，但审查确认当前组件缺少 API、数据模型和访问模式，且 preset 不应单独占 Palette。下一步是 P2.1b：修正 category → variant → optional preset 层级；随后才进入 ProjectFile v3 业务契约。
+当前进度：P2.0、P2.1a 与 P2.1b 已完成。Palette 已按 category → variant → optional preset 组织；当前组件仍缺少 API、数据模型和访问模式。下一步是 P2.2：建立 ProjectFile v3 业务契约。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。

@@ -20,19 +20,19 @@ Project contracts are not component variants. Defining an Orders table once and 
 
 ## Shipped Phase 1 behaviors
 
-Phase 1 ships nine latest-version behaviors. P2.1b will organize them into the category/variant hierarchy without inventing unsupported variants:
+Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants:
 
 | Category | Behavior | Modeled boundary |
 |---|---|---|
 | Traffic | Traffic Generator | Constant or Poisson request arrivals, size, duration, and generation cap |
 | Network | Network Link | Latency, jitter, byte transfer, concurrency, queueing, and packet loss |
-| Routing | Load Balancer | Weighted, round-robin, or health-aware target selection |
-| Compute | Service | Replicas, concurrency, service time, queueing, and intrinsic errors |
-| Async | Queue | Bounded buffering and consumer delivery |
-| Async | Stream | Partitions, consumer groups, batches, acknowledgement, and lag |
-| Data | Cache | Key distribution, TTL, capacity, LRU/FIFO eviction, and hit/miss routing |
-| Data | Object Storage | Bounded reads/writes and byte-dependent throughput |
-| Data | Database | Connections, shards, primary/replica reads, and replication delay |
+| Gateway & Routing | Load Balancer | Weighted, round-robin, or health-aware target selection |
+| Service | Service | Replicas, concurrency, service time, queueing, and intrinsic errors |
+| Messaging | Queue | Bounded buffering and consumer delivery |
+| Messaging | Stream | Partitions, consumer groups, batches, acknowledgement, and lag |
+| Cache | Cache | Key distribution, TTL, capacity, LRU/FIFO eviction, and hit/miss routing |
+| Object Storage | Object Storage | Bounded reads/writes and byte-dependent throughput |
+| Database | Database | Connections, shards, primary/replica reads, and replication delay |
 
 Database v1 remains readable for compatibility; Database v2 is the current palette behavior.
 

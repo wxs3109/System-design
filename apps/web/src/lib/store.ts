@@ -1,7 +1,7 @@
 'use client'
 
 import { addEdge, applyEdgeChanges, applyNodeChanges, type Connection as FlowConnection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react'
-import { componentRegistry, createRegisteredNode, createRolePresetNode, policyRegistry, rolePresetRegistry } from '@system-design/components'
+import { componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry } from '@system-design/components'
 import { createEmptyProject, parseProjectFile, projectFileV2Schema, projectToScenario, type ComponentType, type Experiment, type Fault, type PolicyAttachment, type ProjectConnection, type ProjectFileV2, type SimulationResult, type TopologyGroup } from '@system-design/model'
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
@@ -20,6 +20,8 @@ interface WorkbenchState {
   setProject: (project: ProjectFileV2 | unknown) => void
   restoreProject: (project: ProjectFileV2 | unknown) => void
   addComponent: (type: ComponentType, position: { x: number; y: number }) => void
+  addCatalogComponent: (categoryId: string, type: ComponentType, position: { x: number; y: number }, preset?: { id: string; version: number }) => void
+  /** Compatibility command for existing callers and ProjectFile v2 preset provenance. */
   addRolePreset: (presetId: string, version: number, position: { x: number; y: number }) => void
   onNodesChange: (changes: NodeChange<WorkbenchNode>[]) => void
   onEdgesChange: (changes: EdgeChange<Edge>[]) => void
@@ -99,9 +101,9 @@ let nextNodeNumber = 1
 
 export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) => ({
   project: createEmptyProject(), selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, running: false, error: null,
-  setProject: (input) => set({ project: componentRegistry.validateProject(parseProjectFile(input), rolePresetRegistry), selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null }),
+  setProject: (input) => set({ project: componentRegistry.validateProject(parseProjectFile(input), componentPresetRegistry), selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null }),
   restoreProject: (input) => {
-    const project = componentRegistry.validateProject(parseProjectFile(input), rolePresetRegistry)
+    const project = componentRegistry.validateProject(parseProjectFile(input), componentPresetRegistry)
     const history = useWorkbenchStore.temporal.getState()
     history.pause()
     set({ project, selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null })
@@ -111,7 +113,8 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
   addComponent: (type, position) => set((state) => {
     const id = `${type}-${Date.now()}-${nextNodeNumber++}`
     const workloadId = `${id}-workload`
-    const node = createRegisteredNode(type, id, position, workloadId)
+    const category = componentCatalog.getCategoryForVariant(type)
+    const node = componentCatalog.createNode(category.id, type, id, position, { workloadId })
     return {
       project: {
         ...state.project, topology: { ...state.project.topology, nodes: [...state.project.topology.nodes, node] },
@@ -120,11 +123,23 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
       selectedNodeId: id, selectedEdgeId: null, selectedFaultId: null, result: null, error: null,
     }
   }),
+  addCatalogComponent: (categoryId, type, position, preset) => set((state) => {
+    const id = type + '-' + Date.now() + '-' + nextNodeNumber++
+    const workloadId = id + '-workload'
+    const node = componentCatalog.createNode(categoryId, type, id, position, { workloadId, ...(preset ? { preset } : {}) })
+    return {
+      project: {
+        ...state.project, topology: { ...state.project.topology, nodes: [...state.project.topology.nodes, node] },
+        experiments: state.project.experiments.map((experiment) => node.type === 'traffic' ? { ...experiment, workloads: [...experiment.workloads, { id: workloadId, name: node.name + ' workload', sourceNodeId: id, requestsPerSecond: 100, startAtSeconds: 0, durationSeconds: experiment.simulation.durationSeconds, pattern: 'poisson', requestBytes: 1_024 }] } : experiment),
+      },
+      selectedNodeId: id, selectedEdgeId: null, selectedFaultId: null, result: null, error: null,
+    }
+  }),
   addRolePreset: (presetId, version, position) => set((state) => {
-    const preset = rolePresetRegistry.get(presetId, version)
+    const preset = componentPresetRegistry.get(presetId, version)
     const id = `${presetId}-${Date.now()}-${nextNodeNumber++}`
     const workloadId = `${id}-workload`
-    const node = createRolePresetNode(presetId, version, id, position, workloadId)
+    const node = componentPresetRegistry.createNode(presetId, version, id, position, workloadId)
     return {
       project: {
         ...state.project, topology: { ...state.project.topology, nodes: [...state.project.topology.nodes, node] },

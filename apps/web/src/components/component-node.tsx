@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { componentRegistry, policyRegistry, rolePresetRegistry } from '@system-design/components'
+import { componentPresetRegistry, componentRegistry, policyRegistry } from '@system-design/components'
 import { Activity, Archive, Database, GitFork, Globe2, HardDrive, Layers3, RadioTower, Server, type LucideIcon } from 'lucide-react'
 import { useWorkbenchStore, type WorkbenchNode } from '@/lib/store'
 
@@ -10,7 +10,7 @@ export const componentIcons: Record<string, LucideIcon> = { globe: Globe2, activ
 
 export function ComponentNode({ data, selected }: NodeProps<WorkbenchNode>) {
   const manifest = componentRegistry.get(data.type, data.componentVersion)
-  const preset = data.rolePreset ? rolePresetRegistry.find(data.rolePreset.id, data.rolePreset.version) : undefined
+  const preset = data.rolePreset ? componentPresetRegistry.find(data.rolePreset.id, data.rolePreset.version) : undefined
   const allPolicies = useWorkbenchStore((state) => state.project.topology.policies)
   const policies = useMemo(() => allPolicies
     .filter((policy) => policy.target.kind === 'node' && policy.target.id === data.id)
@@ -23,7 +23,7 @@ export function ComponentNode({ data, selected }: NodeProps<WorkbenchNode>) {
     <div className={`component-node${selected ? ' is-selected' : ''}`} style={{ '--node-color': manifest.color } as React.CSSProperties}>
       {inputs.map((port, index) => <Handle key={port.id} id={port.id} type="target" position={Position.Left} title={portTitle(port)} aria-label={`${port.label} input port`} style={{ top: `${((index + 1) / (inputs.length + 1)) * 100}%` }} />)}
       <div className="component-node__icon"><Icon size={18} aria-hidden="true" /></div>
-      <div className="component-node__copy"><strong>{data.name}</strong><span>{preset?.label ?? manifest.label}</span>{preset ? <em>Uses {manifest.label} behavior</em> : null}<small>{componentRegistry.describeNode(data)}</small>{policies.length ? <div className="component-node__policies" aria-label="Attached policies">{policies.map((policy) => <span key={policy.id} className={policy.enabled ? undefined : 'is-disabled'}>{policyRegistry.get(policy.type, policy.version).label}</span>)}</div> : null}</div>
+      <div className="component-node__copy"><strong>{data.name}</strong><span>{manifest.label}</span>{preset ? <em>Template: {preset.label}</em> : null}<small>{componentRegistry.describeNode(data)}</small>{policies.length ? <div className="component-node__policies" aria-label="Attached policies">{policies.map((policy) => <span key={policy.id} className={policy.enabled ? undefined : 'is-disabled'}>{policyRegistry.get(policy.type, policy.version).label}</span>)}</div> : null}</div>
       {outputs.map((port, index) => <Handle key={port.id} id={port.id} type="source" position={Position.Right} title={portTitle(port)} aria-label={`${port.label} output port`} style={{ top: `${((index + 1) / (outputs.length + 1)) * 100}%` }} />)}
     </div>
   )

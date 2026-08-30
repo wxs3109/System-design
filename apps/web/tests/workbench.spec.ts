@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+async function openComponentCategory(page: Page, name: string) {
+  const category = page.locator('.category-toggle').filter({ hasText: name })
+  await expect(category).toBeVisible()
+  if (await category.getAttribute('aria-expanded') !== 'true') await category.click()
+  await expect(category).toHaveAttribute('aria-expanded', 'true')
+}
 
 const legacyScenario = {
   schemaVersion: 1, id: 'legacy-project', name: 'Legacy import', seed: 'legacy-seed',
@@ -9,6 +16,22 @@ const legacyScenario = {
   edges: [{ id: 'edge', source: 'traffic', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1 }],
   workloads: [{ id: 'load', name: 'Legacy load', sourceNodeId: 'traffic', requestsPerSecond: 10, startAtSeconds: 0, durationSeconds: 2, pattern: 'constant', requestBytes: 100 }],
   faults: [], simulation: { durationSeconds: 2, sampleIntervalMs: 1_000, maxRequests: 100, traceLimit: 20, maxHops: 10 },
+}
+
+const legacyPresetProject = {
+  schemaVersion: 2, id: 'legacy-preset-project', name: 'Legacy preset import', activeExperimentId: 'experiment',
+  topology: {
+    nodes: [{
+      id: 'legacy-sql', name: 'Legacy SQL store', type: 'database', componentVersion: 2,
+      rolePreset: { id: 'sql-store', version: 1 }, position: { x: 120, y: 80 },
+      config: { maxConnections: 100, queryTimeMs: 12, jitterMs: 3, errorRate: 0.001, maxQueueSize: 10_000, shardCount: 1, replicasPerShard: 1, readPreference: 'primary', replicationDelayMs: 100, writeRatio: 0.5, keySpaceSize: 1_000_000, hotKeyProbability: 0 },
+    }],
+    edges: [], groups: [], policies: [],
+  },
+  experiments: [{
+    id: 'experiment', name: 'Experiment', workloads: [], faults: [], seed: 'legacy-preset-seed',
+    simulation: { durationSeconds: 1, sampleIntervalMs: 100, maxRequests: 10, traceLimit: 10, maxHops: 10 },
+  }],
 }
 
 test('switches theme and preserves it after reload', async ({ page }) => {
@@ -210,6 +233,7 @@ test('attaches and configures manifest-driven reliability policies', async ({ pa
 test('builds and configures Phase 1 data components from the shared palette', async ({ page }) => {
   await page.goto('/')
 
+  await openComponentCategory(page, 'Cache')
   await page.getByRole('button', { name: /Cache Stores key-aware entries/ }).click()
   await expect(page.getByText('1 components')).toBeVisible()
   const cache = page.locator('.react-flow__node').filter({ hasText: 'Cache' })
@@ -219,18 +243,21 @@ test('builds and configures Phase 1 data components from the shared palette', as
   await page.getByLabel('Eviction policy').selectOption('fifo')
   await expect(cache).toContainText('42 entries')
 
+  await openComponentCategory(page, 'Messaging')
   await page.getByRole('button', { name: /Stream Partitions messages/ }).click()
   const streamNode = page.locator('.react-flow__node').filter({ hasText: 'Stream' })
   await streamNode.dispatchEvent('click')
   await page.getByLabel('Partitions').fill('8')
   await expect(streamNode).toContainText('8 partitions')
 
+  await openComponentCategory(page, 'Object Storage')
   await page.getByRole('button', { name: /Object Storage Models bounded/ }).click()
   const objectStorage = page.locator('.react-flow__node').filter({ hasText: 'Object Storage' })
   await objectStorage.dispatchEvent('click')
   await page.getByLabel('Read ratio (0–1)').fill('0.6')
 
-  await page.getByRole('button', { name: /Database Routes keyed reads/ }).click()
+  await openComponentCategory(page, 'Database')
+  await page.getByRole('button', { name: /Database Routes generic keyed reads/ }).click()
   const database = page.locator('.react-flow__node').filter({ hasText: 'Database' })
   await database.dispatchEvent('click')
   await page.getByLabel('Shards').fill('4')
@@ -253,17 +280,36 @@ test('builds and configures Phase 1 data components from the shared palette', as
   ]))
 })
 
-test('creates role presets while disclosing and exporting their resolved behaviors', async ({ page }) => {
+test('drags an executable variant from its category onto the canvas', async ({ page }) => {
+  await page.goto('/')
+  await openComponentCategory(page, 'Network')
+  await page.getByRole('button', { name: /Network Link Adds transfer time/ }).dragTo(page.locator('.canvas-stage'), { targetPosition: { x: 500, y: 240 } })
+  await expect(page.getByText('1 components')).toBeVisible()
+  await expect(page.locator('.react-flow__node').filter({ hasText: 'Network Link' })).toBeVisible()
+})
+
+test('creates a nested preset through its component category and exports the resolved variant', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByText('Behaviors', { exact: true })).toBeVisible()
-  await expect(page.getByText('Role presets', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: /Worker Uses Service behavior/ }).click()
+  await expect(page.getByText('Components', { exact: true })).toBeVisible()
+  await expect(page.getByText('Role presets', { exact: true })).toHaveCount(0)
+  await expect(page.getByText(/SQL Store|NoSQL Store|API Gateway/)).toHaveCount(0)
+  const databaseCategory = page.locator('.category-toggle').filter({ hasText: 'Database' })
+  await databaseCategory.focus()
+  await page.keyboard.press('Enter')
+  await expect(databaseCategory).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('#category-database')).toContainText('Database')
+  await expect(page.locator('#category-database .variant-presets button')).toHaveCount(0)
+  const serviceCategory = page.locator('.category-toggle').filter({ hasText: 'Service' })
+  if (await serviceCategory.getAttribute('aria-expanded') !== 'true') await serviceCategory.click()
+  await expect(page.getByLabel('Service presets')).toContainText('Worker')
+  await page.getByRole('button', { name: 'Worker', exact: true }).click()
 
   const worker = page.locator('.react-flow__node').filter({ hasText: 'Worker' })
-  await expect(worker).toContainText('Uses Service behavior')
+  await expect(worker).toContainText('Service')
+  await expect(worker).toContainText('Template: Worker')
   await worker.dispatchEvent('click')
-  await expect(page.locator('.preset-disclosure')).toContainText('Worker is a role preset using Service behavior')
+  await expect(page.locator('.preset-disclosure')).toContainText('Worker is a configuration template for the Service variant')
   await page.getByLabel('Replicas').fill('6')
 
   const downloadPromise = page.waitForEvent('download')
@@ -275,6 +321,28 @@ test('creates role presets while disclosing and exporting their resolved behavio
   const exported = JSON.parse(Buffer.concat(chunks).toString())
   expect(exported.topology.nodes[0]).toMatchObject({
     type: 'service', componentVersion: 1, rolePreset: { id: 'worker', version: 1 }, config: { replicas: 6 },
+  })
+})
+
+test('imports and re-exports a legacy v2 preset as its resolved behavior', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'legacy-preset.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacyPresetProject)) })
+
+  const legacyNode = page.locator('.react-flow__node').filter({ hasText: 'Legacy SQL store' })
+  await expect(legacyNode).toBeVisible()
+  await legacyNode.dispatchEvent('click')
+  await expect(page.locator('.preset-disclosure')).toContainText('Legacy SQL capacity template is a configuration template for the Database variant')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const download = await downloadPromise
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.topology.nodes[0]).toMatchObject({
+    id: 'legacy-sql', type: 'database', componentVersion: 2, rolePreset: { id: 'sql-store', version: 1 },
+    config: { shardCount: 1, replicasPerShard: 1, writeRatio: 0.5 },
   })
 })
 

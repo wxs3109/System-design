@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type OnConnect } from '@xyflow/react'
-import { builtInComponentTypes, componentRegistry, policyRegistry, rolePresetRegistry, type ConfigField, type RolePresetManifest } from '@system-design/components'
+import { builtInComponentTypes, componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry, type BehaviorVariantManifest, type ComponentCategoryManifest, type ComponentPresetManifest, type ConfigField } from '@system-design/components'
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
@@ -46,37 +46,43 @@ function Field({ label, value, min = 0, max, step = 1, onChange }: { label: stri
   )
 }
 
-function PaletteItem({ type, onAdd }: { type: ComponentType; onAdd: () => void }) {
-  const definition = componentRegistry.get(type)
-  const Icon = componentIcons[definition.iconToken]!
+interface CatalogSelection { categoryId: string; type: ComponentType; preset?: { id: string; version: number } }
+
+function VariantChoice({ category, variant, onAdd }: { category: ComponentCategoryManifest; variant: BehaviorVariantManifest; onAdd: (selection: CatalogSelection) => void }) {
+  const presets = componentCatalog.listPresets(variant.type, variant.version)
+  const Icon = componentIcons[variant.iconToken] ?? componentIcons[category.iconToken]!
+  const setDragData = (event: React.DragEvent, preset?: ComponentPresetManifest) => {
+    event.dataTransfer.setData('application/system-design-catalog', JSON.stringify({ categoryId: category.id, type: variant.type, ...(preset ? { preset: { id: preset.id, version: preset.version } } : {}) }))
+    event.dataTransfer.effectAllowed = 'move'
+  }
   return (
-    <button
-      type="button"
-      className="palette-item"
-      draggable
-      onClick={onAdd}
-      onDragStart={(event) => { event.dataTransfer.setData('application/system-design-component', type); event.dataTransfer.effectAllowed = 'move' }}
-      style={{ '--node-color': definition.color } as React.CSSProperties}
-      title={definition.description}
-    >
-      <span><Icon size={17} aria-hidden="true" /></span>
-      <span><strong>{definition.label}</strong><small>{definition.description}</small></span>
-      <Plus size={15} aria-hidden="true" />
-    </button>
+    <div className="variant-choice">
+      <button type="button" className="palette-item palette-item--variant" draggable onClick={() => onAdd({ categoryId: category.id, type: variant.type as ComponentType })} onDragStart={setDragData}
+        style={{ '--node-color': variant.color } as React.CSSProperties} title={variant.description}>
+        <span><Icon size={17} aria-hidden="true" /></span>
+        <span><strong>{variant.label}</strong><small>{variant.description}</small></span>
+        <Plus size={15} aria-hidden="true" />
+      </button>
+      {presets.length > 0 ? <div className="variant-presets" aria-label={variant.label + ' presets'}>
+        <span>Templates</span>
+        {presets.map((preset) => <button key={preset.id + '@' + preset.version} type="button" draggable title={preset.description}
+          onClick={() => onAdd({ categoryId: category.id, type: variant.type as ComponentType, preset: { id: preset.id, version: preset.version } })}
+          onDragStart={(event) => setDragData(event, preset)}>{preset.label}</button>)}
+      </div> : null}
+    </div>
   )
 }
 
-function RolePresetItem({ preset, onAdd }: { preset: RolePresetManifest; onAdd: () => void }) {
-  const behavior = componentRegistry.get(preset.behavior.type, preset.behavior.version)
-  const Icon = componentIcons[preset.iconToken] ?? componentIcons[behavior.iconToken]!
+function CategoryItem({ category, expanded, onToggle, onAdd }: { category: ComponentCategoryManifest; expanded: boolean; onToggle: () => void; onAdd: (selection: CatalogSelection) => void }) {
+  const variants = componentCatalog.listVariants(category.id)
+  const Icon = componentIcons[category.iconToken]!
   return (
-    <button type="button" className="palette-item palette-item--preset" draggable onClick={onAdd}
-      onDragStart={(event) => { event.dataTransfer.setData('application/system-design-role-preset', `${preset.id}@${preset.version}`); event.dataTransfer.effectAllowed = 'move' }}
-      style={{ '--node-color': behavior.color } as React.CSSProperties} title={`${preset.description} Uses ${behavior.label} behavior.`}>
-      <span><Icon size={17} aria-hidden="true" /></span>
-      <span><strong>{preset.label}</strong><small>Uses {behavior.label} behavior</small></span>
-      <Plus size={15} aria-hidden="true" />
-    </button>
+    <section className="palette-category" style={{ '--node-color': category.color } as React.CSSProperties}>
+      <button type="button" className="category-toggle" aria-expanded={expanded} aria-controls={'category-' + category.id} onClick={onToggle}>
+        <span><Icon size={17} aria-hidden="true" /></span><span><strong>{category.label}</strong><small>{variants.length} {variants.length === 1 ? 'variant' : 'variants'}</small></span><ChevronDown size={15} />
+      </button>
+      {expanded ? <div id={'category-' + category.id} className="category-variants">{variants.map((variant) => <VariantChoice key={variant.type + '@' + variant.version} category={category} variant={variant} onAdd={onAdd} />)}</div> : null}
+    </section>
   )
 }
 
@@ -179,12 +185,12 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
     return <div className="empty-properties"><MousePointer2 size={22} /><p>Select a component to configure its runtime behavior.</p></div>
   }
   const manifest = componentRegistry.get(node.type, node.componentVersion)
-  const preset = node.rolePreset ? rolePresetRegistry.find(node.rolePreset.id, node.rolePreset.version) : undefined
+  const preset = node.rolePreset ? componentPresetRegistry.find(node.rolePreset.id, node.rolePreset.version) : undefined
   const setConfig = (key: string, value: number | string) => updateNode({ config: { [key]: value } })
   return (
     <div className="properties-form">
       <div className="section-heading"><div><span>Selected component</span><strong>{manifest.label}</strong></div><button type="button" className="icon-button danger" onClick={deleteNode} aria-label="Delete selected component"><Trash2 size={16} /></button></div>
-      {preset ? <p className="preset-disclosure"><strong>{preset.label}</strong> is a role preset using <strong>{manifest.label}</strong> behavior. Editing these fields changes the resolved behavior directly.</p> : null}
+      {preset ? <p className="preset-disclosure"><strong>{preset.label}</strong> is a configuration template for the <strong>{manifest.label}</strong> variant. Execution uses the resolved variant and stored values.</p> : null}
       <label className="field"><span>Name</span><input value={node.name} onChange={(event) => updateNode({ name: event.target.value })} /></label>
       {node.type === 'traffic' && workload ? <>
         <Field label="Requests / second" value={workload.requestsPerSecond} min={0.1} step={10} onChange={(value) => updateWorkload({ requestsPerSecond: value })} />
@@ -264,7 +270,7 @@ function WorkbenchInner() {
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setProject, restoreProject, addComponent, addRolePreset, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const { setProject, restoreProject, addCatalogComponent, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
   const canUndo = useCanUndo()
   const canRedo = useCanRedo()
   const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
@@ -279,6 +285,7 @@ function WorkbenchInner() {
   const [revisions, setRevisions] = useState<ProjectRevisionRecord[]>([])
   const [runs, setRuns] = useState<SimulationRunRecord[]>([])
   const [historyReady, setHistoryReady] = useState(false)
+  const [expandedCategory, setExpandedCategory] = useState<string | null>('service')
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
   const runTabRef = useRef<HTMLButtonElement>(null)
@@ -331,33 +338,25 @@ function WorkbenchInner() {
     if (!visibility.results) resultsPanelRef.current?.collapse()
   }, [])
 
-  const addAtCenter = useCallback((type: ComponentType) => {
+  const addCatalogAtCenter = useCallback((selection: CatalogSelection) => {
     const viewport = reactFlow.getViewport()
     const element = document.querySelector('.canvas-stage')
     const rect = element?.getBoundingClientRect()
     const position = rect ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: (400 - viewport.x) / viewport.zoom, y: (240 - viewport.y) / viewport.zoom }
-    addComponent(type, position)
-  }, [addComponent, reactFlow])
-  const addPresetAtCenter = useCallback((presetId: string, version: number) => {
-    const viewport = reactFlow.getViewport()
-    const element = document.querySelector('.canvas-stage')
-    const rect = element?.getBoundingClientRect()
-    const position = rect ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: (400 - viewport.x) / viewport.zoom, y: (240 - viewport.y) / viewport.zoom }
-    addRolePreset(presetId, version, position)
-  }, [addRolePreset, reactFlow])
+    addCatalogComponent(selection.categoryId, selection.type, position, selection.preset)
+  }, [addCatalogComponent, reactFlow])
 
   const onConnect: OnConnect = useCallback((connection) => connect(connection), [connect])
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
-    const type = event.dataTransfer.getData('application/system-design-component') as ComponentType
-    const presetReference = event.dataTransfer.getData('application/system-design-role-preset')
+    const catalogReference = event.dataTransfer.getData('application/system-design-catalog')
     const position = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
-    if (orderedTypes.includes(type)) addComponent(type, position)
-    else if (presetReference) {
-      const [presetId, version] = presetReference.split('@')
-      if (presetId && Number.isInteger(Number(version))) addRolePreset(presetId, Number(version), position)
-    }
-  }, [addComponent, addRolePreset, reactFlow])
+    if (!catalogReference) return
+    try {
+      const selection = JSON.parse(catalogReference) as CatalogSelection
+      if (orderedTypes.includes(selection.type)) addCatalogComponent(selection.categoryId, selection.type, position, selection.preset)
+    } catch { setError('Invalid component selection.') }
+  }, [addCatalogComponent, reactFlow, setError])
 
   const showTraceNode = useCallback((nodeId: string) => {
     const node = project.topology.nodes.find((candidate) => candidate.id === nodeId)
@@ -369,7 +368,7 @@ function WorkbenchInner() {
   const run = async () => {
     setRunning(true); setError(null); setResult(null); setProgress(null)
     try {
-      const projectSnapshot = componentRegistry.validateProject(structuredClone(project), rolePresetRegistry)
+      const projectSnapshot = componentRegistry.validateProject(structuredClone(project), componentPresetRegistry)
       const validation = validateScenarioForSimulation(projectSnapshot)
       if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
       clientRef.current ??= new SimulationWorkerClient()
@@ -413,7 +412,7 @@ function WorkbenchInner() {
   const importProject = async (file: File | undefined) => {
     if (!file) return
     try {
-      const imported = componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())), rolePresetRegistry)
+      const imported = componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())), componentPresetRegistry)
       setProject(imported)
       await getLocalHistoryRepository().saveProjectRevision(imported, 'import')
       await refreshHistory(imported.id)
@@ -442,11 +441,10 @@ function WorkbenchInner() {
 
   const palettePanel = (
       <aside className="palette">
-        <div className="panel-header"><span>Behaviors</span><small>New runtime semantics</small></div>
-        <div className="palette-list">{orderedTypes.map((type) => <PaletteItem key={type} type={type} onAdd={() => addAtCenter(type)} />)}</div>
-        <div className="panel-header palette-section-heading"><span>Role presets</span><small>Reuse behaviors</small></div>
-        <div className="palette-list">{rolePresetRegistry.list().map((preset) => <RolePresetItem key={`${preset.id}@${preset.version}`} preset={preset} onAdd={() => addPresetAtCenter(preset.id, preset.version)} />)}</div>
-        <div className="palette-help"><strong>Build from scratch</strong><p>Components are executable behaviors, not decorative icons. Connect output ports to input ports.</p></div>
+        <div className="panel-header"><span>Components</span><small>Choose category → variant</small></div>
+        <div className="palette-list">{componentCatalog.listCategories().map((category) => <CategoryItem key={category.id} category={category} expanded={expandedCategory === category.id}
+          onToggle={() => setExpandedCategory((current) => current === category.id ? null : category.id)} onAdd={addCatalogAtCenter} />)}</div>
+        <div className="palette-help"><strong>Executable building blocks</strong><p>Choose a category, then an implemented behavior variant. Templates only provide starting values.</p></div>
       </aside>
   )
 

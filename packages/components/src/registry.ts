@@ -39,12 +39,26 @@ export interface TextConfigField {
 
 export type ConfigField = NumberConfigField | SelectConfigField | TextConfigField
 
-export interface ComponentManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> {
+/**
+ * A palette-level architectural building block. Categories organize discovery
+ * only; executable semantics always come from a behavior variant.
+ */
+export interface ComponentCategoryManifest {
+  id: string
+  label: string
+  description: string
+  iconToken: string
+  color: string
+  order: number
+}
+
+export interface BehaviorVariantManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> {
   type: string
   version: number
   label: string
   description: string
-  category: 'traffic' | 'network' | 'routing' | 'compute' | 'data' | 'async'
+  /** Stable owning category ID. This manifest is the executable variant. */
+  category: string
   iconToken: string
   color: string
   configSchema: z.ZodType<TConfig>
@@ -58,6 +72,9 @@ export interface ComponentManifest<TConfig extends Record<string, unknown> = Rec
   describeConfig: (config: TConfig) => string
 }
 
+/** @deprecated Use BehaviorVariantManifest. */
+export type ComponentManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> = BehaviorVariantManifest<TConfig>
+
 export interface RegistryNode {
   id: string
   name: string
@@ -69,7 +86,7 @@ export interface RegistryNode {
   config: Record<string, unknown>
 }
 
-export interface RolePresetManifest {
+export interface ComponentPresetManifest {
   id: string
   version: number
   label: string
@@ -77,9 +94,43 @@ export interface RolePresetManifest {
   iconToken: string
   behavior: { type: string; version: number }
   configOverrides: Record<string, unknown>
+  /** Legacy presets remain resolvable for imports but cannot be newly selected. */
+  availability?: 'active' | 'legacy'
 }
 
+/** @deprecated Use ComponentPresetManifest. */
+export type RolePresetManifest = ComponentPresetManifest
+
 const manifestKey = (type: string, version: number) => `${type}@${version}`
+
+export class ComponentCategoryRegistry {
+  private readonly categories = new Map<string, ComponentCategoryManifest>()
+
+  constructor(categories: readonly ComponentCategoryManifest[] = []) {
+    categories.forEach((category) => this.register(category))
+  }
+
+  register(category: ComponentCategoryManifest) {
+    if (!category.id.trim() || !category.label.trim() || !Number.isInteger(category.order) || category.order < 0) {
+      throw new Error(`Invalid component category: ${category.id}.`)
+    }
+    if (this.categories.has(category.id)) throw new Error(`Component category ${category.id} is already registered.`)
+    this.categories.set(category.id, category)
+    return this
+  }
+
+  get(id: string): ComponentCategoryManifest {
+    const category = this.categories.get(id)
+    if (!category) throw new Error(`Unknown component category: ${id}`)
+    return category
+  }
+
+  find(id: string): ComponentCategoryManifest | undefined { return this.categories.get(id) }
+
+  list(): ComponentCategoryManifest[] {
+    return [...this.categories.values()].sort((left, right) => left.order - right.order || left.label.localeCompare(right.label))
+  }
+}
 
 export class ComponentRegistry {
   private readonly manifests = new Map<string, ComponentManifest>()
@@ -109,8 +160,18 @@ export class ComponentRegistry {
     return [...this.latestVersions].map(([type, version]) => this.get(type, version))
   }
 
+  listAll(): ComponentManifest[] { return [...this.manifests.values()] }
+
+  listByCategory(categoryId: string): ComponentManifest[] {
+    return this.list().filter((manifest) => manifest.category === categoryId)
+  }
+
   createNode(type: string, id: string, position: Position, workloadId = `${id}-workload`): RegistryNode {
-    const manifest = this.get(type)
+    return this.createNodeAtVersion(type, this.get(type).version, id, position, workloadId)
+  }
+
+  createNodeAtVersion(type: string, version: number, id: string, position: Position, workloadId = `${id}-workload`): RegistryNode {
+    const manifest = this.get(type, version)
     return {
       id,
       name: manifest.label,
@@ -126,7 +187,7 @@ export class ComponentRegistry {
     return { ...node, config: manifest.configSchema.parse(node.config) }
   }
 
-  validateProject(project: ProjectFileV2, presets?: RolePresetRegistry): ProjectFileV2 {
+  validateProject(project: ProjectFileV2, presets?: ComponentPresetRegistry): ProjectFileV2 {
     return {
       ...project,
       topology: {
@@ -160,14 +221,65 @@ export class ComponentRegistry {
   }
 }
 
-export class RolePresetRegistry {
-  private readonly presets = new Map<string, RolePresetManifest>()
+/**
+ * The complete creation hierarchy exposed to editors. Registration verifies
+ * that every variant belongs to a known category and every preset belongs to
+ * one exact, executable variant.
+ */
+export class ComponentCatalog {
+  constructor(
+    readonly categories: ComponentCategoryRegistry,
+    readonly variants: ComponentRegistry,
+    readonly presets: ComponentPresetRegistry,
+  ) {
+    this.validate()
+  }
 
-  constructor(private readonly components: ComponentRegistry, presets: readonly RolePresetManifest[] = []) {
+  private validate() {
+    for (const variant of this.variants.listAll()) this.categories.get(variant.category)
+    for (const preset of this.presets.list()) this.variants.get(preset.behavior.type, preset.behavior.version)
+    return this
+  }
+
+  listCategories(): ComponentCategoryManifest[] {
+    return this.categories.list().filter((category) => this.variants.listByCategory(category.id).length > 0)
+  }
+
+  listVariants(categoryId: string): ComponentManifest[] {
+    this.categories.get(categoryId)
+    return this.variants.listByCategory(categoryId)
+  }
+
+  listPresets(type: string, version?: number, options: { includeLegacy?: boolean } = {}): ComponentPresetManifest[] {
+    return this.presets.listForVariant(type, version, options)
+  }
+
+  getCategoryForVariant(type: string, version?: number): ComponentCategoryManifest {
+    return this.categories.get(this.variants.get(type, version).category)
+  }
+
+  createNode(categoryId: string, type: string, nodeId: string, position: Position, options: { version?: number; preset?: { id: string; version: number }; workloadId?: string } = {}): RegistryNode {
+    const variant = this.variants.get(type, options.version)
+    if (variant.category !== categoryId) throw new Error(`Behavior variant ${manifestKey(type, variant.version)} does not belong to category ${categoryId}.`)
+    const workloadId = options.workloadId ?? `${nodeId}-workload`
+    if (!options.preset) return this.variants.createNodeAtVersion(type, variant.version, nodeId, position, workloadId)
+    const preset = this.presets.get(options.preset.id, options.preset.version)
+    if (preset.availability === 'legacy') throw new Error(`Preset ${manifestKey(preset.id, preset.version)} is retained for compatibility and cannot create new components.`)
+    if (preset.behavior.type !== variant.type || preset.behavior.version !== variant.version) {
+      throw new Error(`Preset ${manifestKey(preset.id, preset.version)} does not belong to behavior variant ${manifestKey(variant.type, variant.version)}.`)
+    }
+    return this.presets.createNode(preset.id, preset.version, nodeId, position, workloadId)
+  }
+}
+
+export class ComponentPresetRegistry {
+  private readonly presets = new Map<string, ComponentPresetManifest>()
+
+  constructor(private readonly components: ComponentRegistry, presets: readonly ComponentPresetManifest[] = []) {
     presets.forEach((preset) => this.register(preset))
   }
 
-  register(preset: RolePresetManifest) {
+  register(preset: ComponentPresetManifest) {
     if (!preset.id.trim() || !Number.isInteger(preset.version) || preset.version < 1) throw new Error(`Invalid role preset: ${preset.id}.`)
     const key = manifestKey(preset.id, preset.version)
     if (this.presets.has(key)) throw new Error(`Role preset ${key} is already registered.`)
@@ -177,18 +289,29 @@ export class RolePresetRegistry {
     return this
   }
 
-  get(id: string, version: number): RolePresetManifest {
+  get(id: string, version: number): ComponentPresetManifest {
     const preset = this.presets.get(manifestKey(id, version))
     if (!preset) throw new Error(`Unknown role preset: ${manifestKey(id, version)}`)
     return preset
   }
 
-  find(id: string, version: number): RolePresetManifest | undefined { return this.presets.get(manifestKey(id, version)) }
+  find(id: string, version: number): ComponentPresetManifest | undefined { return this.presets.get(manifestKey(id, version)) }
 
-  list(): RolePresetManifest[] { return [...this.presets.values()] }
+  list(): ComponentPresetManifest[] { return [...this.presets.values()] }
+
+  listForVariant(type: string, version?: number, options: { includeLegacy?: boolean } = {}): ComponentPresetManifest[] {
+    const resolvedVersion = version ?? this.components.get(type).version
+    this.components.get(type, resolvedVersion)
+    return this.list().filter((preset) => preset.behavior.type === type
+      && preset.behavior.version === resolvedVersion
+      && (options.includeLegacy || preset.availability !== 'legacy'))
+  }
 
   createNode(id: string, version: number, nodeId: string, position: Position, workloadId = `${nodeId}-workload`): RegistryNode {
     const preset = this.get(id, version)
+    if (preset.availability === 'legacy') {
+      throw new Error(`Preset ${manifestKey(preset.id, preset.version)} is retained for compatibility and cannot create new components.`)
+    }
     const behavior = this.components.get(preset.behavior.type, preset.behavior.version)
     const defaults = behavior.createDefaultConfig({ nodeId, workloadId })
     return {
@@ -208,6 +331,9 @@ export class RolePresetRegistry {
     return node
   }
 }
+
+/** @deprecated Use ComponentPresetRegistry. */
+export { ComponentPresetRegistry as RolePresetRegistry }
 
 export const arePortSemanticsCompatible = (source: PortSemantic, target: PortSemantic): boolean => {
   if (source === 'publish') return target === 'consume'

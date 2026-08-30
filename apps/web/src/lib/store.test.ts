@@ -77,6 +77,16 @@ describe('validated project undo and redo', () => {
     expect(() => projectFileV2Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
   })
 
+  it('creates a variant and nested preset through its component category', () => {
+    useWorkbenchStore.getState().addCatalogComponent('service', 'service', { x: 10, y: 20 }, { id: 'worker', version: 1 })
+    expect(useWorkbenchStore.getState().project.topology.nodes[0]).toMatchObject({
+      name: 'Worker', type: 'service', componentVersion: 1, rolePreset: { id: 'worker', version: 1 },
+    })
+    expect(() => useWorkbenchStore.getState().addCatalogComponent('database', 'service', { x: 0, y: 0 })).toThrow('does not belong to category database')
+    expect(() => useWorkbenchStore.getState().addCatalogComponent('database', 'database', { x: 0, y: 0 }, { id: 'sql-store', version: 1 })).toThrow('retained for compatibility')
+    expect(() => useWorkbenchStore.getState().addRolePreset('sql-store', 1, { x: 0, y: 0 })).toThrow('cannot create new components')
+  })
+
   it('adds a Client preset with the normal Traffic Generator workload contract', () => {
     useWorkbenchStore.getState().addRolePreset('client', 1, { x: 0, y: 0 })
     const project = useWorkbenchStore.getState().project

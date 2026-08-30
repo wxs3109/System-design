@@ -76,13 +76,15 @@ Status: implementation complete. The registry and compatibility work remain usef
 
 Deliverables:
 
-- [ ] introduce explicit category, behavior-variant, and preset contracts;
-- [ ] show only component categories in the primary palette;
-- [ ] choose a variant and optional preset within the add/configure flow;
-- [ ] remove the separate top-level preset section;
-- [ ] preserve old preset provenance without making runtime depend on it;
-- [ ] remove or relabel claims such as SQL Store, NoSQL Store, and API Gateway when only generic Phase 1 behavior exists;
-- [ ] add keyboard, import/export, migration, and browser coverage for the hierarchy.
+- [x] introduce explicit category, behavior-variant, and preset contracts;
+- [x] show only component categories in the primary palette;
+- [x] choose a variant and optional preset within the add/configure flow;
+- [x] remove the separate top-level preset section;
+- [x] preserve old preset provenance without making runtime depend on it;
+- [x] remove or relabel claims such as SQL Store, NoSQL Store, and API Gateway when only generic Phase 1 behavior exists;
+- [x] add keyboard, import/export, migration, and browser coverage for the hierarchy.
+
+Status: complete. New creation follows category → executable variant → optional active preset. Legacy API Gateway, SQL, and NoSQL capacity templates remain import-compatible but cannot be selected or created through public creation commands.
 
 Exit criteria: a user starts with “Database” and then chooses only among implemented variants; deleting every preset leaves the same project executable; no top-level palette item is merely a renamed copy of another runtime behavior.
 
@@ -244,4 +246,4 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 ## 8. Immediate execution order
 
-Implement P2.1b next and commit it independently. Then complete P2.2, P2.3, P2.4, and P2.5 in order. Do not add Scheduler, CDN, Search Index, or new role names before the business contracts and operation-aware runtime pass the order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.
+Implement P2.2 next and commit it independently. Then complete P2.3, P2.4, and P2.5 in order. Do not add Scheduler, CDN, Search Index, or new role names before the business contracts and operation-aware runtime pass the order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.
