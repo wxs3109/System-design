@@ -1,0 +1,349 @@
+<mxfile host="app.diagrams.net" modified="2026-08-13T00:00:00.000Z" agent="Codex" version="24.7.17" type="device" pages="4">
+  <diagram id="overview" name="01-Component Overview">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="News Feed Restorable Production: Components, Responsibilities, and Data Boundaries" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1"><mxGeometry x="400" y="20" width="1000" height="40" as="geometry"/></mxCell>
+        <mxCell id="legend" value="Blue: Synchronous Service Purple: Event/Queue/Worker Dark green: Fact database Light green: Derived index Orange: Cache Solid line: Synchronous call Dotted line: Asynchronous event" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;fontColor=#334155;fontSize=12;" vertex="1" parent="1"><mxGeometry x="330" y="70" width="1140" height="35" as="geometry"/></mxCell>
+
+        <mxCell id="actorsBox" value="Roles and entrances" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#F8FAFC;strokeColor=#94A3B8;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="25" y="130" width="190" height="385" as="geometry"/></mxCell>
+        <mxCell id="reader" value="Feed Reader
+Read/turn pages" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="50" y="175" width="140" height="52" as="geometry"/></mxCell>
+        <mxCell id="author" value="Author
+Post / delete post" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="50" y="245" width="140" height="52" as="geometry"/></mxCell>
+        <mxCell id="follower" value="Follower
+Follow/Unfollow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="50" y="315" width="140" height="52" as="geometry"/></mxCell>
+        <mxCell id="operator" value="Operator
+Alarm/Replay/Reconciliation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="50" y="455" width="140" height="42" as="geometry"/></mxCell>
+
+        <mxCell id="gatewayBox" value="access layer" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#EFF6FF;strokeColor=#3B82F6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="245" y="130" width="210" height="385" as="geometry"/></mxCell>
+        <mxCell id="gateway" value="API Gateway/Auth
+TLS · Authentication · Current limiting · Routing
+request_id/trace_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="275" y="260" width="150" height="90" as="geometry"/></mxCell>
+
+        <mxCell id="servicesBox" value="Synchronization Service (stateless, horizontally scalable)" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#EFF6FF;strokeColor=#3B82F6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="485" y="130" width="610" height="385" as="geometry"/></mxCell>
+        <mxCell id="postSvc" value="Post Service
+Post · Delete post
+solidification mode/version" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="515" y="175" width="160" height="72" as="geometry"/></mxCell>
+        <mxCell id="followSvc" value="Follow Service
+Pay attention to the cycle
+follow_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="175" width="160" height="72" as="geometry"/></mxCell>
+        <mxCell id="feedSvc" value="Feed Query Service
+two-way candidate · merge · dedupe
+fact filter · cursor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="560" y="315" width="210" height="90" as="geometry"/></mxCell>
+        <mxCell id="policySvc" value="Distribution Policy Service
+WRITE/READ
+Pattern history and versions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="820" y="315" width="210" height="90" as="geometry"/></mxCell>
+
+        <mxCell id="asyncBox" value="Asynchronous processing surface" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#FAF5FF;strokeColor=#8B5CF6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1125" y="130" width="650" height="385" as="geometry"/></mxCell>
+        <mxCell id="relays" value="Outbox Relays&#xa;Post / Follow" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="170" width="135" height="65" as="geometry"/></mxCell>
+        <mxCell id="topics" value="Domain Topics&#xa;PostEvents · FollowEvents&#xa;ModeEvents" style="shape=mxgraph.basic.queue;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1310" y="165" width="170" height="75" as="geometry"/></mxCell>
+        <mxCell id="timelineW" value="Timeline Worker
+All Post → Timeline" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1510" y="170" width="145" height="65" as="geometry"/></mxCell>
+        <mxCell id="followIndexW" value="Follow Index Worker&#xa;Following / Followers" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="280" width="160" height="65" as="geometry"/></mxCell>
+        <mxCell id="coordinator" value="Fan-out Coordinator
+Only handle WRITE Post
+Split batches by target shards" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1340" y="275" width="170" height="78" as="geometry"/></mxCell>
+        <mxCell id="batchQueue" value="FanoutBatch Queue&#xa;Retry / DLQ" style="shape=mxgraph.basic.queue;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1540" y="280" width="155" height="65" as="geometry"/></mxCell>
+        <mxCell id="fanoutW" value="Fan-out Worker Pool
+Idempotent batch writing of FeedItem" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="405" width="170" height="65" as="geometry"/></mxCell>
+        <mxCell id="cacheW" value="Cache Invalidation
+Version + invalidation event" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1350" y="405" width="160" height="65" as="geometry"/></mxCell>
+        <mxCell id="repairW" value="Cleanup/Reconcile/Replay
+Cleanup · Reconciliation · DLQ Replay" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1540" y="400" width="195" height="75" as="geometry"/></mxCell>
+
+        <mxCell id="factsBox" value="Fact data (distributed SQL / sharded relational library)" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#ECFDF5;strokeColor=#15803D;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="25" y="550" width="740" height="255" as="geometry"/></mxCell>
+        <mxCell id="userStore" value="User Store&#xa;PK: user_id" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="55" y="620" width="125" height="70" as="geometry"/></mxCell>
+        <mxCell id="postStore" value="Post Store + Outbox&#xa;PK: post_id&#xa;mode / rank_time / deleted" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="205" y="600" width="155" height="100" as="geometry"/></mxCell>
+        <mxCell id="followStore" value="Follow Store + Outbox&#xa;Shard: follower_id&#xa;follow_id lifecycle" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="390" y="600" width="155" height="100" as="geometry"/></mxCell>
+        <mxCell id="modeStore" value="Mode Store
+author_id/mode_version
+Pattern history" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="575" y="600" width="155" height="100" as="geometry"/></mxCell>
+
+        <mxCell id="derivedBox" value="Derived indexes (Cassandra/ScyllaDB/DynmoDB/Bigtable)" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#F0FDF4;strokeColor=#22C55E;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="795" y="550" width="980" height="255" as="geometry"/></mxCell>
+        <mxCell id="timelineStore" value="Author Timeline&#xa;PK: author_id&#xa;SK: rank_time, post_id&#xa;all Post IDs" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="825" y="595" width="175" height="105" as="geometry"/></mxCell>
+        <mxCell id="followingStore" value="Following Index&#xa;PK: follower_id&#xa;SK: followee_id&#xa;follow_id" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1030" y="595" width="165" height="105" as="geometry"/></mxCell>
+        <mxCell id="followersStore" value="Followers Index&#xa;PK: followee_id&#xa;SK: follower_id&#xa;follow_id" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1225" y="595" width="165" height="105" as="geometry"/></mxCell>
+        <mxCell id="feedStore" value="FeedItem Store&#xa;PK: user_id (+ time bucket)&#xa;SK: rank_time, post_id&#xa;follow_id" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1420" y="590" width="180" height="115" as="geometry"/></mxCell>
+        <mxCell id="jobStore" value="Fan-out Job Store&#xa;job_id / batch_id&#xa;status / target shard" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1620" y="595" width="130" height="105" as="geometry"/></mxCell>
+
+        <mxCell id="cacheBox" value="Caching and versions" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#FFF7ED;strokeColor=#F59E0B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="25" y="840" width="1180" height="210" as="geometry"/></mxCell>
+        <mxCell id="redis" value="Redis Cluster&#xa;post:{id}&#xa;feed:{user}:head&#xa;following:{user}&#xa;author:{id}:timeline&#xa;mode:{author}" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="890" width="210" height="125" as="geometry"/></mxCell>
+        <mxCell id="versionCache" value="Version Cache&#xa;feed_version&#xa;timeline_version&#xa;follow_version&#xa;post_version" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="330" y="890" width="190" height="125" as="geometry"/></mxCell>
+        <mxCell id="localCache" value="Application Local Cache
+Extremely hot Post tombstone
+Mode / routing information
+Short TTL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="570" y="900" width="190" height="100" as="geometry"/></mxCell>
+        <mxCell id="cacheNote" value="Active invalidation + persistent version check meets freshness; TTL is only responsible for the bottom line. Cache is not a source of truth." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;fontColor=#7C5B00;" vertex="1" parent="1"><mxGeometry x="810" y="910" width="350" height="80" as="geometry"/></mxCell>
+
+        <mxCell id="obsBox" value="Observability and long-term auditing" style="swimlane;html=1;rounded=1;startSize=28;fillColor=#F8FAFC;strokeColor=#64748B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1235" y="840" width="540" height="210" as="geometry"/></mxCell>
+        <mxCell id="metrics" value="Metrics / Alerts&#xa;SLO · lag · P99 · shard" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1270" y="900" width="145" height="85" as="geometry"/></mxCell>
+        <mxCell id="logs" value="Logs / Traces&#xa;event · job · batch · shard" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1450" y="900" width="145" height="85" as="geometry"/></mxCell>
+        <mxCell id="audit" value="Object Storage
+Audit · Accident Data
+long term archiving" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1630" y="900" width="120" height="85" as="geometry"/></mxCell>
+
+        <mxCell id="o1" value="API" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="reader" target="gateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o2" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="author" target="gateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o3" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="follower" target="gateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o5" value="posts" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="gateway" target="postSvc"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o6" value="follows" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="gateway" target="followSvc"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o8" value="GET /feed" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="gateway" target="feedSvc"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o9" value="mode" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="postSvc" target="policySvc"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o10" value="transaction" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="postSvc" target="postStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o11" value="transaction" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="followSvc" target="followStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o13" value="Pattern history" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="policySvc" target="modeStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o14" value="PENDING" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="postStore" target="relays"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o15" value="PENDING" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="followStore" target="relays"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o16" value="publish" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="relays" target="topics"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o17" value="PostEvents" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="topics" target="timelineW"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o18" value="FollowEvents" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="topics" target="followIndexW"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o19" value="WRITE only" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="topics" target="coordinator"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o20" value="batches" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="coordinator" target="batchQueue"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o21" value="consume" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="batchQueue" target="fanoutW"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o22" value="all Post IDs" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="timelineW" target="timelineStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o23" value="two indexes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="followIndexW" target="followingStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o24" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="followIndexW" target="followersStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o25" value="followers" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="coordinator" target="followersStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o26" value="FeedItems" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="fanoutW" target="feedStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o27" value="progress" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="fanoutW" target="jobStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o28" value="change events" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="fanoutW" target="cacheW"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o29" value="invalidate / version" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#F59E0B;strokeWidth=2;" edge="1" parent="1" source="cacheW" target="redis"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o30" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#F59E0B;strokeWidth=2;" edge="1" parent="1" source="cacheW" target="versionCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o31" value="read candidates" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="feedSvc" target="feedStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o32" value="pull READ" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="feedSvc" target="timelineStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o33" value="follow_id" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="feedSvc" target="followingStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o34" value="Text / deleted" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="feedSvc" target="postStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o35" value="cache first" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;strokeWidth=2;" edge="1" parent="1" source="feedSvc" target="redis"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o36" value="versions" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="feedSvc" target="versionCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o37" value="metrics / logs / traces" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#64748B;" edge="1" parent="1" source="repairW" target="metrics"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o38" value="repair" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="repairW" target="jobStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o39" value="ops" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="operator" target="repairW"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="writeflows" name="02-Writing and asynchronous distribution">
+    <mxGraphModel dx="1800" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="wtitle" value="Writing path: Post, attention relationship and derived index" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1"><mxGeometry x="430" y="20" width="940" height="40" as="geometry"/></mxCell>
+        <mxCell id="wnote" value="Key guarantees: Fact + Outbox atomic submission; events are delivered at least once; Post solidifies distribution_mode; consumers are idempotent." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;fontColor=#334155;fontSize=13;" vertex="1" parent="1"><mxGeometry x="410" y="70" width="980" height="38" as="geometry"/></mxCell>
+
+        <mxCell id="postLane" value="A. Post" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#EFF6FF;strokeColor=#3B82F6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="135" width="1740" height="300" as="geometry"/></mxCell>
+        <mxCell id="wc1" value="Author" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="205" width="110" height="55" as="geometry"/></mxCell>
+        <mxCell id="wg1" value="Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="205" y="205" width="110" height="55" as="geometry"/></mxCell>
+        <mxCell id="wps" value="Post Service
+Read mode v7
+Solidify to Post" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="350" y="190" width="145" height="85" as="geometry"/></mxCell>
+        <mxCell id="wmode" value="Mode Store / Cache&#xa;Alice = WRITE&#xa;mode_version = 7" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="350" y="305" width="145" height="90" as="geometry"/></mxCell>
+        <mxCell id="wpdb" value="Post Store Transaction&#xa;Post(post-123, rank_time, WRITE, v7)&#xa;+ Outbox(event-789)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="535" y="180" width="200" height="105" as="geometry"/></mxCell>
+        <mxCell id="wrelay" value="Post Outbox Relay" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="775" y="195" width="140" height="70" as="geometry"/></mxCell>
+        <mxCell id="wtopic" value="PostEvents Topic&#xa;PostCreated" style="shape=mxgraph.basic.queue;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="955" y="190" width="150" height="80" as="geometry"/></mxCell>
+        <mxCell id="wtimelineW" value="Timeline Worker&#xa;all Post IDs" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="165" width="145" height="70" as="geometry"/></mxCell>
+        <mxCell id="wtimelineDb" value="Author Timeline&#xa;Alice / 10:00 / post-123&#xa;WRITE / v7" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1340" y="155" width="165" height="95" as="geometry"/></mxCell>
+        <mxCell id="wcoord" value="Fan-out Coordinator&#xa;READ → stop&#xa;WRITE → create job" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="285" width="155" height="85" as="geometry"/></mxCell>
+        <mxCell id="wfollowers" value="Followers Index&#xa;Alice → Bob/F2, Carol/F4..." style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1340" y="285" width="175" height="85" as="geometry"/></mxCell>
+        <mxCell id="wqueue" value="FanoutBatch Queue&#xa;one target shard / batch" style="shape=mxgraph.basic.queue;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1545" y="185" width="175" height="80" as="geometry"/></mxCell>
+        <mxCell id="wfanout" value="Fan-out Workers&#xa;idempotent batch write" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1545" y="300" width="175" height="70" as="geometry"/></mxCell>
+        <mxCell id="wfeed" value="FeedItem Store&#xa;(Bob, post-123, F2)&#xa;rank=10:00 / inserted=10:02" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1340" y="375" width="205" height="50" as="geometry"/></mxCell>
+
+        <mxCell id="followLane" value="B. Follow/Unfollow" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#EFF6FF;strokeColor=#3B82F6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="465" width="1740" height="260" as="geometry"/></mxCell>
+        <mxCell id="wfclient" value="Follower&#xa;Bob" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="550" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="wfgateway" value="Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="205" y="550" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="wfs" value="Follow Service&#xa;start F2 / end F1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="350" y="540" width="145" height="80" as="geometry"/></mxCell>
+        <mxCell id="wfdb" value="Follow Store Transaction&#xa;F2: Bob → Alice&#xa;followed_at / unfollowed_at&#xa;+ Outbox" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="535" y="520" width="190" height="115" as="geometry"/></mxCell>
+        <mxCell id="wfrelay" value="Follow Outbox Relay" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="770" y="545" width="145" height="70" as="geometry"/></mxCell>
+        <mxCell id="wftopic" value="FollowEvents Topic&#xa;Started / Ended" style="shape=mxgraph.basic.queue;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="955" y="540" width="155" height="80" as="geometry"/></mxCell>
+        <mxCell id="wfworker" value="Follow Index Worker
+The facts are subject to Follow Store" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="535" width="170" height="85" as="geometry"/></mxCell>
+        <mxCell id="wfollowing" value="Following Index&#xa;Bob → Alice / F2" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1360" y="510" width="165" height="85" as="geometry"/></mxCell>
+        <mxCell id="wfollowers2" value="Followers Index&#xa;Alice → Bob / F2" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1360" y="615" width="165" height="85" as="geometry"/></mxCell>
+        <mxCell id="wcacheInv" value="Cache Invalidation&#xa;follow_version&#xa;following:Bob + feed:Bob" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1570" y="545" width="170" height="90" as="geometry"/></mxCell>
+
+        <mxCell id="deleteLane" value="C. Post Deletion and Visibility" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#FFF7ED;strokeColor=#F59E0B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="755" width="1740" height="245" as="geometry"/></mxCell>
+        <mxCell id="wd1" value="DELETE /posts/123" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="845" width="145" height="55" as="geometry"/></mxCell>
+        <mxCell id="wd2" value="Post Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="255" y="845" width="130" height="55" as="geometry"/></mxCell>
+        <mxCell id="wd3" value="Post Store + Outbox&#xa;deleted_at + post_version&#xa;PostDeleted" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="435" y="820" width="185" height="105" as="geometry"/></mxCell>
+        <mxCell id="wd4" value="PostDeleted Event" style="shape=mxgraph.basic.queue;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="675" y="840" width="155" height="65" as="geometry"/></mxCell>
+        <mxCell id="wd5" value="DELETED tombstone&#xa;+ post_version" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="885" y="825" width="165" height="95" as="geometry"/></mxCell>
+        <mxCell id="wd6" value="Cleanup Worker
+Asynchronously delete Timeline / FeedItem ID" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1110" y="830" width="190" height="85" as="geometry"/></mxCell>
+        <mxCell id="wd7" value="Read-time Filter
+Post.deleted_at is a fact
+Physical cleanup does not determine visibility" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1380" y="820" width="285" height="105" as="geometry"/></mxCell>
+
+        <mxCell id="we1" value="POST" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="wc1" target="wg1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we2" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="wg1" target="wps"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we3" value="current mode" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="wps" target="wmode"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we4" value="atomic commit" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="wps" target="wpdb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we5" value="PENDING" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="wpdb" target="wrelay"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we6" value="at-least-once" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="wrelay" target="wtopic"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we7" value="all Post" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wtopic" target="wtimelineW"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we8" value="idempotent" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="wtimelineW" target="wtimelineDb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we9" value="branch on Post mode" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wtopic" target="wcoord"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we10" value="page followers" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="wcoord" target="wfollowers"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we11" value="target-shard batches" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wcoord" target="wqueue"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we12" value="consume" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wqueue" target="wfanout"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we13" value="unique(user, post)" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="wfanout" target="wfeed"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we14" value="Follow API" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="wfclient" target="wfgateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we15" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="wfgateway" target="wfs"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we16" value="atomic commit" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="wfs" target="wfdb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we17" value="PENDING" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wfdb" target="wfrelay"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we18" value="publish" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wfrelay" target="wftopic"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we19" value="consume" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wftopic" target="wfworker"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we20" value="current view" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="wfworker" target="wfollowing"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we21" value="reverse view" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="wfworker" target="wfollowers2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we22" value="changed" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wfworker" target="wcacheInv"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we23" value="DELETE" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="wd1" target="wd2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we24" value="soft delete + Outbox" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="wd2" target="wd3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we25" value="publish" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wd3" target="wd4"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we26" value="invalidate" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#F59E0B;" edge="1" parent="1" source="wd4" target="wd5"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we27" value="async cleanup" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="wd4" target="wd6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="we28" value="always filter" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#F59E0B;strokeWidth=2;" edge="1" parent="1" source="wd5" target="wd7"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="readpath" name="03-Home page reading path">
+    <mxGraphModel dx="1800" dy="1050" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1050" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="rtitle" value="GET /feed: two-way candidate, version verification and fact filtering" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1"><mxGeometry x="430" y="20" width="940" height="40" as="geometry"/></mxCell>
+        <mxCell id="rlegend" value="The cache goes first, but when the cached version lags behind, it must go back to the source. WRITE Post comes from FeedItem; READ Post comes from Author Timeline; finally filtered by Post and Follow facts." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;fontColor=#334155;fontSize=13;" vertex="1" parent="1"><mxGeometry x="330" y="70" width="1140" height="42" as="geometry"/></mxCell>
+
+        <mxCell id="requestBox" value="1. Request and Orchestration" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#EFF6FF;strokeColor=#3B82F6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="145" width="1740" height="190" as="geometry"/></mxCell>
+        <mxCell id="rclient" value="Bob&#xa;GET /feed?cursor=..." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="210" width="155" height="65" as="geometry"/></mxCell>
+        <mxCell id="rgateway" value="Gateway / Auth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="275" y="210" width="145" height="65" as="geometry"/></mxCell>
+        <mxCell id="rfeed" value="Feed Query Service&#xa;orchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="475" y="200" width="170" height="85" as="geometry"/></mxCell>
+        <mxCell id="rsnapshot" value="Cursor Decoder&#xa;snapshot_time&#xa;last_rank_time / post_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="195" width="175" height="95" as="geometry"/></mxCell>
+        <mxCell id="rmerge" value="Candidate Merge&#xa;k-way merge + dedupe&#xa;(rank_time, post_id)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1110" y="195" width="190" height="95" as="geometry"/></mxCell>
+        <mxCell id="rfilter" value="Fact Filter&#xa;deleted? current follow_id?&#xa;rank_time ≥ followed_at?" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1360" y="195" width="195" height="95" as="geometry"/></mxCell>
+        <mxCell id="rresponse" value="20 items + signed cursor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1610" y="210" width="130" height="65" as="geometry"/></mxCell>
+
+        <mxCell id="sourcesBox" value="2. Candidate sources and caching" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#FFF7ED;strokeColor=#F59E0B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="370" width="1740" height="290" as="geometry"/></mxCell>
+        <mxCell id="rfollowCache" value="Following Cache&#xa;Bob → Alice / F2&#xa;follow_version" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="430" width="170" height="95" as="geometry"/></mxCell>
+        <mxCell id="rmodeCache" value="Mode Cache&#xa;Alice READ intervals&#xa;mode_version" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="280" y="430" width="170" height="95" as="geometry"/></mxCell>
+        <mxCell id="rfeedCache" value="Feed Head Cache&#xa;WRITE candidates&#xa;feed_version" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="430" width="170" height="95" as="geometry"/></mxCell>
+        <mxCell id="rtimelineCache" value="Timeline Cache&#xa;READ candidates&#xa;timeline_version" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="720" y="430" width="175" height="95" as="geometry"/></mxCell>
+        <mxCell id="rversion" value="Version Cache
+feed / timeline / follow / post
+Version mismatch → Back to source" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="945" y="415" width="190" height="115" as="geometry"/></mxCell>
+        <mxCell id="rpostCache" value="Post Cache
+Text / deleted / post_version
+DELETED tombstone" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1190" y="420" width="190" height="110" as="geometry"/></mxCell>
+        <mxCell id="rscan" value="Over-fetch Loop
+Take 50 items each way first
+If filtering is insufficient, continue
+When the scanning limit is reached, the page will be shortened." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1440" y="420" width="230" height="110" as="geometry"/></mxCell>
+        <mxCell id="rsourceNote" value="Feed Head does not cache pinned pages; only the most recent ID and rank_time are cached. Mode data is cached separately by author_id, and mode switching does not invalidate all fans in fan-out." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#7C5B00;" vertex="1" parent="1"><mxGeometry x="300" y="565" width="1160" height="55" as="geometry"/></mxCell>
+
+        <mxCell id="storesBox" value="3. Persistent back-to-source and fact verification" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F0FDF4;strokeColor=#22C55E;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="695" width="1740" height="260" as="geometry"/></mxCell>
+        <mxCell id="rfollowing" value="Following Index&#xa;PK: Bob&#xa;Alice / F2 / followed_at" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="760" width="180" height="100" as="geometry"/></mxCell>
+        <mxCell id="rmodeStore" value="Mode Store&#xa;author_id / history&#xa;WRITE / READ intervals" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="760" width="180" height="100" as="geometry"/></mxCell>
+        <mxCell id="rfeedStore" value="FeedItem Store&#xa;PK: Bob&#xa;WRITE candidates / F2" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="530" y="760" width="180" height="100" as="geometry"/></mxCell>
+        <mxCell id="rtimeline" value="Author Timeline&#xa;PK: Alice&#xa;all Post IDs&#xa;read only READ mode" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="760" y="750" width="190" height="115" as="geometry"/></mxCell>
+        <mxCell id="rpostStore" value="Post Store (fact)
+Text / deleted_at
+rank_time/mode" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1010" y="755" width="185" height="105" as="geometry"/></mxCell>
+        <mxCell id="rfollowStore" value="Follow Store (Facts)
+F2/followed_at
+unfollowed_at = null" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1250" y="755" width="190" height="105" as="geometry"/></mxCell>
+        <mxCell id="rmetrics" value="Read Quality Metrics&#xa;scan amplification&#xa;short page rate&#xa;WRITE vs READ contribution" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1500" y="750" width="210" height="115" as="geometry"/></mxCell>
+
+        <mxCell id="re1" value="request" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="rclient" target="rgateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re2" value="authenticated" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="rgateway" target="rfeed"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re3" value="cursor" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;" edge="1" parent="1" source="rfeed" target="rsnapshot"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re4" value="WRITE + READ candidates" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="rsnapshot" target="rmerge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re5" value="ordered IDs" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="rmerge" target="rfilter"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re6" value="visible items" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#3B82F6;strokeWidth=2;" edge="1" parent="1" source="rfilter" target="rresponse"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re7" value="cache first" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="rfeed" target="rfollowCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re8" value="batch modes" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="rfeed" target="rmodeCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re9" value="WRITE" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="rfeed" target="rfeedCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re10" value="READ" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="rfeed" target="rtimelineCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re11" value="validate versions" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;strokeWidth=2;" edge="1" parent="1" source="rfeed" target="rversion"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re12" value="multi-get" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="rfilter" target="rpostCache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re13" value="more candidates" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;dashed=1;strokeColor=#3B82F6;" edge="1" parent="1" source="rfilter" target="rscan"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re14" value="cache miss / stale" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#22C55E;" edge="1" parent="1" source="rfollowCache" target="rfollowing"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re15" value="stale" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#22C55E;" edge="1" parent="1" source="rmodeCache" target="rmodeStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re16" value="stale" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#22C55E;" edge="1" parent="1" source="rfeedCache" target="rfeedStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re17" value="stale" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#22C55E;" edge="1" parent="1" source="rtimelineCache" target="rtimeline"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re18" value="cache miss" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#22C55E;" edge="1" parent="1" source="rpostCache" target="rpostStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re19" value="uncertain follow" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;startArrow=block;dashed=1;strokeColor=#22C55E;" edge="1" parent="1" source="rfilter" target="rfollowStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="re20" value="quality signals" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#64748B;" edge="1" parent="1" source="rfilter" target="rmetrics"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="recovery" name="04-Fault recovery and reconciliation">
+    <mxGraphModel dx="1800" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="ftitle" value="Fault recovery: discovery → location → hemostasis → replay → reconciliation" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1"><mxGeometry x="420" y="20" width="960" height="40" as="geometry"/></mxCell>
+
+        <mxCell id="detectBox" value="1. Discovery and positioning" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F8FAFC;strokeColor=#64748B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="100" width="1740" height="205" as="geometry"/></mxCell>
+        <mxCell id="slo" value="User SLO&#xa;GET /feed P99&#xa;WRITE freshness&#xa;READ freshness" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="160" width="170" height="90" as="geometry"/></mxCell>
+        <mxCell id="outboxM" value="Outbox&#xa;oldest PENDING age" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="290" y="170" width="155" height="70" as="geometry"/></mxCell>
+        <mxCell id="queueM" value="Queue&#xa;lag / oldest message" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="495" y="170" width="155" height="70" as="geometry"/></mxCell>
+        <mxCell id="workerM" value="Workers&#xa;throughput / retry / DLQ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="170" width="170" height="70" as="geometry"/></mxCell>
+        <mxCell id="shardM" value="Per-shard&#xa;QPS / P99 / errors / hot key" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="920" y="165" width="180" height="80" as="geometry"/></mxCell>
+        <mxCell id="ids" value="Stable IDs&#xa;trace / event / post / job / batch / shard&#xa;mode_version / follow_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="155" width="235" height="100" as="geometry"/></mxCell>
+        <mxCell id="impact" value="Impact Scope&#xa;post-123: WRITE v7&#xa;100 batches: 93 OK / 7 failed&#xa;all → feed-shard-8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1440" y="150" width="270" height="110" as="geometry"/></mxCell>
+
+        <mxCell id="containBox" value="2. Hemostasis and replay" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#FAF5FF;strokeColor=#8B5CF6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="345" width="1740" height="220" as="geometry"/></mxCell>
+        <mxCell id="throttle" value="Throttle/Pause
+Only downgrade shard-8 batches
+Keep unfinished messages" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="90" y="410" width="190" height="90" as="geometry"/></mxCell>
+        <mxCell id="repair" value="Repair Downstream
+Expansion/Off-owner/Repair dependencies" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="360" y="420" width="190" height="75" as="geometry"/></mxCell>
+        <mxCell id="replay" value="Replay Failed Batches
+Original job_id / batch_id
+speed limit + retreat" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="630" y="405" width="205" height="100" as="geometry"/></mxCell>
+        <mxCell id="idemTimeline" value="Timeline Idempotency&#xa;unique(author_id, post_id)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="930" y="415" width="195" height="85" as="geometry"/></mxCell>
+        <mxCell id="idemFeed" value="FeedItem Idempotency&#xa;unique(user_id, post_id)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1200" y="415" width="195" height="85" as="geometry"/></mxCell>
+        <mxCell id="verify" value="Verify Recovery&#xa;oldest age ↓&#xa;error rate ↓&#xa;new traffic not starved" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1480" y="405" width="200" height="100" as="geometry"/></mxCell>
+
+        <mxCell id="reconcileBox" value="3. Reconciliation of factual sources and derived data" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F0FDF4;strokeColor=#22C55E;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="30" y="605" width="1740" height="285" as="geometry"/></mxCell>
+        <mxCell id="postFact" value="Post Store (fact)
+post_id/rank_time
+mode/deleted" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="680" width="180" height="100" as="geometry"/></mxCell>
+        <mxCell id="followFact" value="Follow Store (Facts)
+follow_id / followed_at
+unfollowed_at" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#B7D7B5;strokeColor=#4F8A4B;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="70" y="790" width="180" height="90" as="geometry"/></mxCell>
+        <mxCell id="reconciler" value="Reconciliation Worker
+Limited time window / shard / post / DLQ
+Speed limit + idempotent" style="shape=process;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="330" y="715" width="230" height="110" as="geometry"/></mxCell>
+        <mxCell id="timelineRecon" value="Post → Author Timeline
+All Posts should have item" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="650" y="655" width="205" height="90" as="geometry"/></mxCell>
+        <mxCell id="followRecon" value="Current Follow → Indexes&#xa;unfollowed_at IS NULL&#xa;Following + Followers / follow_id" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="650" y="770" width="220" height="100" as="geometry"/></mxCell>
+        <mxCell id="feedRecon" value="WRITE Post + Current Follow → FeedItem&#xa;followed_at ≤ rank_time&#xa;current follow_id&#xa;unique(user, post)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="965" y="690" width="260" height="125" as="geometry"/></mxCell>
+        <mxCell id="cacheRecon" value="Persistent Versions → Cache&#xa;feed / timeline / follow / post&#xa;stale cache = miss" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1320" y="695" width="225" height="115" as="geometry"/></mxCell>
+        <mxCell id="auditRecon" value="Audit Result&#xa;diff count · repaired count&#xa;rate · duration · remaining" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#F5F5F5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1590" y="700" width="155" height="105" as="geometry"/></mxCell>
+
+        <mxCell id="fe1" value="alert" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="slo" target="outboxM"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe2" value="then" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="outboxM" target="queueM"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe3" value="then" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="queueM" target="workerM"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe4" value="then" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="workerM" target="shardM"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe5" value="correlate" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="shardM" target="ids"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe6" value="scope" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;strokeWidth=2;" edge="1" parent="1" source="ids" target="impact"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe7" value="contain" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;strokeWidth=2;" edge="1" parent="1" source="impact" target="throttle"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe8" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#8B5CF6;" edge="1" parent="1" source="throttle" target="repair"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe9" value="gradual" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#8B5CF6;" edge="1" parent="1" source="repair" target="replay"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe10" value="timeline retry" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="replay" target="idemTimeline"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe11" value="batch retry" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;dashed=1;strokeColor=#8B5CF6;" edge="1" parent="1" source="replay" target="idemFeed"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe12" value="observe" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#8B5CF6;" edge="1" parent="1" source="idemFeed" target="verify"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe13" value="facts" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="postFact" target="reconciler"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe14" value="facts" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="followFact" target="reconciler"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe15" value="rebuild" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="reconciler" target="timelineRecon"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe16" value="rebuild" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;" edge="1" parent="1" source="reconciler" target="followRecon"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe17" value="repair" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#22C55E;strokeWidth=2;" edge="1" parent="1" source="reconciler" target="feedRecon"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe18" value="repair versions" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#F59E0B;" edge="1" parent="1" source="reconciler" target="cacheRecon"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe19" value="record" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="cacheRecon" target="auditRecon"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
