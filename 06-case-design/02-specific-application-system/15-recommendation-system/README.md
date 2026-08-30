@@ -39,7 +39,7 @@ The focus is on how to combine multiple candidates and features with different d
 
 ### 1. Candidate Generation
 
--Do candidates come from collaborative filtering, content similarity, attention relationships, Trending, rule recall or retrieval systems?
+- Do candidates come from collaborative filtering, content similarity, attention relationships, Trending, rule recall or retrieval systems?
 - How to define the Recall, Latency, Freshness, cost and quantity budget of each candidate?
 - How to deal with multi-channel parallel timeout, insufficient results, duplicate content and single source crowding?
 

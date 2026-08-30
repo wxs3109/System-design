@@ -6,7 +6,7 @@ This section does not start from components, but derives solutions from SLOs, wo
 
 ### Scenario and goal
 
-Assuming the ingress peak is 20,000 QPS, after Gateway adds authentication, current limiting, and routing, its own P99 target is 30 ms; the end-to-end API P99 is 500 ms. During a certain downstream failure, the Gateway CPU was only at 45%, but the end-to-end P99 increased to 4 seconds.
+Assuming the ingress peak is 20,000 QPS, after Gateway adds authentication, Rate Limiting, and routing, its own P99 target is 30 ms; the end-to-end API P99 is 500 ms. During a certain downstream failure, the Gateway CPU was only at 45%, but the end-to-end P99 increased to 4 seconds.
 
 ### Do not add an instance first
 
@@ -38,7 +38,7 @@ Fast rejection will make the error rate immediately visible, but protect other r
 - Compare the number of external requests and the number of internal attempts to check retry amplification;
 - Monitor Gateway own time, Upstream time, pool wait, queue wait, and per-route rejection rate.
 
-See [API Gateway: Timeout Retry and Failure Degradation] (../../06-Case Design/01-General Basic System/02-api-gateway/04-Timeout Retry and Failure Degradation.md).
+See [API Gateway: Timeout Retry and Failure Degradation](../../06-case-design/01-common-basic-system/02-api-gateway/04-timeout-retry-and-fault-degradation.md).
 
 ## Case 2: Fan-out on Read and Fan-out on Write of News Feed
 

@@ -7,7 +7,7 @@ This part treats common basic components as complete system design issues. They 
 | Case | Externally provided capabilities | Main in-depth points | Common users |
 |---|---|---|---|
 | [Load Balancer](01-load-balancer/) | Distribute requests to healthy instances | L4/L7, Health Check, Algorithm, Session and Failover | All online services |
-| [API Gateway](02-api-gateway/) | Provides a unified policy entrance for business APIs | Routing, authentication, current limiting, Control Plane, timeout and Canary Release | Almost all external business APIs |
+| [API Gateway](02-api-gateway/) | Provides a unified policy entrance for business APIs | Routing, authentication, Rate Limiting, Control Plane, timeout and Canary Release | Almost all external business APIs |
 | [Distributed Cache](03-distributed-cache/) | Provides low-latency temporary data access | Sharding, replication, eviction, consistency and hotspots | Feed, search, items, sessions |
 | [Rate Limiter](04-rate-limiter/) | Limit request rate by rules | Algorithm, distributed counting, rule publishing and failure strategy | API Gateway, login, payment |
 | [Object Storage](05-object-storage/) | Persistently save and read large-scale objects | Metadata, object data, replication, erasure coding and life cycle | Video, network disk, backup |
@@ -26,7 +26,7 @@ Each case should not only talk about algorithms or individual nodes, but also co
 - Control Plane and Data Plane;
 - Where the status exists;
 - How to expand, shard and handle hotspots;
--Whether data is lost, executed repeatedly, or temporarily unavailable when a node fails;
+- Whether data is lost, executed repeatedly, or temporarily unavailable when a node fails;
 - Which specific applications will reuse it.
 
 The common base system is the contract boundary that other cases rely on, not just algorithmic problems. Each article should also clarify:

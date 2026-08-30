@@ -2,7 +2,7 @@
 
 This section discusses end-to-end systems that directly complete user or business scenarios. The focus is on how the business status changes and how to combine common basic systems to form a complete link.
 
-Each case must first use the [Portal Design Checklist] (00-Portal Design Checklist.md) to distinguish between ordinary APIs, large files, static content, long connections and high-frequency data flows. You cannot simply let all traffic pass through the API Gateway.
+Each case must first use the [Portal Design Checklist](./00-application-specific-entry-design-checklist.md) to distinguish between ordinary APIs, large files, static content, long connections and high-frequency data flows. You cannot simply let all traffic pass through the API Gateway.
 
 The case directory maintains one case per location and does not split folders based on a single quality attribute. This README also provides a multidimensional index organized by system prototypes, quality attributes, traffic shape, technical problems, and learning paths.
 
@@ -30,7 +30,7 @@ The "Case Portrait" at the beginning of each case's README uses the same fields 
 
 The case portrait gives priority, which must then lead to a set of acceptable design assumptions. At least clarify the size, P95/P99, Availability / Durability, Freshness or propagation window of the critical link, and return the old value, Pending, Partial Result or Fail-closed on failure. Numbers are used to derive designs and do not pretend to be real product SLAs.
 
-The case also follows the [Unified Specifications] (../00-Case Writing and Acceptance Specifications.md). When only building the skeleton, the topic selection, scope, dominant constraints, required questions, and dependency contracts should be fixed; there is no need to mark the degree of completion, and the list of component names cannot be regarded as a demonstrated design.
+The case also follows the unified case writing and acceptance specifications. When only building the skeleton, the topic selection, scope, dominant constraints, required questions, and dependency contracts should be fixed; there is no need to mark the degree of completion, and the list of component names cannot be regarded as a demonstrated design.
 
 ## Classification method
 

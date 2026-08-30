@@ -128,7 +128,7 @@ The completion of the design is not subject to "mentioning the Kafka term". It m
 - Consumer crashes after completing business writing but before Commit. Replay will not allow the business results to take effect again.
 - The late Commit of the old Consumer during Rebalance was rejected by the Generation Fence.
 - When the Offset of a slow Consumer falls outside the Retention, an explicit failure and warning will occur, and it cannot silently jump to the latest position.
-- There are clear current limiting, migration and downgrade strategies for a single Hot Key, a single Tenant or when the disk is almost full.
+- There are clear Rate Limiting, migration and downgrade strategies for a single Hot Key, a single Tenant or when the disk is almost full.
 - After adding Partition, clearly explain the mapping changes from Key to Partition and the local order boundary.
 - Distinguish between Broker layer Delivery Guarantee and end-to-end business effects, and do not claim that the infrastructure alone can achieve Exactly-once.
 

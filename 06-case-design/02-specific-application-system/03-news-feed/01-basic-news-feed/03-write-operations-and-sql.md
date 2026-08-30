@@ -6,7 +6,7 @@
 - Follow: Insert a row in Follow; delete it when it is turned off.
 - Delete Post: Mark the Post as deleted.
 
-##Impotent post
+##Idempotent post
 
 The client passes in `Idempotency-Key` when calling `POST /posts`. The service writes it to `posts.idempotency_key` and relies on `UNIQUE (author_id, idempotency_key)` to prevent retries to create multiple Posts.
 

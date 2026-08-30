@@ -175,7 +175,7 @@ Active invalidation and version checking take care of freshness, and TTL is the 
 - Number of times the cached version lags behind;
 - FeedChanged, TimelineChanged, FollowChanged event age;
 - Hot key QPS;
--Number of failure failures and rebuild failures;
+- Number of failure failures and rebuild failures;
 - Database P99 latency on cache failure.
 
 ## Finally, remember only four sentences

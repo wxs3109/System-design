@@ -65,6 +65,6 @@ This section will mention "requires unique constraints", "requires atomic modifi
 - How to derive a copy asynchronously and synchronously;
 - How primary keys are mapped to physical shards.
 
-These are the responsibilities of `02-Core Concepts`, `04-Infrastructure Components` and `05-Common Design Patterns`.
+These are the responsibilities of `02-Core Concepts`, `04-Infrastructure Components` and `05-General Design Patterns`.
 
 [Return to the table of contents of this chapter](../README.md)

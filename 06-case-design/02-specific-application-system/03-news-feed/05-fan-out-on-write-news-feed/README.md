@@ -6,8 +6,8 @@
 
 1. [Why pre-generate feed](01-why-pre-generate-feeds.md)
 2. [Data Model and FeedItem](02-data-model-and-feeditem.md)
-3. [FeedItem Backfill (historical data supplement), Traffic Cutover (traffic switching) and reliability] (03-Post distribution and reliability.md)
-4. [Home page reading and attention life cycle] (04-Home page reading and attention semantics.md)
+3. [FeedItem Backfill (historical data supplement), Traffic Cutover (traffic switching) and reliability](03-feeditem-backfill-cutover-and-reliability.md)
+4. [Home page reading and attention life cycle](./04-home-page-reading-and-attention-semantics.md)
 5. [Bottleneck and Upgrade Signal](05-bottlenecks-and-upgrade-signals.md)
 
 ## What is only added in this version?

@@ -84,7 +84,7 @@ These numbers will affect the final architecture, but the explanation cannot jum
 - Use Cell to limit the blast radius of glitches and releases;
 - Design cross-Region RPO/RTO based on data level.
 
-The first step is to implement logical boundaries in a Cell; as QPS, Items, and Jobs grow, sharding, dedicated resource pools, more Cells, and disaster recovery Regions will be introduced. For the detailed sequence, see [Evolution Route and Current Boundary] (12-Evolution Route and Current Boundary.md).
+The first step is to implement logical boundaries in a Cell; as QPS, Items, and Jobs grow, sharding, dedicated resource pools, more Cells, and disaster recovery Regions will be introduced. For the detailed sequence, see [Evolution Route and Current Boundary](./12-evolution-route-and-current-boundary.md).
 
 These numbers are system design assumptions only and are not publicly available true scale for any specific product.
 

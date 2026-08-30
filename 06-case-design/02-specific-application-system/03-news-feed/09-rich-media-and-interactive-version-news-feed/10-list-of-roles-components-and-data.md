@@ -16,7 +16,7 @@ This chapter first fixes the independent nodes that should appear in the 09 arch
 
 | Service | Read | Write or Return |
 |---|---|---|
-| API Gateway / Auth | token, current limiting policy | Authenticated request |
+| API Gateway / Auth | token, Rate Limiting policy | Authenticated request |
 | Post Service | Media Status, Policy, Author Mode | Post, PostMedia, Post Outbox |
 | Media Service | User quota, Media Metadata | Upload Session, pre-signed URL |
 | Upload Completion Service | part, checksum, object metadata | Media status, MediaUploaded |

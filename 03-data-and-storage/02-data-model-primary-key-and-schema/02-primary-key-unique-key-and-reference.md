@@ -62,7 +62,7 @@ CREATE TABLE posts (
 | `item_id` | `(tenant_id, workspace_id, normalized_name)` | Unique name within Workspace |
 | `reservation_id` | Valid status constraints for events and seats | Preventing overbooking of seats |
 
-A final example might require a conditional unique constraint or a conditional update of an authoritative inventory record. For specific concurrency protection, see [Concurrency Control and Distributed Transactions] (../../02-Core Concepts/09-Concurrency Control and Distributed Transactions/).
+A final example might require a conditional unique constraint or a conditional update of an authoritative inventory record. For specific concurrency protection, see [Concurrency Control and Distributed Transactions](../../02-core-concepts/09-concurrency-control-and-distributed-transactions/).
 
 ## Reference use ID
 

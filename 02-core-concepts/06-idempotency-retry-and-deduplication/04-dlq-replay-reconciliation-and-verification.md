@@ -29,7 +29,7 @@ After Alice posts, the Post Service saves the Post and `PostCreated` Outbox in t
 
 Timeline Worker uses `UNIQUE(author_id, post_id)`; Fan-out Worker uses `UNIQUE(user_id, post_id)`. The message is acknowledged only after the storage transaction is committed. Temporary database failures use backoff with jitter, and permanent format errors enter the DLQ. After the fault is repaired, replay according to the original `event_id/job_id/batch_id` speed limit, and finally reconcile the Post and Follow fact tables.
 
-For complete implementation, see [News Feed: Write Reliability](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/09-write-reliability.md). How to avoid retry amplification at the entry layer, see [API Gateway: Timeout Retry and Failure Degradation] (../../06-Case Design/01-General Basic System/02-api-gateway/04-Timeout Retry and Failure Degradation.md).
+For complete implementation, see [News Feed: Write Reliability](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/09-write-reliability.md). How to avoid retry amplification at the entry layer, see [API Gateway: Timeout Retry and Failure Degradation](../../06-case-design/01-common-basic-system/02-api-gateway/04-timeout-retry-and-fault-degradation.md).
 
 ## 4. What to monitor
 

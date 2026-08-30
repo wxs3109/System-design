@@ -56,7 +56,7 @@ The outer budget should be larger than the inner one, and the remaining deadline
 
 After timeout, downstream work that has no value should be canceled. If the client has given up and the request continues to be executed by each service, a large amount of "ghost traffic" will be generated.
 
-Different routes cannot share an arbitrary global value: reasonable budgets for user queries, lock sockets, batch exports, and long polling are different. Long tasks should be submitted asynchronously and return the task ID, rather than letting the HTTP connection wait for several minutes. For retry semantics, see [Impotent, Retry and Deduplication](../06-idempotency-retry-and-deduplication/).
+Different routes cannot share an arbitrary global value: reasonable budgets for user queries, lock sockets, batch exports, and long polling are different. Long tasks should be submitted asynchronously and return the task ID, rather than letting the HTTP connection wait for several minutes. For retry semantics, see [Idempotent, Retry and Deduplication](../06-idempotency-retry-and-deduplication/).
 
 ## 4. Overload Protection: Bounded Queue and Load Shedding
 
@@ -68,7 +68,7 @@ When the arrival rate continues to be greater than the processing rate, unbounde
 - Return `429` or `503` when the upper limit is exceeded;
 - Reserve capacity for critical traffic such as health checks, logins, payment callbacks, etc.
 
-### The difference between Load Shedding and current limiting
+### The difference between Load Shedding and Rate Limiting
 
 - **Rate Limiting**: Manage traffic according to predefined quotas, such as 100 times per second per tenant.
 - **Load Shedding**: When the system is close to saturation, low-priority work is actively discarded to protect the overall system.

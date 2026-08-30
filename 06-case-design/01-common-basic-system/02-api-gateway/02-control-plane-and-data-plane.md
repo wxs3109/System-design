@@ -6,7 +6,7 @@ The most important architectural split of API Gateway is to separate "configurat
 
 | Part | Responsible content | Whether it is located in the user request path |
 |---|---|---|
-| Control plane | API registration, routing, certificates, authentication methods, current limiting rules, grayscale publishing | No |
+| Control plane | API registration, routing, certificates, authentication methods, Rate Limiting rules, grayscale publishing | No |
 | Data plane | Receives requests, executes local rules, selects backends, forwards and returns responses | Yes |
 
 ```mermaid

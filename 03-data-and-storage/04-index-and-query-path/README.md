@@ -133,7 +133,7 @@ You can use:
 
 The first path answers "Who do I follow?" and the second answers "Who follows me." This is not a fan-out scenario, nor does it replicate business facts; it simply provides a reverse positioning path for the same relationship.
 
-In some KV or Wide-Column products, the two directions may appear as two lookup tables. At that time, it must be marked which copy is the authoritative fact and how the other copy is updated and verified; the complete cross-component link belongs to [Universal Design Pattern] (../../05-Universal Design Pattern/).
+In some KV or Wide-Column products, the two directions may appear as two lookup tables. At that time, it must be marked which copy is the authoritative fact and how the other copy is updated and verified; the complete cross-component link belongs to [General Design Patterns](../../05-general-design-patterns/).
 
 ## 6. Covering Index and Table Lookup
 
@@ -245,7 +245,7 @@ Indexes are not free read optimization:
 
 - Adding, updating and deleting may maintain multiple indexes at the same time;
 - Indexes occupy storage and memory cache;
--Updating indexed fields is usually more expensive than updating non-indexed fields;
+- Updating indexed fields is usually more expensive than updating non-indexed fields;
 - Building large indexes may consume I/O, CPU, and temporary space;
 - Useless or duplicate indexes increase costs without stable read benefits;
 - During Schema migration, the old and new indexes may temporarily coexist.
@@ -268,7 +268,7 @@ Don't keep indexes that "might be useful later" but don't have an owner and quer
 
 The execution plan is the evidence between the candidate design and the real behavior. Output will vary from product to product, but at least check out:
 
--Which index is used, or full table/full partition scan;
+- Which index is used, or full table/full partition scan;
 - How many rows or objects are expected and actually read;
 - How much is left after filtering;
 - Whether additional sorting, temporary results or a large number of Base Table Lookups occur;
@@ -307,7 +307,7 @@ Candidate index:
 
     (tenant_id, workspace_id, created_at DESC, item_id DESC)
 
-Tenant ID is not only a performance field, but also an isolation contract. Whether the primary key, unique key and each access path carry Tenant, see [Multi-tenant Data Layout] (../08-multi-tenant data layout/) for details. Capacity routing and Cell architecture are not discussed in this article.
+Tenant ID is not only a performance field, but also an isolation contract. Whether the primary key, unique key and each access path carry Tenant, see [Multi-tenant Data Layout](../08-multi-tenant-data-layout/) for details. Capacity routing and Cell architecture are not discussed in this article.
 
 ## 14. Case
 
@@ -322,7 +322,7 @@ Tenant ID is not only a performance field, but also an isolation contract. Wheth
 | Home Timeline | (viewer_id, rank/time, post_id) | Derived Read Model, not equal to Post authoritative fact |
 | Search text | Inverted index | Return candidate ID and handle permissions and deletion |
 
-Which Timeline is Fan-out on Write, Read or Hybrid is determined by [General Design Pattern] (../../05-General Design Pattern/) and the case; only how it needs to be read is defined here.
+Which Timeline is Fan-out on Write, Read or Hybrid is determined by [General Design Pattern](../../05-general-design-patterns/) and the case; only how it needs to be read is defined here.
 
 ### Booking
 
@@ -333,7 +333,7 @@ Which Timeline is Fan-out on Write, Read or Hybrid is determined by [General Des
 | Show seat status | (show_id, seat_id) unique or authoritative inventory key |
 | City and date searches | Composite/geographically derived indexes for search |
 
-Searching the index can return candidate hotels or events, but it does not confirm that sold-out inventory is still available for purchase just because the index is older. The final write still requires the concurrency constraints of the authoritative inventory. For the specific mechanism, see [Concurrency Control and Distributed Transactions] (../../02-Core Concepts/09-Concurrency Control and Distributed Transactions/).
+Searching the index can return candidate hotels or events, but it does not confirm that sold-out inventory is still available for purchase just because the index is older. The final write still requires the concurrency constraints of the authoritative inventory. For the specific mechanism, see [Concurrency Control and Distributed Transactions](../../02-core-concepts/09-concurrency-control-and-distributed-transactions/).
 
 ## 15. Common misunderstandings
 

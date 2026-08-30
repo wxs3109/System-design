@@ -9,7 +9,7 @@ This set of notes is used for system design interview preparation. In the first 
 3. [Core Concepts](02-core-concepts/): From SLO, performance and consistency, to design decisions of asynchronous, idempotent, sharding, transactions and recovery.
 4. [Data and Storage](03-data-and-storage/): Starting from the access mode and data model, select storage, Schema, index and life cycle rules.
 5. [Infrastructure Components](04-Infrastructure-Components/): Understand the external contracts, key configurations, limitations and failure behavior of individual off-the-shelf components.
-6. [Universal Design Pattern](05-general-design-patterns/): Combine multiple storage and components into reusable and recoverable data flow and control flow.
+6. [General Design Patterns](05-general-design-patterns/): Combine multiple storage and components into reusable and recoverable data flow and control flow.
 7. [Case Design](06-case-design/): It is divided into reusable general basic systems, end-to-end specific application systems, and platform systems that carry multiple types of resources and workloads.
 8. [Security and Observability](07-security-and-observability/): Authentication, encryption, monitoring, SLOs, and incident response.
 9. [Template and Review](08-templates-and-review/): Unify answer templates, checklists and review records.

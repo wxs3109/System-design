@@ -63,7 +63,7 @@ When READ is switched to WRITE, if you backfill historical READ Post to all fans
 A more reliable solution is:
 
 - New Post uses the new mode immediately;
--Historical Posts maintain the mode they were in when they were published;
+- Historical Posts maintain the mode they were in when they were published;
 - The read path is compatible with both sources within a limited retention window;
 - End the transition naturally after exceeding the window.
 

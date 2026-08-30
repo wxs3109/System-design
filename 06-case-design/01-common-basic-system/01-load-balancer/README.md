@@ -5,8 +5,8 @@ This case trains how to start from an L7 Reverse Proxy and gradually introduce h
 The default learning path only has three documents:
 
 1. This article: Fixed learning contracts, external semantics, architectural maps, and completion conditions.
-2. [Progressive Design Mainline] (01-progressive design mainline.md): Continuous derivation from single agent to single Region L7 Load Balancer.
-3. [Review and Practice] (02-Review and Practice.md): Close-book reconstruction of the design and verification of mastery.
+2. [Progressive Design Mainline](./01-load-balancer-progressive-design-mainline.md): Continuous derivation from single agent to single Region L7 Load Balancer.
+3. [Review and Practice](./02-load-balancer-review-and-practice.md): Close-book reconstruction of the design and verification of mastery.
 
 Stop when you have completed the exercise. Health and configuration convergence, protocol and long connection boundaries are placed in [`optional/`](optional/); global entry, underlying forwarding implementation and complete product governance are placed in [Parking Lot](PARKING-LOT.md).
 

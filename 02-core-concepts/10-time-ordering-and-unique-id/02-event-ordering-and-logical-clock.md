@@ -118,7 +118,7 @@ If the Timeline Consumer unconditionally Upserts in order of arrival, the post w
 - Visibility filtering is still performed before display;
 - Reconciliation fixes silent inconsistency.
 
-Refer to [Deletion and Consistency] (../../06-Case Design/02-Specific Application System/03-news-feed/08-Recoverable Production Version/07-Deletion and Consistency.md).
+Refer to [Deletion and Consistency](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/07-post-deletion-and-consistency.md).
 
 ## 8. Trade-off
 

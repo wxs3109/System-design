@@ -6,7 +6,7 @@
 
 1. [Why build the index first and not cut the feed immediately](01-why-build-the-index-first-and-not-cut-the-feed-immediately.md)
 2. [Outbox, events and derived indexes](02-outbox-events-and-derived-indexes.md)
-3. [Backfill (historical data supplementation), Shadow Validation (bypass verification) and faults] (03-Backfill shadow verification and faults.md)
+3. [Backfill (historical data supplementation), Shadow Validation (bypass verification) and faults](./03-backfill-shadow-validation-and-failures.md)
 4. [Signal entering Fan-out on Write (distributed when writing)](04-signal-entering-fan-out-on-write-distributed-when-writing.md)
 
 ## Inheritance 03

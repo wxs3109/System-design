@@ -29,7 +29,7 @@ Timestamps are not suitable for strict versions: clocks will drift, and it is en
 | Failure type | Example | Handling method |
 |---|---|---|
 | Instantaneous failure | Network jitter, transient 503 | Exponential backoff with Jitter, limited times and total duration |
-| Current limiting/overload | Downstream 429, connection pool full | Respect `Retry-After`, reduce concurrency, and break the circuit when necessary |
+| Rate Limiting/overload | Downstream 429, connection pool full | Respect `Retry-After`, reduce concurrency, and break the circuit when necessary |
 | Permanent business failure | The account does not exist and the status transition is illegal | Do not blindly retry, record the final status or take business compensation |
 | Poison Message | Schema cannot be parsed, required fields are missing | Isolate into DLQ, and control replay after repair |
 | The result is unknown | The external call times out, but it may have succeeded | Use idempotent keys to query or retry, and never treat it as a failure directly |

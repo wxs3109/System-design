@@ -40,8 +40,8 @@ If you're just updating a rebuildable like count, search index, or recommendatio
 
 ## Case mapping
 
-- [Ticket Reservation] (../../06-Case Design/02-Specific Application System/08-ticket-booking/README.md): Lock seat, timeout release, anti-oversold.
-- [Payment System] (../../06-Case Design/02-Specific Application System/09-payment-system/README.md): Unknown status, idempotent deduction, compensation and reconciliation.
+- [Ticket Reservation](../../06-case-design/02-specific-application-system/08-ticket-booking/README.md): Lock seat, timeout release, anti-oversold.
+- [Payment System](../../06-case-design/02-specific-application-system/09-payment-processing/README.md): Unknown status, idempotent deduction, compensation and reconciliation.
 - [News Feed Basic Writing](../../06-case-design/02-specific-application-system/03-news-feed/01-basic-news-feed/03-write-operations-and-sql.md): Unique constraints and idempotent keys.
 - [Multi-tenant platform save Item](../../06-case-design/03-platform-system/01-multi-tenant-data-platform/01-system-design-mainline/07-workload-and-item.md): ETag, anti-overwrite and immutable version.
 

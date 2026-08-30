@@ -6,7 +6,7 @@ Answers in this chapter:
 
 - Which states must be saved by the service itself as Source of Truth, and which ones can be externalized, copied, or simply discarded;
 - When should stateless instances be used first, and when statefulness is a requirement of the business itself;
--Why Session, long connection, Local Cache and background tasks are in hidden state;
+- Why Session, long connection, Local Cache and background tasks are in hidden state;
 - What problems do Sticky Routing, Lease, Partition, Connection Draining and Failure Recovery solve respectively?
 - How to apply these judgments to API Gateway, Chat, Job Scheduler and multi-tenant data platform.
 

@@ -31,7 +31,7 @@ Switching can choose to temporarily stop writing, which has simple semantics but
 
 - **Routing version**: Both client cache and server mapping have versions;
 - **Single writer**: Only the current epoch can be submitted at any time;
-- **Impotent Replication**: Log replay can be repeated safely;
+- **Idempotent Replication**: Log replay can be repeated safely;
 - **Tombstone**: Deletion must also be migrated, and old target data cannot be resurrected;
 - **Verification**: Not only compare the total number of rows, but also compare the business invariants and key indexes;
 - **Rollback**: The source read-only copy is retained after the switch, but the old source cannot be allowed to receive new writes again;
@@ -69,4 +69,4 @@ At a minimum observe: source/destination log gaps zeroed, routed old version req
 
 Please refer to [News Feed: Online Migration and Consistency Verification](../../06-case-design/02-specific-application-system/03-news-feed/07-sharding-extension-news-feed/04-online-migration-and-consistency-verification.md).
 
-[Previous section: Sharding keys and routing] (02-Sharding keys and routing strategy.md) · [Return to the entrance of this chapter] (README.md) · [Next section: Hotspots and cross-shard operations] (04-Hotspots and cross-shard operations.md)
+[Previous section: Sharding keys and routing](./02-shard-key-and-routing-strategy.md) · [Return to the entrance of this chapter](README.md) · [Next section: Hotspots and cross-shard operations](./04-hotspot-and-cross-shard-operation.md)

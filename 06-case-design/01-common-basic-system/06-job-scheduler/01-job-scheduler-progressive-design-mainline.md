@@ -254,7 +254,7 @@ Stop after you can answer the following questions in closed book:
 
 - Why does Outbox not miss but still duplicate?
 - Why can't MQ messages directly grant execution rights?
--Which layer do Attempt, Lease and Business Idempotence protect respectively?
+- Which layer do Attempt, Lease and Business Idempotence protect respectively?
 - Why should Shard Key be derived from transaction boundaries?
 - How to cover all Shards after data is fragmented and tolerate repeated scanning?
 - Why doesn't extending MQ Consumer replace database atomic preemption?

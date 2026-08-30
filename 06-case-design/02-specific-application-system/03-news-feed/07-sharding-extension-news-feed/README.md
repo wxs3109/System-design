@@ -5,9 +5,9 @@
 ## Reading order
 
 1. [Why sharding now](01-why-sharding-now.md)
-2. [How to fragment various types of data] (02-How to fragment various types of data.md)
+2. [How to fragment various types of data](./02-how-to-fragment-various-types-of-data.md)
 3. [Hotspot, Replication and Routing](03-hotspots-replication-and-routing.md)
-4. [Online Migration and Consistency Verification] (04-Online Migration and Consistency Verification.md)
+4. [Online Migration and Consistency Verification](./04-online-migration-and-consistency-verification.md)
 5. [Fragmentation failure and upgrade signal](05-sharding-failure-and-upgrade-signals.md)
 
 ## Inheritance 06

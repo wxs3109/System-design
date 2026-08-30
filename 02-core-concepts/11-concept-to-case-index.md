@@ -20,8 +20,8 @@ This index is used to review concepts when doing cases. First find the symptoms 
 | Single machine capacity is not enough | Sharding, shard key, Rebalancing | [News Feed Sharding Extension](../06-case-design/02-specific-application-system/03-news-feed/07-sharding-extension-news-feed/README.md) |
 | A large customer or account overwhelms the system | Hot Key, Noisy Neighbor, Isolation and Fair Scheduling | [News Feed Celebrity Account](../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/05-celebrity-account-judgment-and-mode-switching.md), [Multi-tenant Platform](../06-case-design/03-platform-system/01-multi-tenant-data-platform/README.md) |
 | There are copies, but they cannot be recovered after being accidentally deleted | Replication vs Backup, PITR, RPO/RTO | [News Feed Data Reliable Version](../06-case-design/02-specific-application-system/03-news-feed/02-data-reliable-version-news-feed/README.md) |
-| I don’t know where to switch after a Region failure | Failover, Fencing, Cell, disaster recovery drills | [Multi-tenant platform evolution] (../06-Case Design/03-Platform System/01-multi-tenant-data-platform/01-System Design Mainline/12-Evolution Route and Current Boundary.md) |
-| Duplicate or missing records when turning pages | Stable sorting, Cursor, Snapshot | [News Feed home page reading] (../06-Case design/02-Specific application system/03-news-feed/08-Recoverable production version/04-Home page reading and FeedItem.md) |
+| I don’t know where to switch after a Region failure | Failover, Fencing, Cell, disaster recovery drills | [Multi-tenant platform evolution](../06-case-design/03-platform-system/01-multi-tenant-data-platform/01-system-design-mainline/12-evolution-route-and-current-boundary.md) |
+| Duplicate or missing records when turning pages | Stable sorting, Cursor, Snapshot | [News Feed home page reading](../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/04-home-page-reading-and-feeditem.md) |
 | After the Worker lease expires, the old Worker is restored | Lease, fencing token, Attempt | [Operation scheduling domain](../06-case-design/03-platform-system/01-multi-tenant-data-platform/02-business-domain-design/05-operation-and-job-scheduling-domain.md) |
 
 ## 2. Back-check by case
@@ -49,7 +49,7 @@ Key concepts:
 - Timeout, Retry, Backoff and Jitter;
 - Circuit Breaker、Bulkhead、Load Shedding；
 - Asynchronousization of long tasks;
-- Current limiting, fairness and observability.
+- Rate Limiting, fairness and observability.
 
 Entrance: [API Gateway](../06-case-design/01-common-basic-system/02-api-gateway/README.md).
 
@@ -103,7 +103,7 @@ After completing a case, review it with the following questions:
 - When the network is partitioned, is each key operation selected consistent or available?
 - How to deal with message duplication, disorder, backlog and permanent failure?
 - How does concurrent writing rely on maintaining invariants?
--Does the shard key match the access pattern and where are the hot spots?
+- Does the shard key match the access pattern and where are the hot spots?
 - Which segment is dominant in P99, and how to discard work when it is overloaded?
 - What faults do replicas, backups, failovers, and reconciliations solve respectively?
 - When does the current solution reach what target does it need to evolve?

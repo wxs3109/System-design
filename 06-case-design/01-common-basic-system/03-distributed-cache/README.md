@@ -5,8 +5,8 @@ This case trains how to start with a loseable memory cache and let capacity, mem
 The default learning path only has three documents:
 
 1. This article: Fixed learning contracts, architectural maps, invariants and completion conditions.
-2. [Progressive Design Mainline] (01-progressive design mainline.md): Continuous derivation from single node to single Region distributed cache.
-3. [Review and Practice] (02-Review and Practice.md): Close-book reconstruction of the design and verification of mastery.
+2. [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md): Continuous derivation from single node to single Region distributed cache.
+3. [Review and Practice](../01-load-balancer/02-load-balancer-review-and-practice.md): Close-book reconstruction of the design and verification of mastery.
 
 Stop when you have completed the exercise. Caching - source data race conditions and sharding implementation options are placed in [`optional/`](optional/); multi-region, persistent KV, rich Redis capabilities and complete product management are placed in [Parking Lot](PARKING-LOT.md).
 
@@ -45,7 +45,7 @@ Out of scope：
 - Cross-Region consistency, global failure propagation and disaster recovery protocols.
 - Complete RBAC, accounting, console, auditing and Managed Cache product platform.
 
-The complete Cache-Aside process on the application side belongs to [cache read link] (../../../05-General Design Pattern/01-Cache Read Link/); in this case, only the boundaries that the caller must understand are retained.
+The complete Cache-Aside process on the application side belongs to [cache read link](../../../05-general-design-patterns/01-cache-read-path/); in this case, only the boundaries that the caller must understand are retained.
 
 ## 3. Minimum external contract
 

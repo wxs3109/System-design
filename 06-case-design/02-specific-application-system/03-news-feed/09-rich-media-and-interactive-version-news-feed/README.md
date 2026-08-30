@@ -4,7 +4,7 @@
 
 ## Reading order
 
-1. [Modern X functional map and scope of this edition] (01-X functional map and scope of this edition.md)
+1. [Modern X functional map and scope of this edition](./01-modern-x-functional-map-and-scope-of-this-edition.md)
 2. [Demand, Capacity and SLO](02-demand-capacity-and-slo.md)
 3. [Post type and interactive data model](03-post-type-and-interactive-data-model.md)
 4. [General process of media upload](04-general-media-upload-process.md)
@@ -14,8 +14,8 @@
 8. [Feed Assembly, Notification and Counting](08-feed-assembly-notification-and-counting.md)
 9. [Visibility, review and deletion](09-visibility-moderation-and-deletion.md)
 10. [Role, component and data list](10-list-of-roles-components-and-data.md)
-11. [Reliability, cost and subsequent evolution] (11-Reliability cost and subsequent evolution.md)
-12. [Function and data migration from 08 to 09] (12-Function and data migration.md)
+11. [Reliability, cost and subsequent evolution](./11-reliability-cost-and-subsequent-evolution.md)
+12. [Function and data migration from 08 to 09](./12-function-and-data-migration-from-08-to-09.md)
 
 ## Core design of this version
 

@@ -5,8 +5,8 @@ This case trains how to start from a server that saves bytes by key, and gradual
 The default learning path only has three documents:
 
 1. This article: fixed learning contract, external semantics, core model and completion conditions.
-2. [Progressive Design Mainline] (01-progressive design mainline.md): Continuously derived from a single node to a single Region Object Storage.
-3. [Review and Practice] (02-Review and Practice.md): Close-book reconstruction of the design and verification of mastery.
+2. [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md): Continuously derived from a single node to a single Region Object Storage.
+3. [Review and Practice](../01-load-balancer/02-load-balancer-review-and-practice.md): Close-book reconstruction of the design and verification of mastery.
 
 Stop when you have completed the exercise. Erasure coding and layout evolution, verification and repair certificates are placed in [`optional/`](optional/); cross-region, rich S3 product capabilities and complete management are placed in [Parking Lot](PARKING-LOT.md).
 

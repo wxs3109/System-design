@@ -46,9 +46,9 @@ The optimization sequence is usually: first remove unnecessary work, then reduce
 
 - [Back-of-the-Envelope](../../01-Back-of-the-Envelope/) is responsible for converting DAU, behavior frequency, and object size into QPS, bytes, working set, and machine magnitude; this chapter uses these results directly.
 - The "capacity" focus in this chapter is to explain how concurrency, saturation, queuing, bottlenecks, and failure margin affect runtime performance without repeating the full business sizing arithmetic.
-- For the task semantics after the long job is moved out of the request path, see [Synchronization, Asynchronous and Event-driven] (../05-synchronous, asynchronous and event-driven/).
-- Can you retry after timeout and how to prevent retry storm? See [Impotent, Retry and Deduplication] (../06-Impotent, Retry and Deduplication/).
-- Bulkhead, Circuit Breaker and downgrade recovery see [Fault Tolerance, Downgrade and Disaster Recovery] (../07-Fault Tolerance, Downgrade and Disaster Recovery/).
+- For the task semantics after the long job is moved out of the request path, see [Synchronization, Asynchronous and Event-driven](../05-synchronous-asynchronous-and-event-driven-architecture/).
+- Can you retry after timeout and how to prevent retry storm? See [Idempotent, Retry and Deduplication](../06-idempotency-retry-and-deduplication/).
+- Bulkhead, Circuit Breaker and downgrade recovery see [Fault Tolerance, Downgrade and Disaster Recovery](../07-fault-tolerance-graceful-degradation-and-disaster-recovery/).
 - Sharding keys, hotspots, and data rebalancing belong to subsequent data distribution topics; this chapter first explains how to identify them from indicators.
 
 ## Minimum answer framework in interviews

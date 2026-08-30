@@ -13,12 +13,12 @@ These four are not contradictory - they choose different semantics for different
 
 ## Map of this chapter
 
-1. [Define the consistency object first] (01-Definition-Consistency-object and scope.md): Start judging from the business Invariant, Source of Truth and Visibility Window.
+1. [Define the consistency object first](./01-first-define-the-object-and-scope-of-consistency.md): Start judging from the business Invariant, Source of Truth and Visibility Window.
 2. [CAP, Partition and PACELC](02-cap-partition-and-pacelc.md): Under what circumstances is it necessary to discuss CAP, and what should be sacrificed during the Partition period and the normal period.
 3. [Consistency Model and Session Guarantee](03-consistency-model-and-session-guarantee.md): Linearizability, Causal Consistency, Eventual Consistency and Read-Your-Writes.
-4. [Replication, Quorum and Conflict Handling] (04-Replication-Quorum-and conflict Handling.md): How Leader, Quorum, version and merge strategy fulfill the semantics promised previously.
-5. [The boundary between Transaction Isolation and distributed consistency] (05-Transaction-Isolation-The boundary with distributed consistency.md): Why ACID, Isolation Level and cross-replica visibility are three different issues.
-6. [Case Decision Matrix and Verification Checklist] (06-Case-Decision-Matrix-and Verification Checklist.md): Apply the concept to payment, ticket booking, shopping cart, feed and chat.
+4. [Replication, Quorum and Conflict Handling](./04-replication-quorum-and-conflict-handling.md): How Leader, Quorum, version and merge strategy fulfill the semantics promised previously.
+5. [The boundary between Transaction Isolation and distributed consistency](./05-the-boundary-between-transaction-isolation-and-distributed-consistency.md): Why ACID, Isolation Level and cross-replica visibility are three different issues.
+6. [Case Decision Matrix and Verification Checklist](./06-case-decision-matrix-and-verification-checklist.md): Apply the concept to payment, ticket booking, shopping cart, feed and chat.
 
 ## Shortest decision path
 

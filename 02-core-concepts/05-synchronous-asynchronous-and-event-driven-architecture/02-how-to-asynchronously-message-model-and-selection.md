@@ -59,7 +59,7 @@ But Workflow is not a distributed database transaction. Compensation is just a n
 
 | Mode | Advantages | Risks | Suitable scenarios |
 |---|---|---|---|
-| Broker Push | No overhead of idle polling, simple access | Current limiting and re-investment are required when the receiver is overloaded | Webhook, lightweight subscription |
+| Broker Push | No overhead of idle polling, simple access | Rate Limiting and re-investment are required when the receiver is overloaded | Webhook, lightweight subscription |
 | Consumer Pull | Consumer controls the batch and rate by itself, and Backpressure is naturally established | Offset and polling logic must be maintained | High throughput Worker, Event Stream |
 
 Webhooks themselves are also an asynchronous boundary. The sender should sign, set a timeout, and press backoff to retry; the receiver should quickly verify and persist, and then put it in its own queue for slow processing, rather than letting the Webhook request wait for the entire business process to complete.

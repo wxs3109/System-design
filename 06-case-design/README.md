@@ -124,7 +124,7 @@ The general basic system must also clarify what it will not assume for the calle
 Case completion is determined by evidence of competency, not the number of pages of documentation. When not looking at documentation, learners should be able to:
 
 - Draw the core architecture and explain the stress sources of the components in five minutes.
--Trace one normal process and at least two critical failure processes.
+- Trace one normal process and at least two critical failure processes.
 - Name 3–5 core invariants or system commitments.
 - Complete a magnitude estimate and identify dominant bottlenecks.
 - Explain at least three Trade-offs and one rejected offer.

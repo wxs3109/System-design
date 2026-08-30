@@ -70,6 +70,6 @@ Operation RUNNING
 └─ Attempt 2: Get a higher Fencing Token and submit successfully
 ```
 
-If you only store "the task is running" in the Worker memory, once the Worker disappears, the Scheduler will have no way to judge whether it should be retried or has been completed. And if there is no Fencing Token, the restored old Worker may also overwrite the new results - it does not know that its Lease has expired long ago. Can be compared with [Operation and Job scheduling domain] (../../06-Case Design/03-Platform System/01-multi-tenant-data-platform/02-Business Domain Design/05-Operation and Job Scheduling Domain.md).
+If you only store "the task is running" in the Worker memory, once the Worker disappears, the Scheduler will have no way to judge whether it should be retried or has been completed. And if there is no Fencing Token, the restored old Worker may also overwrite the new results - it does not know that its Lease has expired long ago. Can be compared with [Operation and Job scheduling domain](../../06-case-design/03-platform-system/01-multi-tenant-data-platform/02-business-domain-design/05-operation-and-job-scheduling-domain.md).
 
 [Return to the entrance of this chapter](README.md) · [Next section: Stateless Scaling and Session external](02-stateless-scaling-and-session-external.md)

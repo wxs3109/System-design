@@ -7,7 +7,7 @@
 1. [Why solve data reliability first](01-why-solve-data-reliability-first.md)
 2. [Replication, Failover and Consistency](02-replication-failover-and-consistency.md)
 3. [Backup, recovery and drill](03-backup-restore-and-drill.md)
-4. [Migration and upgrade signals from 01 to 02] (04-Migration and upgrade signals.md)
+4. [Migration and upgrade signals from 01 to 02](./04-migration-and-upgrade-signals-from-01-to-02.md)
 
 ## Inheritance 01
 

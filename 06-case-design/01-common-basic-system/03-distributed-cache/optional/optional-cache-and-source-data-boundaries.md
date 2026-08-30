@@ -1,6 +1,6 @@
 # Optional: cache and source data boundaries
 
-Read this article only if your business requires stronger read semantics than "allow bounded staleness". For the complete Cache-Aside process on the application side, see [Cache Read Link] (../../../../05-Generic Design Patterns/01-Cache Read Link/); here we only analyze the race conditions that will change the cache contract.
+Read this article only if your business requires stronger read semantics than "allow bounded staleness". For the complete Cache-Aside process on the application side, see [Cache Read Link](../../../../05-general-design-patterns/01-cache-read-path/); here we only analyze the race conditions that will change the cache contract.
 
 ## 1. Baseline Contract
 

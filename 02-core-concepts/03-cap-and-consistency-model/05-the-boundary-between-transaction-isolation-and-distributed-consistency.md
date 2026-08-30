@@ -59,7 +59,7 @@ For example: If orders and inventory must be submitted strictly atomically, you 
 
 A travel booking Saga might reserve flights, hotels, and rental cars in that order. The hotel's failure to cancel the flight is a new business operation, and it does not erase the fact that the user or external system has seen that the flight has been reserved.
 
-The point is: CAP, Transaction Isolation, and cross-service atomicity are three different issues. For complete selection of Saga, 2PC, Lock, compensation and reconciliation, see [Concurrency Control and Distributed Transactions] (../09-Concurrency Control and Distributed Transactions/); in the chapter on consistency, you only need to check these boundaries:
+The point is: CAP, Transaction Isolation, and cross-service atomicity are three different issues. For complete selection of Saga, 2PC, Lock, compensation and reconciliation, see [Concurrency Control and Distributed Transactions](../09-concurrency-control-and-distributed-transactions/); in the chapter on consistency, you only need to check these boundaries:
 
 - Which services, shards and external systems this consistency requirement spans;
 - Whether the user can see the intermediate state, and whether it can be undone after seeing it;

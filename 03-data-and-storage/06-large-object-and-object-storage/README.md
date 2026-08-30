@@ -10,7 +10,7 @@ Large objects usually have these characteristics:
 
 - A single object is large, mainly read in whole blocks or in byte ranges;
 - The content is rarely modified in place after it is written;
--The total capacity and download bandwidth are much larger than metadata;
+- The total capacity and download bandwidth are much larger than metadata;
 - Requires separate retention, archiving and delivery strategies;
 - The client can upload or download directly without having the application server forward all bytes.
 
@@ -83,7 +83,7 @@ Object writes and database commits are usually not a local transaction, so there
 4. Metadata is switched to `READY`;
 5. Only `READY` objects can be officially referenced by posts, videos or Items.
 
-If the object is written successfully first and the metadata fails to be written later, an orphan object will be generated; if the metadata exists but the object is incomplete, a dangling reference will be generated. Applications should scan for both types of differences and clean up or retry respectively. For details on messages, idempotence and retries of reliable workflows, see [General Design Pattern] (../../05-General Design Patterns/).
+If the object is written successfully first and the metadata fails to be written later, an orphan object will be generated; if the metadata exists but the object is incomplete, a dangling reference will be generated. Applications should scan for both types of differences and clean up or retry respectively. For details on messages, idempotence and retries of reliable workflows, see [General Design Pattern](../../05-general-design-patterns/).
 
 ## Life cycle and deletion
 

@@ -1,12 +1,12 @@
 # Design Rate Limiter
 
-This case trains how to start with single-process current limiting, and gradually introduce shared counting, atomic deduction, sharding and downgrading strategies based on multi-instance, concurrency, capacity and failure pressure, instead of replicating a complete current limiting product.
+This case trains how to start with single-process Rate Limiting, and gradually introduce shared counting, atomic deduction, sharding and downgrading strategies based on multi-instance, concurrency, capacity and failure pressure, instead of replicating a complete Rate Limiting product.
 
 The default learning path only has three documents:
 
 1. This article: fixed scope, core model, architecture map and completion conditions.
-2. [Progressive Design Mainline] (01-progressive design mainline.md): Continuously deduced from single-process Token Bucket to single-Region shared current limiting.
-3. [Review and Practice] (02-Review and Practice.md): Close-book reconstruction of the design and verification of true mastery.
+2. [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md): Continuously deduced from single-process Token Bucket to single-Region shared Rate Limiting.
+3. [Review and Practice](../01-load-balancer/02-load-balancer-review-and-practice.md): Close-book reconstruction of the design and verification of true mastery.
 
 Stop when you have completed the exercise. Algorithm implementation and rule interface semantics can be read on demand in [`optional/`](optional/); multi-Region, Token Lease and complete product governance stay in [Parking Lot](PARKING-LOT.md).
 
@@ -30,7 +30,7 @@ Core functions:
 - Construct a rate limiting key based on trusted fields in User, Tenant, API Key, IP or Route.
 - Configure long-term Rate and allowed Burst.
 - Atomic completion of limit check and consumption: `ALLOW` or `DENY` is returned when the judgment is successful, `ERROR` is returned when the judgment cannot be trusted; `DENY` returns `retryAfter`.
--Supports single instance protection and single Region shared quota.
+- Supports single instance protection and single Region shared quota.
 - Continue to use the last valid configuration when rule update fails.
 - Execute the pre-declared Failure Mode when RLS or Shared Counter Store fails.
 

@@ -2,7 +2,7 @@
 
 This is not a dictionary of terms, but a set of design decision-making tools. Each topic answers: when is it needed, why is it needed, how to implement it, what is the cost, how to recover after failure, and is connected to the specific system in 06-Case Design.
 
-When learning for the first time, read [How to use core concepts] (00-How to use core concepts.md); when doing cases or review, you can use [Concept to Case Index] (11-Concept to Case Index.md) to check back according to symptoms.
+When learning for the first time, read [How to use core concepts](./00-how-to-use-core-concepts.md); when doing cases or review, you can use [Concept to Case Index](./11-concept-to-case-index.md) to check back according to symptoms.
 
 ## Learn the main line
 
@@ -16,20 +16,20 @@ When learning for the first time, read [How to use core concepts] (00-How to use
 8. [Partition, Sharding and Hotspot](08-partition-sharding-and-hotspot/): Select Shard boundary and handle Hotspot, Migration and Cross-shard Operation.
 9. [Concurrency Control and Distributed Transaction](09-concurrency-control-and-distributed-transactions/): Protect invariants with Conditional Update, Lock, Lease, Saga and Reconciliation.
 10. [Time, Ordering and Unique ID](10-time-ordering-and-unique-id/): Handle Clock Skew, Event Ordering, ID and Stable Pagination.
-11. [Core concept to real product navigation] (12-Real implementation of core concepts/): Map concepts to real capabilities in subsequent chapters, and do not maintain product encyclopedias in core concepts.
+11. [Core concept to real product navigation](12-navigation-from-core-concepts-to-production-product/): Map concepts to real capabilities in subsequent chapters, and do not maintain product encyclopedias in core concepts.
 
 ## Shortest reading path
 
 If you want to get into case design as soon as possible, it is recommended to read:
 
-1. [Six-step design decision-making method] (00-How to use core concepts.md#1-Six-step design decision-making method);
+1. [Six-step design decision-making method](./00-how-to-use-core-concepts.md#1-six-step-decision-making-method);
 2. [When to asynchronously](05-synchronous-asynchronous-and-event-driven-architecture/01-when-to-asynchronously-determination-methods-and-counterexamples.md);
 3. [When does CAP need to be discussed](03-cap-and-consistency-model/02-cap-partition-and-pacelc.md);
 4. [Timeout and safe retry](06-idempotency-retry-and-deduplication/01-timeout-and-safe-retry.md);
 5. [Failure Model, Timeout and Overload Protection](07-fault-tolerance-graceful-degradation-and-disaster-recovery/01-failure-model-timeout-and-overload-protection.md);
 6. [Concept to Case Index](11-concept-to-case-index.md).
 
-If you have understood the concept and are making specific selections, you can use [Real Product Navigation] (12-Real Implementation of Core Concepts/) to find the corresponding chapter.
+If you have understood the concept and are making specific selections, you can use [Real Product Navigation](12-navigation-from-core-concepts-to-production-product/) to find the corresponding chapter.
 
 ##Boundary of this chapter
 
@@ -37,11 +37,11 @@ This chapter only solves one problem: **What semantic and mechanism trade-offs m
 
 | This chapter is responsible | This chapter is not responsible | Where to go |
 |---|---|---|
-| Define availability, consistency, order, idempotence and success semantics | Teach how to allocate interview time | [Interview method] (../00-Interview method/) |
+| Define availability, consistency, order, idempotence and success semantics | Teach how to allocate interview time | [Interview method](../00-interview-method/) |
 | Explain why Async, Replication, Sharding, Retry, Graceful Degradation occur and their cost | Recalculate DAU, QPS, storage and bandwidth | [Back-of-the-Envelope](../01-Back-of-the-Envelope/) |
-| Describe state ownership, fault behavior, recovery methods and verification signals | Expand internal algorithms such as B-tree and LSM-tree | [Data and Storage] (../03-Data&Storage/) only retains the performance guarantee required for selection |
-| Establish a decision-making framework of "Problem → Mechanism → Trade-off" | Introduce Kafka, Redis or database configuration item by item according to the product manual | [Real Product Navigation] (12-Real Implementation of Core Concepts/) is responsible for offloading; the database belongs to `03`, and the non-storage components belong to `04` |
-| Use a short case to prove how the concept changes the design | Write a complete set of YouTube, Booking or News Feed | [Case Design] (../06-casedesign/) |
+| Describe state ownership, fault behavior, recovery methods and verification signals | Expand internal algorithms such as B-tree and LSM-tree | [Data and Storage](../03-data-and-storage/) only retains the performance guarantee required for selection |
+| Establish a decision-making framework of "Problem → Mechanism → Trade-off" | Introduce Kafka, Redis or database configuration item by item according to the product manual | [Real Product Navigation](12-navigation-from-core-concepts-to-production-product/) is responsible for offloading; the database belongs to `03`, and the non-storage components belong to `04` |
+| Use a short case to prove how the concept changes the design | Write a complete set of YouTube, Booking or News Feed | [Case Design](../06-case-design/) |
 
 ### This chapter unifies the granularity
 
@@ -66,7 +66,7 @@ Output: Consistency, Sync/Async, State, Sharding, Failure and Recovery semantics
 03 Data and Storage / 04 Infrastructure Components
 Output: Storage types and ready-made components that satisfy these semantics and scale
         ↓
-05 Universal Design Patterns
+05 General Design Patterns
 Output: recurring combinations of multiple components
         ↓
 06 Case design

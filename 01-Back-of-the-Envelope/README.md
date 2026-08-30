@@ -8,9 +8,9 @@ This chapter only solves one problem: **Translating business size into numbers t
 
 | This chapter is responsible | This chapter is not responsible | Follow-up destination |
 |---|---|---|
-| Estimating average and peak QPS from DAU and behavior frequency | Explain why queuing amplifies P99 | [Core concepts: latency, throughput and tail latency] (../02-Core Concepts/02-Latency, Throughput and Tail Latency/) |
+| Estimating average and peak QPS from DAU and behavior frequency | Explain why queuing amplifies P99 | [Core concepts: latency, throughput and tail latency](../02-core-concepts/02-latency-throughput-and-tail-latency/) |
 | Estimate storage from object size, growth, and retention | Choose SQL, NoSQL, or object storage | [Data & Storage](../03-data-and-storage/) |
-| Estimating bandwidth, Hot Working Set and machine magnitude | Talking about Cache Consistency, Shard Migration and Hotspot processing mechanism | [Core concept] (../02-Core concept/) |
+| Estimating bandwidth, Hot Working Set and machine magnitude | Talking about Cache Consistency, Shard Migration and Hotspot processing mechanism | [Core concept](../02-core-concepts/) |
 | Distinguish between interview convenience value and engineering measurement value | Commit a fixed QPS or delay to a product | Product documentation, benchmark testing and production stress testing |
 
 We can draw conclusions such as "the peak value is about 100,000 QPS, the original data is about 2 PB per year, and a single machine is not enough", but we do not decide to use Kafka, Redis, Cassandra or some kind of consistency model here. Numbers are **input** to subsequent design, not architectural answers.
@@ -39,7 +39,7 @@ In reality, there is no universal "database stand-alone QPS" or "SSD fixed laten
 - Request size, read-write ratio, index and query complexity;
 - Concurrency, connection pool, cache hit rate and data distribution;
 - Persistence, replication, consistency and batching strategies;
--The average is still P95/P99;
+- The average is still P95/P99;
 - Steady state, burst, degraded state or single node failure state.
 
 The real capacity should be obtained through production indicators, load testing and fault drills, and a safety margin should be retained. The realistic numbers given in this article can only be used as typical orders of magnitude or initial assumptions.

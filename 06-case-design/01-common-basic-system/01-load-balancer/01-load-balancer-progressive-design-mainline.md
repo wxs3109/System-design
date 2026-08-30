@@ -94,7 +94,7 @@ Draining is not a lossless migration either: each LB can only stop itself from c
 - Endpoints that have been confirmed to be unhealthy or draining will no longer receive new requests from this node.
 - New instances will not take full traffic share directly from zero.
 - Health only means "worth trying" and does not prove the success of the next business request.
-- Detection traffic, local status and misjudgment are new costs; for detailed status convergence, see [Health status and configuration convergence] (optional/Health status and configuration convergence.md).
+- Detection traffic, local status and misjudgment are new costs; for detailed status convergence, see [Health status and configuration convergence](./optional/optional-health-status-and-configuration-convergence.md).
 
 ## 4. Uneven request costs: from polling to local load awareness
 
@@ -294,4 +294,4 @@ Minimal validation only covers core promises:
 
 Minimum indicators include ingress Request/s and Backend Attempt/s, P50/P99 latency breakdown, In-flight and errors per Pool / Endpoint, Active / New Connections, TLS Handshake Rate, inbound and outbound bandwidth, Ejection / Drain status, Snapshot Version distribution, Retry Amplification, Queue and Shed Rate. Average is not a substitute for Endpoint and AZ distributions.
 
-After completing [Review and Exercise] (02-Review and Exercise.md), you can deduce health, scheduling, fleet, configuration and overload boundaries in a closed-book manner. State convergence and long-lived connection variants go into [`optional/`](optional/); global scheduling, L4 Fast Path and full product governance stay in [Parking Lot](PARKING-LOT.md).
+After completing [Review and Exercise](../../../08-templates-and-review/), you can deduce health, scheduling, fleet, configuration and overload boundaries in a closed-book manner. State convergence and long-lived connection variants go into [`optional/`](optional/); global scheduling, L4 Fast Path and full product governance stay in [Parking Lot](PARKING-LOT.md).

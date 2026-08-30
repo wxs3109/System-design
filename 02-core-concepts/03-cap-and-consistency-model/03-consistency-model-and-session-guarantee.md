@@ -105,7 +105,7 @@ The most dangerous anomaly under Eventual Consistency is often not "new content 
 - Deletion events are propagated idempotently, and background scans verify all derived copies;
 - Tombstones must never be overwritten with old values, otherwise the object will be resurrected.
 
-The News Feed case [Deletion and Consistency] (../../06-Case Design/02-Specific Application System/03-news-feed/08-Recoverable Production Version/07-Deletion and Consistency.md) illustrates why deletion requires a stricter read defense than ordinary addition.
+The News Feed case [Deletion and Consistency](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/07-post-deletion-and-consistency.md) illustrates why deletion requires a stricter read defense than ordinary addition.
 
 ## How to choose
 

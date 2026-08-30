@@ -35,7 +35,7 @@ How to stabilize paging without leakage or duplication?
 
 ## Case mapping
 
-- [News Feed home page read] (../../06-Case design/02-Specific application system/03-news-feed/08-Recoverable production version/04-Home page read and FeedItem.md): `rank_time + post_id` stable sorting.
+- [News Feed home page read](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/04-home-page-reading-and-feeditem.md): `rank_time + post_id` stable sorting.
 - [News Feed Write Reliability](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/09-write-reliability.md): Event duplication, latency and idempotent identity.
 - [Multi-tenant Platform Operation](../../06-case-design/03-platform-system/01-multi-tenant-data-platform/01-system-design-mainline/08-from-item-to-operation-define-how-to-become-a-run.md): Operation, Attempt, Lease and fencing token.
-- [Short Link System] (../../06-Case Design/02-Specific Application System/01-url-shortener/README.md): Collision, enumeration and fragmentation issues with short IDs.
+- [Short Link System](../../06-case-design/02-specific-application-system/01-url-shortener/README.md): Collision, enumeration and fragmentation issues with short IDs.

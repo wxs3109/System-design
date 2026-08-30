@@ -5,7 +5,7 @@
 - User size and activity ratio
 - Number of operations per user per day
 - Read and write ratio and peak factor
--Single record or object size
+- Single record or object size
 - Data retention period
 
 ## Need to calculate

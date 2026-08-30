@@ -27,7 +27,7 @@
 ## Core business closed loop
 
 1. Driver App establishes an online session and periodically reports Location Event with Event Time, Sequence Number and accuracy.
-2. Location Ingestion completes device authentication, Schema/speed verification and current limiting, and partitions events by Region/Geo Cell; Latest Location and spatial index are expirable Derived State.
+2. Location Ingestion completes device authentication, Schema/speed verification and Rate Limiting, and partitions events by Region/Geo Cell; Latest Location and spatial index are expirable Derived State.
 3. Rider submits Pickup, Destination and idempotent Request ID; the system generates Quote and solidifies price, service type and validity period into Snapshot.
 4. Dispatch Service reads nearby available Drivers, sorts them based on ETA, car model, status and fairness, and creates a Dispatch Round/Offer with deadline.
 5. Driver and Trip are atomically bound through Lease/Conditional Update when accepting an order; late or repeated Accept can only see the confirmed result and cannot form a second valid allocation.

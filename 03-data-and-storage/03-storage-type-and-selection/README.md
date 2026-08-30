@@ -2,7 +2,7 @@
 
 Storage selection does not start from "SQL or NoSQL", but from **data shape, access mode and correctness boundary**.
 
-This article only answers three things: what application visibility capabilities are needed, what types of storage typically provide these capabilities, and what needs to be verified before choosing a specific product. CAP, replication, sharding, transaction isolation and disaster recovery principles are responsible for [core concept] (../../02-Core Concept/); the storage engine algorithm is not expanded here, nor is a unified performance number promised for any product.
+This article only answers three things: what application visibility capabilities are needed, what types of storage typically provide these capabilities, and what needs to be verified before choosing a specific product. CAP, replication, sharding, transaction isolation and disaster recovery principles are responsible for [core concept](../../02-core-concepts/); the storage engine algorithm is not expanded here, nor is a unified performance number promised for any product.
 
 ## 1. Write the requirements first, then list the candidates
 
@@ -17,7 +17,7 @@ This article only answers three things: what application visibility capabilities
 | Lifecycle | Retention, deletion, archiving, export, and rebuild requirements |
 | Operational constraints | Team experience, region, compliance, quotas, costs and hosting capabilities |
 
-For the writing method of data list and access mode, see [Data List, Fact Boundary and Access Mode] (../01-Data List Fact Boundary and Access Mode/).
+For the writing method of data list and access mode, see [Data List, Fact Boundary and Access Mode](../01-data-inventory-source-of-truth-and-access-pattern/).
 
 Don’t write “Post uses so-and-so database because it’s NoSQL.” should write:
 
@@ -88,7 +88,7 @@ Suitable:
 
 For example, in a product catalog, different categories have different attributes, and Document can reduce the sparse table structure. However, if prices, inventories and orders have independent concurrency and life cycles, they should still be recorded independently.
 
-Limitations: "Flexible Schema" simply places more compatibility responsibilities on the application; infinitely growing arrays worsening reads, updates, and contention; cross-document transactions, joins, uniqueness, and indexing capabilities must be confirmed by product. For embedding and referencing, see [Data Model, Primary Key and Schema] (../02-Data Model, Primary Key and Schema/).
+Limitations: "Flexible Schema" simply places more compatibility responsibilities on the application; infinitely growing arrays worsening reads, updates, and contention; cross-document transactions, joins, uniqueness, and indexing capabilities must be confirmed by product. For embedding and referencing, see [Data Model, Primary Key and Schema](../02-data-model-primary-key-and-schema/).
 
 ## 6. Wide-Column storage
 
@@ -98,7 +98,7 @@ Suitable for: The query path is small and stable; the amount of data and continu
 
 Major limitations: Schemas are often built around queries and have limited ad hoc query capabilities; key design errors can lead to excessive scans or concentrated loads; secondary indexes, aggregations, batch operations, and atomic boundaries vary widely; authoritative facts and reconstruction methods must be defined after copying the layout.
 
-Key routing, node migration or hotspot management are not expanded here. See [Partition, Sharding and Hotspot Management] (../../02-Core Concepts/08-Partition Sharding and Hotspot Management/).
+Key routing, node migration or hotspot management are not expanded here. See [Partition, Sharding and Hotspot Management](../../02-core-concepts/08-partition-sharding-and-hotspot/).
 
 ## 7. Search Engine
 
@@ -140,7 +140,7 @@ Object storage excels at large objects, streaming, and lifecycle layering, but t
 
 File storage provides directories, file names, shared mounts, and file system-like semantics, and is suitable for scenarios that must be compatible with traditional software or shared file protocols. Object storage is often more natural when uploading and downloading by key alone; file storage should be verified when files must be modified randomly or when a share is mounted.
 
-For large object contracts, see [Large Objects and Object Storage] (../06-large object and object storage/); object storage internal disk layout, replication, and erasure coding are outside the scope of this chapter.
+For large object contracts, see [Large Objects and Object Storage](../06-large-object-and-object-storage/); object storage internal disk layout, replication, and erasure coding are outside the scope of this chapter.
 
 ## 11. OLTP Storage and Analytical Storage
 
@@ -148,7 +148,7 @@ Online transaction storage serves a large number of short requests; analytical s
 
 Analytical storage is suitable for scanning history by time and dimensions, aggregating on a few columns, generating reports and features, and can tolerate longer latencies. Columnar data warehouses, data lakes, and lakehouses may all play this role.
 
-Don't let unbounded analytic queries compete for connections, CPU, and I/O to your online database. For data relationships, see [Online Data and Analysis Data] (../07-Online Data and Analysis Data/); how to combine ETL, ELT, CDC and stream batch links belongs to [General Design Pattern] (../../05-General Design Pattern/).
+Don't let unbounded analytic queries compete for connections, CPU, and I/O to your online database. For data relationships, see [Online Data and Analysis Data](../07-online-data-and-analytical-data/); how to combine ETL, ELT, CDC and stream batch links belongs to [General Design Pattern](../../05-general-design-patterns/).
 
 ## 12. When to introduce the second kind of storage
 
@@ -211,7 +211,7 @@ Inventory and Reservation first require verifiable conditional updates, uniquene
 - Belief that relational databases cannot scale;
 - Think NoSQL does not need Schema;
 - Force one storage to handle all queries;
--Introducing multiple storages without an upgrade signal;
+- Introducing multiple storages without an upgrade signal;
 - Use average latency instead of verification under real data distribution.
 
 ## 16. Interview expression sequence

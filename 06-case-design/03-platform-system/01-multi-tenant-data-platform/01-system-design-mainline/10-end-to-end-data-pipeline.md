@@ -67,7 +67,7 @@ Submit the Notebook Operation after the Pipeline is successful:
 Semantic Model Save:
 
 - table reference;
--Date, Store, Product and other dimensional relationships;
+- Date, Store, Product and other dimensional relationships;
 - `Total Sales` and other indicators;
 - Data permissions for Business User.
 

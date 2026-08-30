@@ -40,7 +40,7 @@ The three cases cover data assets and computing capacity, declarative resource c
 
 ## Minimum contract for platform cases
 
-In addition to following the [Unified Specifications] (../00-Case Writing and Acceptance Specifications.md), the platform chapter must also treat cross-domain protocols as first-class design objects:
+In addition to following the unified case writing and acceptance specifications, the platform chapter must also treat cross-domain protocols as first-class design objects:
 
 - Designate a unique authoritative writer for each type of resource, and other domains can only propose changes through commands, APIs or events;
 - Establish a unified event directory, fix event names, Schema, Partition Key, idempotent keys, versions and compatibility strategies;

@@ -15,7 +15,7 @@ A topic must simultaneously satisfy:
 5. There are Recovery, Rebuild or Reconciliation methods;
 6. Have applicable conditions, counterexamples, and simpler alternatives.
 
-For example, Kafka Consumer Group is a single-component contract and belongs to [Infrastructure Component] (../../04-Infrastructure Component/); the collaboration of Database, Outbox, Relay, Broker and Consumer is the reliable event publishing model of this chapter.
+For example, Kafka Consumer Group is a single-component contract and belongs to [Infrastructure Component](../../04-Infrastructure-Components/); the collaboration of Database, Outbox, Relay, Broker and Consumer is the reliable event publishing model of this chapter.
 
 ## 2. Start with business invariants
 
@@ -120,10 +120,10 @@ Don't just write about the advantages. Cache-Aside reduces database load and als
 
 Schema documents can rely on these semantics without reteaching:
 
-- Idempotent, Retry, Sequence, Lease, Backpressure, Saga and RPO/RTO: see [Core Concepts] (../../02-Core Concepts/);
-- Schema, index, authority and derived data: see [Data and Storage] (../../03-Data and Storage/);
-- Product contracts for Redis, Kafka, Queue, Workflow, DNS and Mesh: see [Infrastructure Components] (../../04-Infrastructure-Components/);
-- Complete system for News Feed, YouTube, Booking, etc.: See [Case Design] (../../06-Case Design/).
+- Idempotent, Retry, Sequence, Lease, Backpressure, Saga and RPO/RTO: see [Core Concepts](../../02-core-concepts/);
+- Schema, index, authority and derived data: see [Data and Storage](../../03-data-and-storage/);
+- Product contracts for Redis, Kafka, Queue, Workflow, DNS and Mesh: see [Infrastructure Components](../../04-Infrastructure-Components/);
+- Complete system for News Feed, YouTube, Booking, etc.: See [Case Design](../../06-case-design/).
 
 This chapter only explains how these capabilities work together. If a piece of content can be covered in just one component, it usually does not belong in this chapter.
 

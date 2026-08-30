@@ -69,14 +69,14 @@ Backfill reads the old value at a certain point in time. Before its calculation 
 
 So at least define:
 
-- **Impotent Key**: Repeated processing of the same record will not produce repeated side effects;
+- **Idempotent Key**: Repeated processing of the same record will not produce repeated side effects;
 - **Version Condition**: Write only if the source version or updated_at has not changed;
 - **Checkpoint**: Record where to scan, so you don’t have to guess from scratch after restarting;
 - **Speed ​​Limit Range**: Migration scanning cannot occupy resources required for online query;
 - **Exception**: Records that cannot be converted enter a list that can be viewed and repaired;
 - **Complete Definition**: Not "the task is completed", but "coverage and invariant check passed".
 
-If migration requires Message Replay, Retry and Deduplication, see [Impotent, Retry and Deduplication] (../../02-Core Concepts/06-Impotent, Retry and Deduplication/) for their semantics. This article will not repeat the message reliability mechanism.
+If migration requires Message Replay, Retry and Deduplication, see [Idempotent, Retry and Deduplication](../../02-core-concepts/06-idempotency-retry-and-deduplication/) for their semantics. This article will not repeat the message reliability mechanism.
 
 ## 5. Verify with data invariants instead of switching based on feeling
 
@@ -141,7 +141,7 @@ Replication errors can quickly propagate to online copies, so "having a copy" do
 
 There may still be data in the backup that has been deleted from the online system. Compliance design should address when backups naturally expire, how deletions are re-performed after restoring old backups, and what legal requirements allow or prohibit immediate modification of backup media.
 
-For RPO, RTO, failover and recovery drills, see [Fault Tolerance, Downgrade and Disaster Recovery] (../../02-Core Concepts/07-Fault Tolerance, Downgrade and Disaster Recovery/).
+For RPO, RTO, failover and recovery drills, see [Fault Tolerance, Downgrade and Disaster Recovery](../../02-core-concepts/07-fault-tolerance-graceful-degradation-and-disaster-recovery/).
 
 ## 8. Also understand the new Schema when restoring from an old backup
 

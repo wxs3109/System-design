@@ -1,6 +1,6 @@
 # Job Scheduler: review and practice
 
-This article does not introduce new knowledge, but only tests whether it is possible to leave the document and re-derive the design from stress and faults. Read [Progressive Design Mainline] (01-progressive design mainline.md) first, then close the document and complete it within 45–60 minutes.
+This article does not introduce new knowledge, but only tests whether it is possible to leave the document and re-derive the design from stress and faults. Read [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) first, then close the document and complete it within 45–60 minutes.
 
 Try to use:
 
@@ -148,8 +148,8 @@ Gap-oriented review:
 | Gap | Where to go back |
 |---|---|
 | The core concept is unclear | [README](README.md) |
-| Outbox, Preemption, Lease or Old Worker | [Progressive Mainline Section 3–7] (01-Progressive Design Mainline.md) |
-| Sharding, scanning, or asynchronous link expansion | [Progressive Mainline Section 8] (01-Progressive Design Mainline.md) |
+| Outbox, Preemption, Lease or Old Worker | [Progressive Mainline Section 3–7](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) |
+| Sharding, scanning, or asynchronous link expansion | [Progressive Mainline Section 8](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) |
 | Continuously adding new product capabilities | [Parking Lot](PARKING-LOT.md) |
 
 Stop after final dictation; no more Scheduler details are added without new real requirements, measurement bottlenecks, or different failure contracts.

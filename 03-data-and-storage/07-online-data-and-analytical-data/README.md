@@ -2,7 +2,7 @@
 
 Online requests and analytical queries face the same business, but have different access modes. The design goal is not to stuff all data into a "universal database", but to make the transaction path stable and low-latency, and the analysis path can scan and aggregate large amounts of historical data**.
 
-This section only compares data roles, storage forms, and application-visible trade-offs. Reliable links for ETL, CDC, and streaming batch processing belong to [Common Design Pattern] (../../05-Common Design Patterns/).
+This section only compares data roles, storage forms, and application-visible trade-offs. Reliable links for ETL, CDC, and streaming batch processing belong to [Common Design Pattern](../../05-general-design-patterns/).
 
 ## The difference between OLTP and OLAP
 
@@ -109,8 +109,8 @@ Capacity Manager can read Usage summaries within the latency tolerance range for
 
 ## Do not expand in this section
 
-- Single product contracts such as Kafka, Event Hubs, Warehouse, etc.: See [Infrastructure Components] (../../04-Infrastructure-Components/) and storage selection in this chapter;
-- CDC, batch processing, stream processing, Checkpoint and Backfill links: see [General Design Pattern] (../../05-General Design Pattern/);
+- Single product contracts such as Kafka, Event Hubs, Warehouse, etc.: See [Infrastructure Components](../../04-Infrastructure-Components/) and storage selection in this chapter;
+- CDC, batch processing, stream processing, Checkpoint and Backfill links: see [General Design Pattern](../../05-general-design-patterns/);
 - Column encoding, query optimizer, execution engine and tabular internal algorithms;
 - End-to-end design of complete platforms such as Microsoft Fabric.
 

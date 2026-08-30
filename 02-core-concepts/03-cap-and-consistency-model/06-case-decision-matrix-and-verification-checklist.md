@@ -71,7 +71,7 @@ This sacrifices some write availability and protects an irrecoverable ownership 
 
 Distributed to all fans simultaneously, the delay and availability of posting will be determined by the slowest Consumer. Asynchronous Fanout shortens the write path, at the cost of users temporarily seeing different results, so it must be equipped with backlog alerts, replay, Backfill, and deletion filtering when reading.
 
-The case can continue to read [write reliability] (../../06-Case Design/02-Specific Application System/03-news-feed/08-Recoverable Production Version/09-Write Reliability.md) and [caching and invalidation] (../../06-Case Design/02-Specific Application System/03-news-feed/08-Recoverable Production Version/11-Caching and Invalidation.md).
+The case can continue to read [write reliability](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/09-write-reliability.md) and [caching and invalidation](../../06-case-design/02-specific-application-system/03-news-feed/08-resumable-production-version-news-feed/11-caching-and-invalidation.md).
 
 ## In-depth case four: chat
 

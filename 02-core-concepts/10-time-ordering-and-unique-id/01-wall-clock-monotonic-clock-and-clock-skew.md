@@ -50,7 +50,7 @@ When delivering deadlines across services, absolute UTC deadlines can be sent, b
 - Log sorting: Trace seems to receive the response first and then send the request;
 - Snowflake class IDs: Clock rollback may generate duplicate or out-of-order IDs.
 
-Lease correctness therefore cannot rely solely on client comparison times; authoritative Lease services and downstream fencing tokens must participate. See [Optimistic Locking, Pessimistic Locking and Leases] (../09-Concurrency Control and Distributed Transactions/02-Optimistic Locking Pessimistic Locking and Leases.md).
+Lease correctness therefore cannot rely solely on client comparison times; authoritative Lease services and downstream fencing tokens must participate. See [Optimistic Locking, Pessimistic Locking and Leases](../09-concurrency-control-and-distributed-transactions/02-optimistic-lock-pessimistic-lock-and-lease.md).
 
 ## 4. Event Time and Processing Time
 

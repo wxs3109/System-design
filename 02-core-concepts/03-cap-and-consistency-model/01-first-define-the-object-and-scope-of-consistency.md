@@ -61,7 +61,7 @@ The judgment is based on "what will be the cost of violating this Invariant".
 | Loss of funds, oversold, override | Ledger, inventory ownership, ACL | Strong Consistency, or single point of authority serialization | Reject, queue, return `PROCESSING` |
 | User confusion, but can be automatically recovered | Profile, Post visibility | Session Guarantee or Bounded Staleness | Read Primary, or wait for Replica to catch up with the required Version |
 | Numbers temporarily mismatched | Views, total number of likes | Eventual Consistency | Delayed aggregation, background repair |
-| Just cache misses the latest value | CDN, Query Cache | Can accept older values ​​| Invalidation, TTL, read back to origin |
+| Just cache misses the latest value | CDN, Query Cache | Can accept older values ​​| Invalidation, TTL, Origin Fetch |
 
 Strong Consistency has latency, availability, and cross-region costs and cannot be used everywhere just because it “sounds more secure.” Eventual Consistency doesn't scale out for free either: it shifts complexity to conflict handling, user experience, observability, and remediation tools.
 

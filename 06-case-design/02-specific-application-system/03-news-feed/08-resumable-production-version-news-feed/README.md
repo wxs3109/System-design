@@ -16,7 +16,7 @@
 10. [Fragmentation and Hotspots](10-sharding-and-hotspots.md)
 11. [Caching and Invalidation](11-caching-and-invalidation.md)
 12. [Observability and Recovery](12-observability-and-recovery.md)
-13. [Migration, disaster preparedness and acceptance from 07 to 08] (13-Migration disaster preparedness and acceptance.md)
+13. [Migration, disaster preparedness and acceptance from 07 to 08](./13-migration-disaster-recovery-and-acceptance-from-07-to-08.md)
 
 ## New capabilities from 07
 

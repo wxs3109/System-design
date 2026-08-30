@@ -113,7 +113,7 @@ Checkout is not a continuation of cart merging, it is revalidated against author
 
 Control Plane requires Quorum and a monotonically increasing version number to publish new configurations, preventing two administrators from concurrently publishing two different "latest versions"; when Data Plane loses contact with Control Plane, it continues to use the verified Last-Known-Good configuration to ensure that business traffic is not interrupted.
 
-The Control Plane is more consistent, and the Data Plane is more usable. The [control plane and data plane] (../../06-Case Design/01-General Basic System/02-api-gateway/02-Control Plane and Data Plane.md) in the API Gateway case is also disassembled in the same way.
+The Control Plane is more consistent, and the Data Plane is more usable. The [control plane and data plane](../../06-case-design/01-common-basic-system/02-api-gateway/02-control-plane-and-data-plane.md) in the API Gateway case is also disassembled in the same way.
 
 ## How to express CAP in an interview
 

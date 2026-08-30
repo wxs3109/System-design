@@ -28,7 +28,7 @@ Backup success metrics do not prove recoverability. The drill requires actual me
 
 - How long does it take to find the backup;
 - How long does it take to download and restore;
--WAL is continuous;
+- WAL is continuous;
 - Whether the application can connect to the recovery library;
 - Whether data constraints, sampling Post and Follow are correct;
 - Whether the final RPO/RTO meets the standards.

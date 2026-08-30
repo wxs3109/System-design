@@ -5,7 +5,7 @@
 When the request meets the following conditions, priority is given to making it a stateless computing layer:
 
 - The request itself carries the identity and parameters required for processing;
--Business facts are stored in a shared authoritative store;
+- Business facts are stored in a shared authoritative store;
 - Any Instance can access dependencies within Deadline;
 - There is no requirement for the same process to maintain an implicit order between requests;
 - Instance exit will not cause the data that has been successfully confirmed to disappear.
@@ -79,7 +79,7 @@ Control Plane publishes versioned configuration snapshots
              ↓
 The Gateway instance reads the local snapshot and handles the request
              ↓
-Current limiting status by user/tenant count, placed in a clear consistency boundary
+Rate Limiting status by user/tenant count, placed in a clear consistency boundary
 ```
 
 Local configuration snapshots allow business to continue even if the Control Plane fails briefly - snapshots are derived states that can be re-pulled. The global accurate current limit count requires remote coordination, which will increase the delay of each request; a common practice in engineering is to pre-allocate a batch of quotas locally, trading a little accuracy for availability and throughput. See [API Gateway: Control Plane and Data Plane](../../06-case-design/01-common-basic-system/02-api-gateway/02-control-plane-and-data-plane.md).

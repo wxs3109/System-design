@@ -1,6 +1,6 @@
 # Rate Limiter: review and practice
 
-This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline] (01-progressive design mainline.md) first, then close the document and complete it within 45–60 minutes.
+This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) first, then close the document and complete it within 45–60 minutes.
 
 Use the same framework for each answer:
 
@@ -139,4 +139,4 @@ After everything is satisfied, this case ends:
 - Can explain why version snapshots do not rely on online control planes.
 - It can be clarified that global quotas, cross-key transactions, billing and security detection are not within the current scope.
 
-Press the gap to return to the corresponding stage of [main line] (01-progressive design main line.md). Stop after final dictation; no more Rate Limiter product details are added without new real contracts or measurement bottlenecks.
+Press the gap to return to the corresponding stage of [main line](./01-rate-limiter-the-main-line-of-progressive-design.md). Stop after final dictation; no more Rate Limiter product details are added without new real contracts or measurement bottlenecks.

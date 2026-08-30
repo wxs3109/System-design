@@ -130,7 +130,7 @@ The selection of Store is also determined by this set of semantics, rather than 
 - Within a healthy Owner, concurrent Decisions for the same Key have an authoritative order.
 - Atomicity only covers one Counter Key and does not automatically cover multiple rules or multiple shards.
 - All operations of a single Key pass through the same sequence point, which will form an upper limit for Hot Key.
-- When the Store has deducted but the response is lost, retry may conservatively repeat consumption; if the business cannot accept it, introduce [Decision Idempotence] (optional/Rules and Interface Semantics.md) as needed, and do not build a complete deduplication system by default.
+- When the Store has deducted but the response is lost, retry may conservatively repeat consumption; if the business cannot accept it, introduce [Decision Idempotence](./optional/optional-rules-and-interface-semantics.md) as needed, and do not build a complete deduplication system by default.
 
 ## 5. Throughput and Hot Key: Sharding can only expand different Keys
 
@@ -266,4 +266,4 @@ Minimal validation only covers core promises:
 
 The minimum metrics are Decision's QPS, P99, `ALLOW/DENY/ERROR/DEGRADED`, Store latency and errors, Shard/Hot Key load, and configuration version and age. Raw User ID, IP or API Key are not directly used as high-cardinality metric labels.
 
-After completing [Review and Exercise] (02-Review and Exercise.md), you can deduce Shared Counter, Atomic Decision, Sharding/Hot Key, Fault Contract and Rule Snapshot from a single process in closed volume and then stop. Algorithms and interface implementations enter [`optional/`](optional/) on demand; multi-rule transactions, Token Lease, global quotas and complete product governance remain in [Parking Lot](PARKING-LOT.md).
+After completing [Review and Exercise](../../../08-templates-and-review/), you can deduce Shared Counter, Atomic Decision, Sharding/Hot Key, Fault Contract and Rule Snapshot from a single process in closed volume and then stop. Algorithms and interface implementations enter [`optional/`](optional/) on demand; multi-rule transactions, Token Lease, global quotas and complete product governance remain in [Parking Lot](PARKING-LOT.md).

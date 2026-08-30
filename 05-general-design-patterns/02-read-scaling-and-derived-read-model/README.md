@@ -2,7 +2,7 @@
 
 When the Write Model corresponding to the Source of Truth cannot efficiently support all queries at the same time, the read can be directed to the Read Replica, or the facts can be converted into the query-oriented Derived Read Model. This pattern is concerned with multi-component read links, staleness boundaries, and rebuildability.
 
-For data roles and Schema design, see [Authoritative Data and Derived Views] (../../03-Data and Storage/05-Authoritative Data and Derived Views/); for replication and consistency principles, see [CAP and Consistency Model] (../../02-Core Concepts/03-CAP and Consistency Model/).
+For data roles and Schema design, see [Authoritative Data and Derived Views](../../03-data-and-storage/05-source-of-truth-and-derived-view/); for replication and consistency principles, see [CAP and Consistency Model](../../02-core-concepts/03-cap-and-consistency-model/).
 
 ## 1. Which problem to determine first?
 
@@ -116,7 +116,7 @@ Derived Read Model must have reconstructed inputs that do not rely on existing r
 
 When backfill and online increments are run at the same time, avoid older Snapshots from overwriting newer online results. The minimum contract is: each result carries the Source Version, only accepts higher versions, or switches stages after an explicit Checkpoint.
 
-For complete links for reliable release, Consumer Replay and Schema compatibility, see [Reliable Event Release Link] (../03-Reliable Event Release Link/) and [Core Concept] (../../02-Core Concept/) respectively.
+For complete links for reliable release, Consumer Replay and Schema compatibility, see [Reliable Event Release Link](../03-reliable-event-publishing-path/) and [Core Concept](../../02-core-concepts/) respectively.
 
 ## 8. Capacity and Cost
 

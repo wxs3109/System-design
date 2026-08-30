@@ -145,7 +145,7 @@ Each dimension is rated on a scale of $0$ to $4$, for a total score of $24$. Don
 - Are APIs, data models, components and data flows consistent?
 - Can the critical read and write paths be communicated end-to-end?
 - Are component boundaries and responsibilities clear?
--Are single points of failure and obvious data correctness issues avoided?
+- Are single points of failure and obvious data correctness issues avoided?
 
 ### D. Capacity planning and scalability:__/4
 
@@ -156,7 +156,7 @@ Each dimension is rated on a scale of $0$ to $4$, for a total score of $24$. Don
 
 ### E. Reliability, consistency and operation and maintenance: __/4
 
--Explain Timeout, Retry, Idempotency, Deduplication and Backpressure?
+- Explain Timeout, Retry, Idempotency, Deduplication and Backpressure?
 - Do you choose consistency based on business operations rather than drawing general conclusions?
 - Consider Replication, Failover, Data Recovery and Graceful Degradation?
 - Are key indicators, logs, tracking and alerts presented?

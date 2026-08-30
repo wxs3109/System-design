@@ -35,7 +35,7 @@ flowchart TB
 
 | Components | Responsibility | Not Responsible |
 |---|---|---|
-| API Gateway | Authentication entrance, routing, current limiting | Data processing |
+| API Gateway | Authentication entrance, routing, Rate Limiting | Data processing |
 | Workspace and Item Service | Workspace, Item metadata and definition versions | Running long tasks |
 | Metadata DB | Tenant, Workspace, Item, ACL | Save large files and tables |
 | Definition Store | Save versions of Pipeline, Notebook, and Report | Execute definition |

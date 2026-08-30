@@ -2,7 +2,7 @@
 
 The value of Synchronous Call is to allow the Caller to get a definite result immediately; its risk is that the Caller will inherit the Latency, Capacity and Failure of Downstream at the same time. Instead of turning on all Retry, Circuit Breaker and Fallback, Resilient Call Path uses Deadline to constrain the total waiting time, uses Resource Isolation to limit Blast Radius, and only recovers or falls back when business semantics allow it.
 
-This article discusses the combination of Caller, Gateway / Service and Downstream. The definitions of Timeout, Retry, Isolation and Fallback are in [Fault Tolerance, Downgrade and Disaster Recovery] (../../02-Core Concepts/07-Fault Tolerance, Downgrade and Disaster Recovery/), and the single product contracts for Gateway, Load Balancer and Service Communication components are in [Infrastructure Components] (../../04-Infrastructure-Components/).
+This article discusses the combination of Caller, Gateway / Service and Downstream. The definitions of Timeout, Retry, Isolation and Fallback are in [Fault Tolerance, Downgrade and Disaster Recovery](../../02-core-concepts/07-fault-tolerance-graceful-degradation-and-disaster-recovery/), and the single product contracts for Gateway, Load Balancer and Service Communication components are in [Infrastructure Components](../../04-Infrastructure-Components/).
 
 ## Problems to be solved and invariants
 

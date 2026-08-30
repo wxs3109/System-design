@@ -15,7 +15,7 @@ Isolation reduces resource sharing efficiency and increases pool size configurat
 
 ### Example: API Gateway
 
-If Gateway shares a connection pool for all backends, the slow query of the reporting service may fill up the connection, making login and payment callbacks unable to enter. Isolating connection pools by dependency or service level and preserving concurrency for critical routes can limit failures to the reporting path. For the complete entry strategy, see [API Gateway: Timeout Retry and Failure Degradation] (../../06-Case Design/01-General Basic System/02-api-gateway/04-Timeout Retry and Fault Degradation.md).
+If Gateway shares a connection pool for all backends, the slow query of the reporting service may fill up the connection, making login and payment callbacks unable to enter. Isolating connection pools by dependency or service level and preserving concurrency for critical routes can limit failures to the reporting path. For the complete entry strategy, see [API Gateway: Timeout Retry and Failure Degradation](../../06-case-design/01-common-basic-system/02-api-gateway/04-timeout-retry-and-fault-degradation.md).
 
 ## 2. Circuit Breaker: Fail quickly when failure continues
 

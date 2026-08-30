@@ -21,7 +21,7 @@ Gateway should only retry if the following conditions are simultaneously true:
 
 - The request is idempotent, or carries an Idempotency Key that is truly supported by the backend;
 - The failure occurs at a clearly retryable stage, such as a connection failure or the backend has not yet received the request;
--The total overtime budget is still sufficient;
+- The total overtime budget is still sufficient;
 - The number of retries is small and Jitter is used;
 - Does not span incompatible backend versions.
 

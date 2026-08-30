@@ -19,7 +19,7 @@ Not responsible for:
 
 - Common Tenant, Workspace and Item identities;
 - Determine whether the user has Item permission;
--Determine how many CUs the customer has left;
+- Determine how many CUs the customer has left;
 - Save the authoritative state of the Operation.
 
 ## 2. Authoritative object

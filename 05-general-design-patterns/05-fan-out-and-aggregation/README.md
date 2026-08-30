@@ -4,7 +4,7 @@ Fan-out distributes one input to multiple independent targets; Aggregation combi
 
 It is not a "two-way query index" for Follow data. `(follower_id, followee_id)` and the inverted index just allow the same relationship to support "who I follow" and "who follows me"; it only enters Fan-out when a Post, notification or query needs to be split among many recipients or sources.
 
-This article discusses reusable cross-component links. Why Wide Fan-out amplifies Tail Latency, see [Tail Latency and Fan-out Amplification] (../../02-Core Concepts/02-Latency, Throughput and Tail Latency/04-Tail-Latency-and-Fan-out.md); for the delivery contract of Queue, see [Task Queue and Publish and Subscribe] (../../04-Infrastructure-Components/06-task-queues-and-pub-sub/); the complete data model and API of News Feed belong to [Case Design] (../../06-Case Design/02-Specific Application System/03-news-feed/).
+This article discusses reusable cross-component links. Why Wide Fan-out amplifies Tail Latency, see [Tail Latency and Fan-out Amplification](../../02-core-concepts/02-latency-throughput-and-tail-latency/04-tail-latency-and-fan-out.md); for the delivery contract of Queue, see [Task Queue and Publish and Subscribe](../../04-Infrastructure-Components/06-task-queues-and-pub-sub/); the complete data model and API of News Feed belong to [Case Design](../../06-case-design/02-specific-application-system/03-news-feed/).
 
 ## Problem to be solved
 
@@ -119,7 +119,7 @@ The aggregator requests candidates from each source in the same stable order, su
 
 The next page cursor must at least express the stable sorting boundary of the previous page; if the progress of each source is different, it is also necessary to save the continuation position of each source, or use a server-side query snapshot. Don't use page numbers plus offset to pretend that cross-source results are stable: new data insertions, source timeouts, and retries can all cause duplicates or skipped items.
 
-The specific sorting algorithm is not specified here. For the design of data primary keys, cursors and query paths, see [Data Model, Primary Keys and Schema] (../../03-Data and Storage/02-Data Model, Primary Keys and Schema/) and [Index and Query Path] (../../03-Data and Storage/04-Index and Query Path/).
+The specific sorting algorithm is not specified here. For the design of data primary keys, cursors and query paths, see [Data Model, Primary Keys and Schema](../../03-data-and-storage/02-data-model-primary-key-and-schema/) and [Index and Query Path](../../03-data-and-storage/04-index-and-query-path/).
 
 ## Partial failure and recovery
 

@@ -2,7 +2,7 @@
 
 The long task link separates "receiving the request" and "completing the work": the API first reliably records an operation, and then the Queue and Worker execute it in the background. It is suitable for image processing, report generation, batch import, email sending and other tasks that do not need to occupy a synchronization request.
 
-This article only discusses how Client, API, Operation Store, Queue and Worker collaborate. For the semantics of asynchronous, retry and idempotence, see [Synchronization, Asynchronous and Event-Driven] and [Impotent, Retry and Deduplication] (../../02-Core Concepts/06-Impotence, Retry and Deduplication/); for the single-component contract of Queue, see [Task Queue and Publish and Subscribe] (../../04-Infrastructure-Components/06-task-queues-and-pub-sub/). Multi-step, wait and compensation belong to [Workflow and Long Task Platform] (../../04-Infrastructure-Components/08-workflow-and-long-running-task-platforms/) and [Saga and Business Workflow] (../06-Saga and Business Workflow/).
+This article only discusses how Client, API, Operation Store, Queue and Worker collaborate. For the semantics of asynchronous, retry and idempotence, see [Synchronization, Asynchronous and Event-Driven] and [Idempotent, Retry and Deduplication](../../02-core-concepts/06-idempotency-retry-and-deduplication/); for the single-component contract of Queue, see [Task Queue and Publish and Subscribe](../../04-Infrastructure-Components/06-task-queues-and-pub-sub/). Multi-step, wait and compensation belong to [Workflow and Long Task Platform](../../04-Infrastructure-Components/08-workflow-and-long-running-task-platforms/) and [Saga and Business Workflow](../06-saga-and-business-workflow/).
 
 ## 1. Why is the simplest solution not enough?
 
@@ -77,7 +77,7 @@ The API creates Operations within a Database Transaction. The Worker or Dispatch
 
 ### Plan B: Operation + Outbox, then dispatch to Queue
 
-The API saves the Operation and the records to be dispatched in the same transaction, and the Dispatcher sends them to the Queue with recovery. This solution is suitable for scenarios that require Queue buffering, independent expansion of Workers, or isolation of task categories. The specific reliable release mechanism directly reuses [reliable event release link] (../03-Reliable event release link/). This article will not expand on Outbox and CDC.
+The API saves the Operation and the records to be dispatched in the same transaction, and the Dispatcher sends them to the Queue with recovery. This solution is suitable for scenarios that require Queue buffering, independent expansion of Workers, or isolation of task categories. The specific reliable release mechanism directly reuses [reliable event release link](../03-reliable-event-publishing-path/). This article will not expand on Outbox and CDC.
 
 Regardless of the solution, "Queue send call returned once" cannot be used as the only basis for recovery. It must be possible to rediscover unfinished tasks from a persistent state.
 
@@ -114,7 +114,7 @@ Retries should be classified by error:
 
 | Error | Common handling |
 |---|---|
-| Temporary network errors, current limiting | Bounded retries, backoff and Jitter |
+| Temporary network errors, Rate Limiting | Bounded retries, backoff and Jitter |
 | Invalid parameter, permission denied | Terminate directly without meaningless retries |
 | The external result is unknown | Query with the business ID first and then decide whether to try again |
 | Program defects or poisonous data | Isolate tasks, alarms, and re-drive after repair |

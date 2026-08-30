@@ -2,7 +2,7 @@
 
 Data pipelines continuously or periodically process source data into another piece of usable data. The real design focus is not the choice between Batch or Streaming, but: whether the input range can be determined, where to continue after processing is interrupted, whether repeated processing of the same data will corrupt the results, and when the output can be declared available to readers.
 
-This article only talks about the combination of Source, Ingestion, Processor and Sink. For the single product contract of the messaging platform, see [Event Streaming Platform] (../../04-Infrastructure-Components/07-event-streaming-platforms/), and for the role boundaries of online data and analytical data, see [Online Data and Analytical Data] (../../03-Data and Storage/07-Online Data and Analytical Data/).
+This article only talks about the combination of Source, Ingestion, Processor and Sink. For the single product contract of the messaging platform, see [Event Streaming Platform](../../04-Infrastructure-Components/07-event-streaming-platforms/), and for the role boundaries of online data and analytical data, see [Online Data and Analytical Data](../../03-data-and-storage/07-online-data-and-analytical-data/).
 
 ## Problems to be solved and invariants
 
@@ -71,7 +71,7 @@ Processing results and checkpoints are often located in two systems, and we cann
 - So usually accept at least once processing and make Sink writes idempotent by event ID, business key + version, window + output version;
 - External side effects that are not idempotent should be moved out of the normal analysis pipeline, or clear deduplication and reconciliation boundaries should be added.
 
-Exactly-once can only be established within the scope of the product's explicit coverage and cannot be automatically extended from the stream processing engine to any database, mail, or third-party API. For related semantics, see [Impotent, Retry and Deduplication] (../../02-Core Concepts/06-Impotent, Retry and Deduplication/).
+Exactly-once can only be established within the scope of the product's explicit coverage and cannot be automatically extended from the stream processing engine to any database, mail, or third-party API. For related semantics, see [Idempotent, Retry and Deduplication](../../02-core-concepts/06-idempotency-retry-and-deduplication/).
 
 ## Trade-offs between Batch, Micro-batch and Streaming
 
@@ -120,7 +120,7 @@ When online streams and Backfill write the same business key at the same time, t
 | Sink partial write failure | Only some partitions in the same batch | Rewrite failed partition or the entire output version | Readers did not see the semi-finished product |
 | Checkpoint unavailable | Calculated but unable to confirm progress | Stop forwarding and Replay | No progress faked from local memory |
 | Schema incompatibility | Poison Record or entire batch parsing failed | Replay after isolating input and fixing compatibility | Number of error records and business impact |
-| Consumption backlog | Output freshness continues to decline | Current limiting Backfill, capacity expansion or downgrade non-critical processing | Oldest Event Age fall back |
+| Consumption backlog | Output freshness continues to decline | Rate Limiting Backfill, capacity expansion or downgrade non-critical processing | Oldest Event Age fall back |
 | Conversion logic is defective | Wrong derived results have been released | Roll back to the old version and Backfill | Differences between old and new results and affected scope |
 
 Recovery is completed not by re-running the Worker, but by re-consistent input range, progress, output and release version.

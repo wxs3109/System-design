@@ -63,7 +63,7 @@ Multi-Region, Write-Behind/Persistence KV, full Redis product, and membership ma
 
 - Redis/Memcached command and product feature matrix.
 - Accurate LRU/LFU implementation, hash ring code and number of virtual nodes.
-- Fixed number of nodes, timeouts, memory water levels and migration thresholds.
+- Fixed number of nodes, timeouts, memory Watermarks and migration thresholds.
 - Complete API, Key encoding, Value Schema and serialization specifications.
 - Complete Cache-Aside, Read-Through, Write-Through and Write-Behind tutorials.
 - Metadata consensus, split-brain recovery and online migration state machine.

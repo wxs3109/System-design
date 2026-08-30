@@ -1,6 +1,6 @@
 # Saga and Business Workflow
 
-Saga and the business workflow model organize a cross-service, long-lasting business process into multiple local submissions and persistently recoverable state transitions. Here we discuss how `Workflow Engine + Service + Local Transaction` forms an operational link; for the principles of Saga, 2PC, compensation and isolation, see [Local Transactions, 2PC and Saga] (../../02-Core Concepts/09-Concurrency Control and Distributed Transactions/03-Local Transactions 2PC and Saga.md).
+Saga and the business workflow model organize a cross-service, long-lasting business process into multiple local submissions and persistently recoverable state transitions. Here we discuss how `Workflow Engine + Service + Local Transaction` forms an operational link; for the principles of Saga, 2PC, compensation and isolation, see [Local Transactions, 2PC and Saga](../../02-core-concepts/09-concurrency-control-and-distributed-transactions/03-local-affairs-2pc-and-saga.md).
 
 ## Problem to be solved
 
@@ -68,7 +68,7 @@ Taking booking as an example, we only explain the mode and do not expand the com
 
 Each step only modifies the local facts of the service it belongs to. The success of the activity does not mean the success of the entire process, and the failure of the notification should not turn the confirmed reservation into a failure again.
 
-If atomic submission is not possible between business creation and workflow startup, you need to use [reliable event publishing link] (../03-Reliable event publishing link/) or use a recoverable scanner to find "created but not started" records. A state is not acceptable: the API has returned success, but the process has neither started nor can it be re-started.
+If atomic submission is not possible between business creation and workflow startup, you need to use [reliable event publishing link](../03-reliable-event-publishing-path/) or use a recoverable scanner to find "created but not started" records. A state is not acceptable: the API has returned success, but the process has neither started nor can it be re-started.
 
 ## Success Semantics and API
 
@@ -122,7 +122,7 @@ Real systems can be mixed: Workflows orchestrate critical business steps, and se
 
 Workflow may reschedule the activity after the Worker crashes or times out. Each step should use a stable business idempotent key, such as `booking_id + payment_authorize`, rather than generating a new identity with each retry.
 
-Business services protect legal paths with conditional state transitions. For example, only `PAYMENT_PENDING -> CONFIRMED` is allowed, and the cancellation process only allows unconfirmed records to enter `CANCELLED`. For related mechanisms, see [State Machine, Compensation and Reconciliation] (../../02-Core Concepts/09-Concurrency Control and Distributed Transactions/04-State Machine Compensation and Reconciliation.md).
+Business services protect legal paths with conditional state transitions. For example, only `PAYMENT_PENDING -> CONFIRMED` is allowed, and the cancellation process only allows unconfirmed records to enter `CANCELLED`. For related mechanisms, see [State Machine, Compensation and Reconciliation](../../02-core-concepts/09-concurrency-control-and-distributed-transactions/04-state-machine-compensation-and-reconciliation.md).
 
 The most dangerous race conditions usually involve cancellations, timeouts, and late successes all happening at the same time:
 

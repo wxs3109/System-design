@@ -2,7 +2,7 @@
 
 The same business information often appears in databases, caches, search indexes, and precomputed lists at the same time. The focus of the design is not to eliminate duplication, but to answer: **Which copy has the final say, why other copies exist, and how to recover after an error. **
 
-This section only defines data roles and application-visible correctness boundaries. How events are delivered reliably, how consumers retry, and how multiple components form links belong to [core concept] (../../02-Core Concept/) and [general design pattern] (../../05-General Design Pattern/) respectively.
+This section only defines data roles and application-visible correctness boundaries. How events are delivered reliably, how consumers retry, and how multiple components form links belong to [core concept](../../02-core-concepts/) and [general design pattern](../../05-general-design-patterns/) respectively.
 
 ## First distinguish four roles
 
@@ -92,9 +92,9 @@ Broker Lag can only indicate the progress of message processing, but cannot prov
 
 ## Do not expand in this section
 
-- At-least-once delivery, idempotent, out-of-order and reconciliation principles: see [Core Concepts] (../../02-Core Concepts/);
-- Kafka, Queue, Cache and other individual products: see [Infrastructure Components] (../../04-Infrastructure-Components/);
-- Outbox, CDC, CQRS and Derived Read Model links: see [Universal Design Patterns] (../../05-Universal Design Patterns/);
+- At-least-once delivery, idempotent, out-of-order and reconciliation principles: see [Core Concepts](../../02-core-concepts/);
+- Kafka, Queue, Cache and other individual products: see [Infrastructure Components](../../04-Infrastructure-Components/);
+- Outbox, CDC, CQRS and Derived Read Model links: see [General Design Patterns](../../05-general-design-patterns/);
 - Internal data structures for search engines, databases and caches.
 
 ## Checklist

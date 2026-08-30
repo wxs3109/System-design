@@ -10,11 +10,11 @@ It is recommended to order cheaper and more conclusive tests first, and more exp
 4. Match Host, Path, Method and API version.
 5. Verify the identity and obtain the user, application or service subject.
 6. Perform tenant, scope, or coarse-grained permission checks.
-7. Enforce current limiting, quotas, and concurrency limits.
+7. Enforce Rate Limiting, quotas, and concurrency limits.
 8. Select a backend, set timeout and forward requests.
 9. Record structured access logs and indicators, and return unified errors.
 
-Unknown routes should return `404` as early as possible, Method is not allowed to return `405`, requests that are too large return `413`, and current limiting returns `429`. Do not forward these requests to business services.
+Unknown routes should return `404` as early as possible, Method is not allowed to return `405`, requests that are too large return `413`, and Rate Limiting returns `429`. Do not forward these requests to business services.
 
 ## Authentication and Authorization
 

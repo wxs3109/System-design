@@ -28,10 +28,10 @@ For general principles, see [API Gateway Case](../01-common-basic-system/02-api-
 
 1. Who is the external caller: an anonymous user, a logged-in user, a partner, or a device?
 2. Which APIs require authentication, and authorization is completed by Gateway or business services?
-3. Is current limiting performed by IP, User, Tenant, Route or globally?
+3. Is Rate Limiting performed by IP, User, Tenant, Route or globally?
 4. Which requests are safe to retry, and which ones must rely on the Idempotency Key?
 5. Which large files, static content, long connections or high-frequency data should take dedicated paths?
-6. How to downgrade when Gateway, authentication, current limiting or target service failure?
+6. How to downgrade when Gateway, authentication, Rate Limiting or target service failure?
 7. What audit fields need to be recorded, and what sensitive data must not be entered into the log?
 
 It is not necessary to expand the internal components of the Gateway in the application architecture diagram, just indicate the entrance, key policies and Direct Data Path.

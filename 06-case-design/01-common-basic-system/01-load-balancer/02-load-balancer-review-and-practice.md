@@ -1,6 +1,6 @@
 # Load Balancer: review and practice
 
-This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline] (01-progressive design mainline.md) first, then close the document and complete it within 45–60 minutes.
+This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](./01-load-balancer-progressive-design-mainline.md) first, then close the document and complete it within 45–60 minutes.
 
 Use the same framework for each answer:
 

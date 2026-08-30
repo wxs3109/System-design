@@ -12,7 +12,7 @@ It takes the scale and semantic requirements identified in the previous chapters
 | 02-Core concepts | Consistency, availability, transactions, asynchronous, sharding and recovery semantics | Provide correctness and operational constraints |
 | 03-Data and Storage | How to model, query and store data | Responsibilities of this chapter |
 | 04-Infrastructure components | Capability and failure contracts for individual off-the-shelf components | Verification that specific products meet requirements |
-| 05-Universal Design Patterns | How multiple components form reliable read and write links | Implement the data relationships defined in this chapter |
+| 05-General Design Patterns | How multiple components form reliable read and write links | Implement the data relationships defined in this chapter |
 | 06-Case Design | How the complete system evolves step by step | Use the data design method in this chapter |
 
 ## Learning boundaries

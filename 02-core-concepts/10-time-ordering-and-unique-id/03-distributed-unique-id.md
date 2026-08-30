@@ -50,7 +50,7 @@ Must deal with:
 Public APIs should not expose continuously increasing IDs:
 
 - Easily enumerate other people’s resources;
--Leaking business volume;
+- Leaking business volume;
 - It is easy for crawlers to scan the entire table.
 
 You can use random Public IDs while retaining compact Internal IDs. But random IDs are not an authorization mechanism; services must still verify tenants and permissions.

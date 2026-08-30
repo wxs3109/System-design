@@ -2,7 +2,7 @@
 
 The key to a multi-tenant system is not to "add an extra column to the table", but to allow each piece of data to answer: **Which tenant does it belong to, who can access it, where should it be placed, and how can it be individually migrated or deleted? **
 
-This article only discusses the impact of these issues on data models and queries. Authentication, current limiting, cell architecture, capacity scheduling and fault isolation are the responsibility of other chapters.
+This article only discusses the impact of these issues on data models and queries. Authentication, Rate Limiting, cell architecture, capacity scheduling and fault isolation are the responsibility of other chapters.
 
 ## 1. First distinguish four types of boundaries
 
@@ -63,7 +63,7 @@ A hybrid approach is commonly used in real-life systems: a large number of small
 
 Hybrid placement requires an authoritative Tenant Placement record containing at least tenant_id, placement, region, and status. The business code checks routing based on Tenant ID instead of writing the database address into the object ID or business logic.
 
-This article only defines this Data Contract; how to split, rebalance and handle Hotspot, see [Partition, Sharding and Hotspot Governance] (../../02-Core Concepts/08-Partition Sharding and Hotspot Governance/).
+This article only defines this Data Contract; how to split, rebalance and handle Hotspot, see [Partition, Sharding and Hotspot Governance](../../02-core-concepts/08-partition-sharding-and-hotspot/).
 
 ## 3. How to enter Schema with Tenant ID
 
@@ -100,7 +100,7 @@ The index should be derived from the real access pattern, for example:
 - List background tasks by Tenant and status;
 - Query Membership by Tenant, User.
 
-tenant_id is not mechanically placed first in every index; however, any intra-tenant query must have a query path that both limits the tenant and complies with the filtering and sorting methods. For the specific order of indexing, see [Index and Query Path] (../04-INDEX AND QUERY PATH/).
+tenant_id is not mechanically placed first in every index; however, any intra-tenant query must have a query path that both limits the tenant and complies with the filtering and sorting methods. For the specific order of indexing, see [Index and Query Path](../04-index-and-query-path/).
 
 ## 4. Query must carry Tenant Context
 
@@ -156,7 +156,7 @@ Deleting a Tenant does not mean deleting a Tenant table. The removal manifest sh
 
 You can first mark the Tenant as deleting to prevent new writes, and then delete and verify according to the list. The expiration method, legal retention and audit evidence in the backup must be stated separately; we cannot promise that all copies will disappear instantly after the database is deleted.
 
-For details on Soft Delete, Tombstone, Retention and Derived Data Cleanup, see [Schema Evolution and Data Lifecycle] (../09-Schema Evolution and Data Lifecycle/).
+For details on Soft Delete, Tombstone, Retention and Derived Data Cleanup, see [Schema Evolution and Data Lifecycle](../09-schema-evolution-and-data-life-cycle/).
 
 ## 7. Common mistakes
 

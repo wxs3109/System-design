@@ -35,7 +35,7 @@ The publishing API returns success, which only guarantees that `Post + PostCreat
 - **Backpressure**: Monitor the P99 visible from submission to feed; give priority to keeping new posts online when backlogged, and limit historical replay.
 - **FIX**: Reconciling `FeedItem` by Post and fan relationships, allowing you to reconstruct the entire derived feed from facts and events at any time.
 
-For the complete evolution, see [News Feed: Asynchronous Index Version] (../../06-Case Design/02-Specific Application System/03-news-feed/04-Asynchronous Index Version/README.md) and [News Feed: Write-time Distribution Version] (../../06-Case Design/02-Specific Application System/03-news-feed/05-Write-time Distribution Version/README.md).
+For the complete evolution, see [News Feed: Asynchronous Index Version](../../06-case-design/02-specific-application-system/03-news-feed/04-asynchronous-index-version-news-feed/README.md) and [News Feed: Write-time Distribution Version](../../06-case-design/02-specific-application-system/03-news-feed/02-data-reliable-version-news-feed/README.md).
 
 ## Case 2: Bypass action after payment
 

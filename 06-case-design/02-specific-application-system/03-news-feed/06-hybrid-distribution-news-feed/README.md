@@ -7,7 +7,7 @@
 1. [Why unified WRITE fails](01-why-unified-write-fails.md)
 2. [Author Timeline and Pattern Solidification](02-author-timeline-and-pattern-solidification.md)
 3. [Mixed reading and paging](03-mixed-reading-and-paging.md)
-4. [Migration, switching and failure from 05 to 06] (04-Migration, switching and failure.md)
+4. [Migration, switching and failure from 05 to 06](./04-migration-switching-and-failure-from-05-to-06.md)
 5. [Signal entering shard expansion](05-signal-for-entering-shard-expansion.md)
 
 ## Inheritance 05

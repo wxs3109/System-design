@@ -1,6 +1,6 @@
 # Design API Gateway
 
-API Gateway is a unified entrance for business APIs. It implements common cross-business policies, such as authentication, authorization, current limiting, routing, timeout, and auditing, before requests enter specific services.
+API Gateway is a unified entrance for business APIs. It implements common cross-business policies, such as authentication, authorization, Rate Limiting, routing, timeout, and auditing, before requests enter specific services.
 
 It's not the way to go for all byte streams. Video playback, map tiles, static files, and large file uploads typically use a dedicated data path from a CDN or Object Storage.
 
@@ -8,7 +8,7 @@ It's not the way to go for all byte streams. Video playback, map tiles, static f
 
 - Receive API requests such as HTTP, REST, gRPC, etc.
 - Select backend based on Host, Path, Method, Header or API version.
-- Implement authentication, authorization, current limiting, request size limitation and basic security policies.
+- Implement authentication, authorization, Rate Limiting, request size limitation and basic security policies.
 - Unified propagation of Request ID, Trace Context and caller identity.
 - Manage timeouts, limited retries, circuit breakers, grayscale routing and error mapping.
 - Dynamically publish routes and policies, supporting grayscale, rollback and multi-availability zone operation.
@@ -32,7 +32,7 @@ This case does not put business logic such as pricing, order status or feed sort
 5. [Long connections, large files and Direct Data Path](05-long-connections-large-files-and-direct-data-path.md)
 6. [Capacity High Availability and Observability](06-capacity-high-availability-and-observability.md)
 
-When accessing a specific application, use [Application Portal Design Checklist] (../../02-Specific Application System/00-Portal Design Checklist.md) to record only the special strategy of the application and not to repeat the design of the entire Gateway.
+When accessing a specific application, use [Application Portal Design Checklist](../../02-specific-application-system/00-application-specific-entry-design-checklist.md) to record only the special strategy of the application and not to repeat the design of the entire Gateway.
 
 ## Make clear conclusions first during the interview
 

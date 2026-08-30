@@ -169,5 +169,5 @@ Case design: How do these concepts and components combine into a complete system
 ```
 
 - This directory answers decision semantics such as Consistency, Async, Idempotency, Tail Latency, and Fault Tolerance.
-- [Infrastructure Components] (../04-Infrastructure-Components/README.md) discusses components such as Load Balancer, Cache, Queue, and Storage.
-- [Case Design] (../06-Case Design/README.md) applies them to News Feed, Payment, YouTube and multi-tenant platforms.
+- [Infrastructure Components](../04-Infrastructure-Components/README.md) discusses components such as Load Balancer, Cache, Queue, and Storage.
+- [Case Design](../06-case-design/README.md) applies them to News Feed, Payment, YouTube and multi-tenant platforms.

@@ -47,7 +47,7 @@ Signals suitable for denormalization:
 - Businesses allow clear freshness windows;
 - Can be reconstructed from authoritative facts.
 
-Signs of unsuitability: What is copied is the fact that balances, permissions, etc. must be correct immediately, or the system does not have a repair and removal path. The asynchronous maintenance link belongs to `05-Universal Design Patterns`.
+Signs of unsuitability: What is copied is the fact that balances, permissions, etc. must be correct immediately, or the system does not have a repair and removal path. The asynchronous maintenance link belongs to `05-General Design Patterns`.
 
 ## Embedding or Reference
 
@@ -94,7 +94,7 @@ Reservation(
 )
 ```
 
-Status fields express current facts, and timestamps support auditing. Complete history can save state change events if it has business value. For state transfer, concurrency and compensation, see [State Machine, Compensation and Reconciliation] (../../02-Core Concepts/09-Concurrency Control and Distributed Transactions/04-State Machine Compensation and Reconciliation.md).
+Status fields express current facts, and timestamps support auditing. Complete history can save state change events if it has business value. For state transfer, concurrency and compensation, see [State Machine, Compensation and Reconciliation](../../02-core-concepts/09-concurrency-control-and-distributed-transactions/04-state-machine-compensation-and-reconciliation.md).
 
 ## The time field must explain the semantics
 
@@ -136,7 +136,7 @@ Item.definition_version = 17
 Operation.definition_version = 16
 ```
 
-Operation saves the version it actually executed to avoid being unable to interpret old results after the Item is updated. For complete migration, see [Schema Evolution and Life Cycle] (../09-Schema Evolution and Data Life Cycle/).
+Operation saves the version it actually executed to avoid being unable to interpret old results after the Item is updated. For complete migration, see [Schema Evolution and Life Cycle](../09-schema-evolution-and-data-life-cycle/).
 
 ## Case
 

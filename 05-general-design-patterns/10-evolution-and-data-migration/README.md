@@ -2,7 +2,7 @@
 
 System evolution often requires migrating traffic and data from the old implementation to the new implementation while continuing to accept online requests. This pattern combines Backfill, Change Capture, Shadow, Verification, Cutover, and Rollback to make migration an observable, pauseable, and provably complete process.
 
-This article discusses how multiple old and new components work together. For field compatibility, TTL and data life cycle, see [Schema Evolution and Data Life Cycle] (../../03-Data&Storage/09-Schema Evolution and Data Life Cycle/); deployment tools such as Canary and Blue-Green themselves are not expanded here.
+This article discusses how multiple old and new components work together. For field compatibility, TTL and data life cycle, see [Schema Evolution and Data Life Cycle](../../03-data-and-storage/09-schema-evolution-and-data-life-cycle/); deployment tools such as Canary and Blue-Green themselves are not expanded here.
 
 ## 1. Invariant to be protected
 
@@ -94,13 +94,13 @@ Common data contracts include:
 - Repeated writing of the same version yields the same result;
 - Unsortable conflicts go into exception list, no silent guessing.
 
-This is just the version requirement for migration; see [Core Concepts] (../../02-Core Concepts/) for the principles of concurrency, idempotence and sequence.
+This is just the version requirement for migration; see [Core Concepts](../../02-core-concepts/) for the principles of concurrency, idempotence and sequence.
 
 ## 7. Why is Dual Write not the default solution?
 
 When the application writes Old and New at the same time, network failure will cause one side to succeed and the other side to fail. If there is no common business, you must answer:
 
--Which side is written first, which side determines the success of the API;
+- Which side is written first, which side determines the success of the API;
 - Where to recover the write intent after the second side fails;
 - Both sides are successful but the content is different, who covers whom;
 - Whether retrying will produce repeated side effects;

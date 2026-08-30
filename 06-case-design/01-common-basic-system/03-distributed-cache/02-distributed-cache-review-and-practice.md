@@ -1,6 +1,6 @@
 # Distributed Cache: review and practice
 
-This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline] (01-progressive design mainline.md) first, then close the document and complete it within 45–60 minutes.
+This article does not introduce new knowledge, but only tests whether the design can be re-derived without the document. Read [Progressive Design Mainline](../01-load-balancer/01-load-balancer-progressive-design-mainline.md) first, then close the document and complete it within 45–60 minutes.
 
 Use the same framework for each answer:
 
@@ -112,7 +112,7 @@ answer:
 
 Choose a boundary question: Value only carries Version, why can’t it necessarily prevent Late Fill after the Cache has been deleted? What real requirements warrant reopening a Conditional Fill, Version Floor, or reliable failure event?
 
-Passing criteria: Ability to provide an aging timeline without extending the cache service into a Database-Cache distributed transaction. Stronger semantics for on-demand reading [cache and source data boundaries] (optional/cache and source data boundaries.md).
+Passing criteria: Ability to provide an aging timeline without extending the cache service into a Database-Cache distributed transaction. Stronger semantics for on-demand reading [cache and source data boundaries](./optional/optional-cache-and-source-data-boundaries.md).
 
 ## 8. Boundary judgment and completion judgment
 

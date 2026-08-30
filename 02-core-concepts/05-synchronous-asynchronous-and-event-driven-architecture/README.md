@@ -31,17 +31,17 @@ Synchronization and asynchronousness can also be mixed: payment requests complet
 
 ## Navigation of this chapter
 
-1. [When to become asynchronous: Judgment methods and counterexamples] (01-When to become asynchronous.md)
+1. [When to become asynchronous: Judgment methods and counterexamples](01-when-to-asynchronously-determination-methods-and-counterexamples.md)
 2. [How to asynchronously: Queue, Pub/Sub, Event Stream and Workflow](02-how-to-asynchronously-message-model-and-selection.md)
 3. [Reliable Delivery: Success Boundary, Outbox and Consumption Semantics](03-reliable-delivery-success-boundary-and-consistency.md)
 4. [Runtime Correctness: Ordering, Backpressure, Retry, DLQ and Observability](04-runtime-correctness-ordering-backpressure-retry-and-observability.md)
-5. [Case Study: News Feed, Payment and Image Processing] (05-Case Study and Checklist.md)
+5. [Case Study: News Feed, Payment and Image Processing](../02-latency-throughput-and-tail-latency/06-case-study-and-design-checklist.md)
 
 ## Boundaries with other chapters
 
 - Latency budget and queuing effects see [Latency, Throughput and Tail Latency](../02-latency-throughput-and-tail-latency/).
-- For Consumer's idempotent keys, backoff and deduplication windows, see [Impotent, Retry and Deduplication] (../06-Impotent, Retry and Deduplication/).
-- For fault domain, degradation and disaster recovery, see [Fault Tolerance, Degradation and Disaster Recovery] (../07-Fault Tolerance, Degradation and Disaster Recovery/).
+- For Consumer's idempotent keys, backoff and deduplication windows, see [Idempotent, Retry and Deduplication](../06-idempotency-retry-and-deduplication/).
+- For fault domain, degradation and disaster recovery, see [Fault Tolerance, Degradation and Disaster Recovery](../07-fault-tolerance-graceful-degradation-and-disaster-recovery/).
 
 ## Minimum answer framework in interviews
 

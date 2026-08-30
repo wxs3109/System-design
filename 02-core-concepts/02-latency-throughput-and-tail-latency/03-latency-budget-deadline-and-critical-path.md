@@ -62,7 +62,7 @@ Start by asking whether a piece of work affects the correctness of the current r
 | Multiple small IOs | Batch/merge | Reduce round trips; need to wait for batching and may generate large requests |
 | Large file transfer | Signed URL direct connection to object storage/CDN | Avoid occupying ordinary API resources; increase authorization and life cycle design |
 
-See [Synchronization, Asynchronous and Event-Driven] (../05-synchronous, asynchronous and event-driven/) for complete success boundaries, status and backlog handling of asynchronization.
+See [Synchronization, Asynchronous and Event-Driven](../05-synchronous-asynchronous-and-event-driven-architecture/) for complete success boundaries, status and backlog handling of asynchronization.
 
 ## Whether the cache really shortens the critical path
 

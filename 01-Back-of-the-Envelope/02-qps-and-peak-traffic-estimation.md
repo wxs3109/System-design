@@ -71,7 +71,7 @@ Assume that 100 million pieces of content are added every day, and each piece of
 
 - Write about $10^3$ QPS;
 - Read about $10^5$ QPS;
--The peak value is multiplied by the corresponding coefficient.
+- The peak value is multiplied by the corresponding coefficient.
 
 More reads may promote Cache, CDN, Read Replica and Materialized View; more writes may promote Batch Processing, Log-structured Write, Sharding and asynchronous Index. But the read-write ratio is just the entry point, and it also depends on the request complexity, object size, Hotspot and Consistency.
 

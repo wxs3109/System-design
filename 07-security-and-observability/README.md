@@ -16,12 +16,12 @@ The goal: to enable systems to not only run, but also be protected, measured, di
 - Secret management, certificates and trust boundaries
 - Sensitive data classification and desensitization
 
-## 3. Abuse prevention and current limiting
+## 3. Abuse prevention and Rate Limiting
 
-- User, IP, Token and resource dimension current limiting
+- User, IP, Token and resource dimension Rate Limiting
 - Bots, crawlers, spam and fraud
 - WAF, DDoS protection and quotas
-- Killings, downgrades and appeal paths
+- Bans, takedowns and appeal paths
 
 ## 4. Logs, indicators and Tracing
 
@@ -35,7 +35,7 @@ The goal: to enable systems to not only run, but also be protected, measured, di
 - Availability, latency, correctness and freshness metrics
 - Error Budget and release decisions
 - The difference between user perspective and component perspective
--Multi-window alarm
+- Multi-window alarm
 
 ## 6. Alarm and incident response
 

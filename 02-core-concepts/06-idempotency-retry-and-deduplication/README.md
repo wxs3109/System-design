@@ -5,8 +5,8 @@ The most difficult thing to deal with in distributed calls is not the clear fail
 ## Learning sequence
 
 1. [Timeout and Safe Retry](01-timeout-and-safe-retry.md)
-2. [Impotent API and external side effects](02-idempotent-api-and-external-side-effect.md)
-3. [Message idempotence, deduplication and out-of-order] (03-Message idempotence, deduplication and out-of-order.md)
+2. [Idempotent API and external side effects](02-idempotent-api-and-external-side-effect.md)
+3. [Message idempotence, deduplication and out-of-order](./03-message-idempotency-deduplication-and-out-of-order.md)
 4. [DLQ, Replay, Reconciliation and Verification](04-dlq-replay-reconciliation-and-verification.md)
 
 ## Remember four points first

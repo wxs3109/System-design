@@ -44,7 +44,7 @@ The Load Balancer is in front of the Gateway and distributes requests to healthy
 
 ## Abilities that should not be put in
 
--Business rules such as order price calculation and feed sorting;
+- Business rules such as order price calculation and feed sorting;
 - Business status changes that require multi-table transactions;
 - Massive response assembly and complex workflow orchestration;
 - Long-term tasks such as video transcoding and file scanning;

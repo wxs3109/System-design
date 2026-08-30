@@ -139,4 +139,4 @@ Retry and DLQ can only handle failures that have been recognized by the system. 
 
 "Can be replayed" does not mean "has been verified that it can be replayed". Really practice before going online: rebuild a new index from the specified offset and observe its impact on online traffic.
 
-[Previous section: Message Model and selection] (02-Message-Model-and selection.md) · [Return to the entrance of this chapter] (README.md) · [Next section: Ordering, Backpressure and operation] (04-Ordering-Backpressure-and operation.md)
+[Previous section: Message Model and selection](./02-how-to-asynchronously-message-model-and-selection.md) · [Return to the entrance of this chapter](README.md) · [Next section: Ordering, Backpressure and operation](./04-runtime-correctness-ordering-backpressure-retry-and-observability.md)

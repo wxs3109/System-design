@@ -11,7 +11,7 @@ Responsible:
 - Connection Metadata and data source types;
 - Secret Reference, Secret rotation and revocation;
 - Test connection and network reachability check;
--Issue short-term, least privilege credentials based on Operation context;
+- Issue short-term, least privilege credentials based on Operation context;
 - Data access policies and sensitive credential auditing.
 
 Not responsible for:

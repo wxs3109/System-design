@@ -217,7 +217,7 @@ For example, the theoretical Data Amplification of $(8+4)$ is $1.5\times$, and t
 - EC significantly reduces long-term capacity amplification.
 - Encoding, Degraded Read and Repair consume additional CPU, network and I/O; small Objects may not be suitable for direct EC due to amplification and random I/O.
 - Selecting $k,m$, Stripe size and packaging format requires real media and Workload stress testing; the core only knows the formula and failure boundary.
-- For details on the layout evolution of three copies to EC, see [Erasure Code and Layout Evolution] (optional/erasure code and layout evolution.md).
+- For details on the layout evolution of three copies to EC, see [Erasure Code and Layout Evolution](./optional/optional-erasure-coding-and-layout-evolution.md).
 
 ## 7. Copies also decay together: Checksum, Scrub and Repair Budget
 
@@ -256,7 +256,7 @@ Media and Failure Domain Failure Rate
 → Annual object loss risk model
 ```
 
-It's not "there are three copies, so 11 nines." For detailed verification boundaries, see [Verification Repair and Durability Proof] (optional/verification repair and durability proof.md).
+It's not "there are three copies, so 11 nines." For detailed verification boundaries, see [Verification Repair and Durability Proof](./optional/optional-calibration-repair-and-durability-certification.md).
 
 ## 8. TB-level objects: Multipart, Range and Cleanup
 
@@ -330,4 +330,4 @@ Minimal validation only covers core promises:
 
 Minimum indicators include PUT / GET / HEAD / LIST results and delays, object size distribution, logical / physical bytes, Metadata QPS, Data / Replication / Repair bandwidth, Checksum Failure, Degraded Object, Scrub Coverage Age, Repair Backlog / Age, Staging / Orphan Bytes, each Failure Domain Capacity and hotspot Key.
 
-After completing [Review and Exercise] (02-Review and Exercise.md), you can explain Commit, sharding, redundancy, Repair, Multipart and GC in a closed-book manner. Encoding and durability models go to [`optional/`](optional/); cross-region, full versioning/WORM, Signed URL and product governance stay in [Parking Lot](PARKING-LOT.md).
+After completing [Review and Exercise](../../../08-templates-and-review/), you can explain Commit, sharding, redundancy, Repair, Multipart and GC in a closed-book manner. Encoding and durability models go to [`optional/`](optional/); cross-region, full versioning/WORM, Signed URL and product governance stay in [Parking Lot](PARKING-LOT.md).

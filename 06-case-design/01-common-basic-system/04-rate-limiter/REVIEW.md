@@ -46,7 +46,7 @@ Single process Token Bucket
 
 [`optional/Algorithm and Atomic Implementation.md`](optional/optional-algorithm-and-atomic-implementation.md) Only reserved:
 
--Selection of Fixed Window and Token Bucket.
+- Selection of Fixed Window and Token Bucket.
 - Token Bucket formulas and atomic script semantics.
 - Timing, TTL and numerical accuracy risks.
 - Implementation boundaries of Hot Key.
@@ -59,7 +59,7 @@ Single process Token Bucket
 - Multiple rules for independent accounting.
 - The existence and boundaries of Idempotency and Shadow.
 
-Multi-Region, Token Lease, complex multi-rule transactions and complete current-limiting products are only recorded in [Parking Lot](PARKING-LOT.md).
+Multi-Region, Token Lease, complex multi-rule transactions and complete rate-limiting products are only recorded in [Parking Lot](PARKING-LOT.md).
 
 ## What was deleted or omitted
 

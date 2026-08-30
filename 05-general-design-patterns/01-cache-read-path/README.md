@@ -95,13 +95,13 @@ Don't just rely on complex deletion timing to claim "never read old". If there a
 | Points of failure | External manifestations | Safe handling |
 |---|---|---|
 | Cache timeout | Unknown result, not an explicit miss | Fast-fail cache call; bounded Database Fallback or downgrade |
-| A large number of Key failures | Miss and database QPS increase at the same time | Request Coalescing, Database Fallback current limiting, returning old values ​​or non-critical data degradation |
+| A large number of Key failures | Miss and database QPS increase at the same time | Request Coalescing, Database Fallback Rate Limiting, returning old values ​​or non-critical data degradation |
 | Database slows down | Authoritative Read requests pile up | Limit concurrency; cannot be masked with infinite cache retries |
 | The invalidation action fails | The old value may still be read after the write is successful | TTL is used as an upper bound; reliable asynchronous invalidation or version verification is only introduced when really necessary |
 | All Cache is lost | Cold start, hit rate is close to zero | Step by step Cache Pre-warming, prioritize hot spots, protect the database |
 | Permissions or deletion have changed | Old objects are still cached | Shorten the TTL of sensitive data, do authority checks when reading, and clarify the upper limit of invisibility |
 
-Failure messages are more sensitive than plain display data, but the entire chain of events should not be immediately taken as the default answer. First determine whether the TTL has met the business invisibility requirements; if not, introduce [reliable event publishing link] (../03-Reliable event publishing link/).
+Failure messages are more sensitive than plain display data, but the entire chain of events should not be immediately taken as the default answer. First determine whether the TTL has met the business invisibility requirements; if not, introduce [reliable event publishing link](../03-reliable-event-publishing-path/).
 
 ## 7. Latency, consistency and cost trade-offs
 

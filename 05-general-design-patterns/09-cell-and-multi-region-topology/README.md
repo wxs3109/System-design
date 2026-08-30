@@ -2,7 +2,7 @@
 
 Cell uses multiple mutually isolated complete Service Units to limit Blast Radius; Multi-region Topology uses different Regions to undertake low latency, Data Residency and Disaster Recovery. The two can be combined, but they are not the same problem: a system can have multiple Cells in a single Region, or it can be deployed across Regions but still share a huge Failure Domain.
 
-This article only talks about how to combine routing, state attribution, isolation, switching and recovery. For the principles of replication, consistency and network partitioning, see [CAP and Consistency Model] (../../02-Core Concepts/03-CAP and Consistency Model/), and for RPO/RTO and disaster recovery concepts, see [Fault Tolerance, Downgrade and Disaster Recovery] (../../02-Core Concepts/07-Fault Tolerance, Downgrade and Disaster Recovery/).
+This article only talks about how to combine routing, state attribution, isolation, switching and recovery. For the principles of replication, consistency and network partitioning, see [CAP and Consistency Model](../../02-core-concepts/03-cap-and-consistency-model/), and for RPO/RTO and disaster recovery concepts, see [Fault Tolerance, Downgrade and Disaster Recovery](../../02-core-concepts/07-fault-tolerance-graceful-degradation-and-disaster-recovery/).
 
 ## Problems to be solved and invariants
 
