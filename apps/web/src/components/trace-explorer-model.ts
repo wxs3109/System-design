@@ -39,7 +39,7 @@ export interface TraceMarker {
   kind: 'fault' | 'policy'
 }
 
-const terminalTypes = new Set<RuntimeEvent['type']>(['request-completed', 'request-failed'])
+const terminalTypes = new Set<RuntimeEvent['type']>(['request-completed', 'request-failed', 'operation-completed'])
 const traceMarkerTypes = new Set<RuntimeEvent['type']>([
   'attempt-started', 'retry-scheduled', 'timeout-fired', 'rate-limit-rejected', 'message-dead-lettered',
 ])
@@ -72,13 +72,13 @@ export function buildTraceRecords(result: Pick<SimulationResult, 'events' | 'spa
     if (unsortedSpans.length === 0) return []
     const spans = [...unsortedSpans].sort((left, right) => left.startedAtMs - right.startedAtMs || left.spanId.localeCompare(right.spanId))
     const events = requestEventsByTrace.get(traceId) ?? []
-    const generated = events.filter((event) => event.type === 'request-generated').sort((left, right) => left.sequence - right.sequence)[0]
+    const generated = events.filter((event) => event.type === 'request-generated' || event.type === 'operation-started').sort((left, right) => left.sequence - right.sequence)[0]
     const terminal = lastBySequence(events.filter((event) => terminalTypes.has(event.type) && event.attributes.terminal === true))
       ?? lastBySequence(events.filter((event) => terminalTypes.has(event.type)))
     const startedAtMs = Math.min(generated?.timestampMs ?? Number.POSITIVE_INFINITY, ...spans.map((span) => span.startedAtMs))
     const endedAtMs = Math.max(terminal?.timestampMs ?? 0, ...spans.map((span) => span.endedAtMs))
     const failedSpan = [...spans].reverse().find((span) => span.status === 'error')
-    const status: TraceStatus = terminal ? (terminal.type === 'request-failed' ? 'error' : 'ok') : failedSpan ? 'error' : 'ok'
+    const status: TraceStatus = terminal ? (terminal.status === 'ok' ? 'ok' : 'error') : failedSpan ? 'error' : 'ok'
     const reason = terminal ? terminal.reason : failedSpan?.reason ?? 'none'
     const reasonCodes = [...new Set([
       reason,

@@ -5,7 +5,7 @@ import { redoProject, undoProject, useWorkbenchStore } from './store'
 const emptyResult: SimulationResult = {
   runId: 'run', scenarioId: 'history-project', seed: 'seed', simulatedDurationMs: 1, wallClockDurationMs: 1,
   summary: { generatedRequests: 0, completedRequests: 0, failedRequests: 0, throughputPerSecond: 0, errorRate: 0, latencyP50Ms: 0, latencyP95Ms: 0, latencyP99Ms: 0 },
-  nodes: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
+  nodes: [], operations: [], actions: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
 }
 
 afterEach(() => {

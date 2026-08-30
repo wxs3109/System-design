@@ -370,6 +370,15 @@ export const projectFileV3Schema = projectFileV3BaseSchema.superRefine((project,
   }
   const phaseOneValidation = projectFileV2Schema.safeParse(phaseOneShape)
   if (!phaseOneValidation.success) phaseOneValidation.error.issues.forEach((issue) => {
+    if (issue.path[0] === 'topology' && issue.path[1] === 'nodes' && typeof issue.path[2] === 'number' && issue.message.includes('must have a workload')) {
+      const nodeId = project.topology.nodes[issue.path[2]]?.id
+      if (nodeId && project.experiments.every((experiment) => experiment.operationWorkloads.some((workload) => workload.sourceNodeId === nodeId))) return
+    }
+    if (issue.path[0] === 'experiments' && issue.message.includes('Unknown workload fault target:')) {
+      const targetId = issue.message.split(': ').at(-1)
+      const experimentIndex = typeof issue.path[1] === 'number' ? issue.path[1] : undefined
+      if (targetId && experimentIndex !== undefined && project.experiments[experimentIndex]?.operationWorkloads.some((workload) => workload.id === targetId)) return
+    }
     context.addIssue({ code: 'custom', path: [...issue.path], message: issue.message })
   })
   validateBusinessReferences(project, context)
@@ -460,7 +469,24 @@ export const projectToScenario = (input: AnyProjectFile, experimentId = input.ac
   const project = input.schemaVersion === 3 ? projectFileV3Schema.parse(input) : projectFileV2Schema.parse(input)
   const experiment = project.experiments.find((candidate) => candidate.id === experimentId)
   if (!experiment) throw new Error(`Experiment ${experimentId} does not exist.`)
-  return scenarioSchema.parse({
+  const operationWorkloadIds = new Set(project.schemaVersion === 3
+    ? project.experiments.find((candidate) => candidate.id === experimentId)!.operationWorkloads.map((workload) => workload.id) : [])
+  const expandedFaults = experiment.faults.flatMap((fault) => {
+    const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
+    if (target?.kind !== 'group') return [fault]
+    const members = project.topology.groups.find((group) => group.id === target.id)?.nodeIds ?? []
+    const memberSet = new Set(members)
+    const affectedEdges = project.topology.edges.filter((edge) => memberSet.has(edge.source) || memberSet.has(edge.target)).map((edge) => edge.id)
+    return [
+      ...members.map((nodeId, index) => ({ ...fault, id: `${fault.id}:node:${index}`, sourceFaultId: fault.id, type: 'region-outage' as const, target: { kind: 'node' as const, id: nodeId } })),
+      ...affectedEdges.map((edgeId, index) => ({ ...fault, id: `${fault.id}:edge:${index}`, sourceFaultId: fault.id, type: 'region-outage' as const, target: { kind: 'edge' as const, id: edgeId } })),
+    ]
+  })
+  const operationFaults = expandedFaults.filter((fault) => {
+    const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
+    return target?.kind === 'workload' && operationWorkloadIds.has(target.id)
+  })
+  const scenario = scenarioSchema.parse({
     schemaVersion: 1,
     id: project.id,
     name: project.name,
@@ -474,19 +500,11 @@ export const projectToScenario = (input: AnyProjectFile, experimentId = input.ac
     }),
     edges: project.topology.edges.map(({ sourceSemantic: _sourceSemantic, targetSemantic: _targetSemantic, routingMode: _routingMode, ...edge }) => ({ ...edge, sourcePort: 'out' as const, targetPort: 'in' as const })),
     workloads: experiment.workloads,
-    faults: experiment.faults.flatMap((fault) => {
-      const target = fault.target ?? (fault.targetNodeId === undefined ? undefined : { kind: 'node' as const, id: fault.targetNodeId })
-      if (target?.kind !== 'group') return [fault]
-      const members = project.topology.groups.find((group) => group.id === target.id)?.nodeIds ?? []
-      const memberSet = new Set(members)
-      const affectedEdges = project.topology.edges.filter((edge) => memberSet.has(edge.source) || memberSet.has(edge.target)).map((edge) => edge.id)
-      return [
-        ...members.map((nodeId, index) => ({ ...fault, id: `${fault.id}:node:${index}`, sourceFaultId: fault.id, type: 'region-outage' as const, target: { kind: 'node' as const, id: nodeId } })),
-        ...affectedEdges.map((edgeId, index) => ({ ...fault, id: `${fault.id}:edge:${index}`, sourceFaultId: fault.id, type: 'region-outage' as const, target: { kind: 'edge' as const, id: edgeId } })),
-      ]
-    }),
+    faults: expandedFaults.filter((fault) => !operationFaults.includes(fault)),
     simulation: experiment.simulation,
   })
+  if (operationFaults.length > 0) scenario.faults.push(...operationFaults)
+  return scenario
 }
 
 export const createEmptyProject = (id = 'untitled-system'): ProjectFileV3 => projectFileV3Schema.parse({

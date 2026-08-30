@@ -2,7 +2,7 @@
 
 This document defines what a current simulation result means. The simulator is a deterministic, virtual-time model for exploring system-design trade-offs. It is not a capacity promise, benchmark of a real product, cloud-provider emulator, packet-level network simulator, or correctness proof.
 
-`ProjectFile v3` can now store and validate business definitions for APIs, JSON Schemas, relational/document/key-value data models, cache keys, events, interactions, and operation workloads. P2.2 establishes those contracts only. Until the operation-aware compiler and runtime land in P2.4, simulation still executes the Phase 1 anonymous-request projection described below: business definitions, operation mixes, handler estimates, table/index metadata, and event identities do not change runtime events or metrics. A `business-aware` badge therefore describes the project model, not the current execution fidelity.
+`ProjectFile v3` can store, validate, and execute business definitions for APIs, relational/document/key-value data models, cache keys, events, interactions, and operation workloads. P2.4 compiles those definitions into topology-bound operation plans and emits operation/action events and metrics. Capacity-only projects continue to use the Phase 1 anonymous-request path. The operation-aware path is still an explainable system-design approximation; the executed and descriptive fields are separated below.
 
 Results are useful for comparing designs only when the experiment is held constant. Baseline and candidate runs must use identical workload definitions, fault schedules, simulation limits, and seed. Absolute values are model outputs, not production forecasts. Calibrate component inputs with measurements before using them for planning.
 
@@ -13,6 +13,53 @@ Results are useful for comparing designs only when the experiment is held consta
 - Constant workloads use evenly spaced arrivals. Poisson workloads use exponential inter-arrival times. `maxRequests` is a generation safety limit shared by the run; reaching it stops new requests and emits a warning.
 - `maxHops` terminates cyclic paths. A request at the limit fails with `hop_limit`; the engine does not infer loop intent.
 - A saved run contains an immutable project snapshot. Historical comparisons reject different workloads, faults, simulation settings, or seeds, but engine-version compatibility is not yet a long-term stability guarantee.
+
+## Business-aware operations and interactions
+
+- Each operation-mix entry resolves one API operation and one interaction version. Compilation requires the interaction's entry API call to start at the workload's Traffic Generator and end at the API owner. Every action target must be enabled and reachable through compatible topology edges: API, service, data, and cache actions use synchronous paths; event publish/consume actions use asynchronous paths.
+- An operation workload on a Traffic Generator supersedes the legacy capacity workload on that same source. The compiler emits a warning instead of generating both request streams. Arrival phases and weighted operation selection use the same virtual clock and seeded random stream as capacity-only workloads.
+- Actions run in declared order. `dependsOn` requires earlier actions to have produced a successful outcome. Conditions currently branch on `success`, `cache-hit`, or `cache-miss`; an unsatisfied action emits `action-skipped`. An executed action failure terminates its operation, so the schema's `failure` condition is reserved and is not yet a recovery branch. This is a deterministic workflow projection, not parallel DAG scheduling, distributed transactions, rollback, compensation, or a saga engine.
+- Request context carries operation and action IDs, the selected key, payload bytes, data-object and query-shape identity, cache-key identity, and event identity. API/service handler time is added to the target Service's configured base time. Action targets consume their configured capacity, queue, latency, jitter, error, and active node-fault behavior. Bound path traversal also remains subject to modeled edge faults. Runtime meaning never depends on canvas coordinates.
+- Operation metrics report generated/completed/failed counts and successful p95 latency. Action metrics report completed/failed counts, average duration, records examined, and bytes processed. Operation/action spans and domain events are derived from the same ordered runtime event stream as the summary.
+- Request JSON bodies are not materialized. JSON Schema validates and documents contracts, while request bytes, API response estimates, sampled value bytes, and generated keys are the executable projection described by each component model. The operation-mix `responseBytes` override is stored in the compiled plan but is not yet applied to action response latency. API method/path, response status/schema, and SLO fields identify or describe an operation but do not emulate HTTP, enforce an SLO, or change correctness.
+
+### Database access-cost approximation
+
+For an access action, let $N$ be the declared object cardinality, $r$ the declared `estimatedRows` clamped to the modeled cardinality, $B$ the declared row/document/value bytes, $q$ the Database node's configured `queryTimeMs`, and
+
+$$
+d = \max\left(1, \left\lceil \log_2(\max(2,N)) \right\rceil\right).
+$$
+
+The simulator estimates examined records $E$, a query multiplier $m$, and service time
+
+$$
+t = \max\left(0.001, q m + \frac{\max(B, EB)}{262144}\right)\ \text{ms}.
+$$
+
+The byte term is a transparent calibration constant, not a storage-device throughput claim.
+
+| Access shape | Examined records $E$ | Multiplier $m$ |
+|---|---:|---:|
+| point read | $1$ | $0.65$ |
+| hash index read | $\min(N,1+r)$ | $0.75 + 0.035 + 0.004r$ |
+| B-tree index read | $\min(N,d+r)$ | $0.75 + 0.035d + 0.004r$ |
+| range read | $\min(N,d+r)$ | $0.9 + 0.04d + 0.006r$ |
+| scan | $N$ | $1 + 0.35\log_{10}(N+1) + N/25000$ |
+| insert | $1$ | $1.25$ |
+| update | $r$ | $1.15 + 0.01r$ |
+| delete | $r$ | $1.05 + 0.009r$ |
+
+Index and range actions must reference a declared index. A hash index cannot serve a range read. Relational primary and unique keys are treated as B-tree access paths; relational indexes retain their B-tree/hash kind; document secondary indexes are treated as B-trees. The model uses declared cardinality and record size, but it does not inspect predicates, estimate real selectivity, choose a plan, model joins, or maintain changing cardinality after writes.
+
+Database v2 still supplies the aggregate shard/replica capacity and key-routing approximation described under Stateful component semantics. Workload uniform, hotspot, or Zipfian key generation can therefore change shard concentration. It does not derive keys from JSON payloads or declared column/JSON-pointer values.
+
+### Cache, event, and descriptive contract fields
+
+- A named cache `get` performs the existing deterministic TTL/capacity lookup and produces a hit or miss outcome for interaction conditions. Explicit `put` and `delete` actions mutate that same cache state. Cache-key estimated bytes affect the action payload; its pattern and value schema are descriptive. There is no automatic cache-aside fill unless the interaction declares the corresponding write action.
+- Named event publish/consume actions use the bound Queue/Stream capacity behavior and carry the declared event identity and estimated payload bytes. Delivery and ordering declarations are currently descriptive; they do not add durable redelivery, deduplication, exactly-once processing, or ordering enforcement.
+- Operation action paths execute intermediate component resources and target component resources sequentially. Edge timeouts and node rate limits apply, while retry/circuit-breaker attachments, async backpressure gates, and load-balancer target selection are not yet composed into operation action paths. Edge latency-spike remains multiplicative and therefore adds no delay to a zero-latency edge. Use node capacity/latency/failure controls for operation-aware comparisons until those remaining policy integrations are implemented.
+- Relational column types/nullability, unique and foreign-key correctness, included-index columns, document schemas and partition-key pointers, key/value schemas, event payload schemas, API response schemas/SLOs, and key-value consistency hints remain validation or documentation metadata. They do not currently alter latency or enforce data correctness. Compiler warnings identify descriptive action-level fields that might otherwise imply execution semantics.
 
 ## Requests, routing, and completion
 

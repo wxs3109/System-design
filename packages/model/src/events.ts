@@ -7,9 +7,10 @@ export const runtimeEventTypeSchema = z.enum([
   'request-generated', 'request-arrived', 'request-queued', 'request-started', 'request-completed', 'request-failed',
   'dependency-started', 'dependency-returned', 'retry-scheduled', 'attempt-started', 'timeout-fired',
   'circuit-opened', 'circuit-half-opened', 'circuit-closed', 'rate-limit-accepted', 'rate-limit-rejected',
-  'cache-hit', 'cache-miss', 'cache-evicted', 'cache-expired', 'message-published', 'message-consumed',
+  'cache-hit', 'cache-miss', 'cache-written', 'cache-deleted', 'cache-evicted', 'cache-expired', 'message-published', 'message-consumed',
   'message-acknowledged', 'message-dead-lettered', 'stream-record-appended', 'stream-record-consumed',
   'object-read', 'object-written', 'database-read', 'database-written',
+  'operation-started', 'operation-completed', 'action-started', 'action-completed', 'action-skipped',
   'fault-activated', 'fault-recovered', 'metric-sampled', 'node-snapshot',
 ])
 
@@ -30,6 +31,8 @@ export const runtimeEventSchema = z.object({
   traceId: identifierSchema.optional(),
   spanId: identifierSchema.optional(),
   parentSpanId: identifierSchema.optional(),
+  operationId: identifierSchema.optional(),
+  actionId: identifierSchema.optional(),
   nodeId: identifierSchema.optional(),
   edgeId: identifierSchema.optional(),
   attempt: z.number().int().positive().default(1),
@@ -55,7 +58,7 @@ export const spanSchema = z.object({
   runId: identifierSchema, traceId: identifierSchema, spanId: identifierSchema, parentSpanId: identifierSchema.optional(),
   requestId: identifierSchema, nodeId: identifierSchema, edgeId: identifierSchema.optional(), attempt: z.number().int().positive(),
   startedAtMs: nonNegativeSchema, endedAtMs: nonNegativeSchema, durationMs: nonNegativeSchema, queueDurationMs: nonNegativeSchema,
-  status: z.enum(['ok', 'error']), reason: reasonCodeSchema,
+  status: z.enum(['ok', 'error']), reason: reasonCodeSchema, operationId: identifierSchema.optional(), actionId: identifierSchema.optional(),
 }).superRefine((span, context) => {
   if (span.endedAtMs < span.startedAtMs) {
     context.addIssue({ code: 'custom', path: ['endedAtMs'], message: 'A span cannot end before it starts.' })

@@ -1,4 +1,5 @@
 import type { ComponentNode, EventStatus, RuntimeEventType } from '@system-design/model'
+import type { CompiledOperationAction } from '../compiler/operation-plan'
 import { ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState } from './data-state'
 
 export interface StatefulRequest {
@@ -9,6 +10,8 @@ export interface StatefulRequest {
   operation?: 'read' | 'write'
   outgoingPort?: string
   hotKeyProbabilityOverride?: number
+  operationAction?: CompiledOperationAction
+  payloadBytes?: number
 }
 
 export interface ComponentDomainEvent {
@@ -33,15 +36,16 @@ export interface ComponentStateRuntime {
   complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
   dependencyComplete?(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
   snapshot(nowMs: number): ComponentStateSnapshot
+  outcome?(request: StatefulRequest): 'hit' | 'miss' | undefined
 }
 
 const token = (request: StatefulRequest) => `${request.id}:${request.spanId}`
 const generatedKey = (request: StatefulRequest, keySpaceSize: number, hotKeyProbability: number, random: () => number) =>
   request.key ?? (random() < hotKeyProbability ? 'hot:0' : `key:${Math.floor(random() * keySpaceSize)}`)
 
-class CacheRuntime implements ComponentStateRuntime {
+export class CacheRuntime implements ComponentStateRuntime {
   private readonly cache
-  private readonly pending = new Map<string, { key: string; fill: boolean }>()
+  private readonly pending = new Map<string, { key: string; operation: 'get' | 'put' | 'delete'; outcome: 'hit' | 'miss' }>()
 
   constructor(private readonly node: Extract<ComponentNode, { type: 'cache' }>) {
     this.cache = new VirtualCacheState(node.config)
@@ -49,12 +53,21 @@ class CacheRuntime implements ComponentStateRuntime {
 
   begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision {
     const key = generatedKey(request, this.node.config.keySpaceSize, request.hotKeyProbabilityOverride ?? this.node.config.hotKeyProbability, random)
+    const declared = request.operationAction?.cache?.operation
+    if (declared === 'put') {
+      this.pending.set(token(request), { key, operation: declared, outcome: 'hit' })
+      return { patch: { key, operation: 'write', outgoingPort: 'hit' } }
+    }
+    if (declared === 'delete') {
+      this.pending.set(token(request), { key, operation: declared, outcome: 'hit' })
+      return { patch: { key, operation: 'write', outgoingPort: 'hit' } }
+    }
     const read = this.cache.read(key, nowMs)
-    const fill = read.outcome !== 'hit'
-    this.pending.set(token(request), { key, fill })
+    const miss = read.outcome !== 'hit'
+    this.pending.set(token(request), { key, operation: 'get', outcome: miss ? 'miss' : 'hit' })
     const common = { key, ...(read.outcome === 'hit' ? { ageMs: read.ageMs } : {}) }
     return {
-      patch: { key, operation: 'read', outgoingPort: fill ? 'miss' : 'hit' },
+      patch: { key, operation: 'read', outgoingPort: miss ? 'miss' : 'hit' },
       events: read.outcome === 'expired'
         ? [{ type: 'cache-expired', status: 'ok', attributes: common }, { type: 'cache-miss', status: 'ok', attributes: common }]
         : [{ type: read.outcome === 'hit' ? 'cache-hit' : 'cache-miss', status: 'ok', attributes: common }],
@@ -63,14 +76,22 @@ class CacheRuntime implements ComponentStateRuntime {
 
   complete(request: StatefulRequest, success: boolean, _nowMs: number): ComponentDomainEvent[] {
     const pending = this.pending.get(token(request))
-    if (!success || !pending?.fill || request.outgoingPort !== 'miss') this.pending.delete(token(request))
+    if (success && pending?.operation === 'put') { this.cache.write(pending.key, _nowMs, (request.operationAction?.cache?.ttlSeconds ?? this.node.config.ttlMs / 1_000) * 1_000); this.pending.delete(token(request)); return [{ type: 'cache-written', status: 'ok', attributes: { key: pending.key } }] }
+    if (pending?.operation === 'delete') { const deleted = success && this.cache.delete(pending.key, _nowMs); this.pending.delete(token(request)); return [{ type: 'cache-deleted', status: 'ok', attributes: { key: pending.key, deleted } }] }
+    if (!success) this.pending.delete(token(request))
     return []
+  }
+
+  outcome(request: StatefulRequest) {
+    const pending = this.pending.get(token(request))
+    if (request.operationAction?.cache) this.pending.delete(token(request))
+    return pending?.outcome
   }
 
   dependencyComplete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[] {
     const pending = this.pending.get(token(request))
     this.pending.delete(token(request))
-    if (!success || !pending?.fill) return []
+    if (!success || pending?.operation !== 'get' || pending.outcome !== 'miss') return []
     const write = this.cache.write(pending.key, nowMs)
     return write.evictedKey === undefined ? [] : [{ type: 'cache-evicted', status: 'ok', attributes: { key: write.evictedKey } }]
   }

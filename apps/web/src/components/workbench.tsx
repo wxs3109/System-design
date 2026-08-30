@@ -221,6 +221,25 @@ function FaultTraceEvidence({ result }: { result: SimulationResult }) {
   )
 }
 
+function OperationExecutionMetrics({ result }: { result: SimulationResult }) {
+  const operations = result.operations ?? []
+  const actions = result.actions ?? []
+  if (operations.length === 0 && actions.length === 0) return null
+  return (
+    <section className="operation-execution" aria-label="Operation execution metrics">
+      <div className="operation-execution__heading"><strong>Operation execution</strong><span>{operations.length} operation{operations.length === 1 ? '' : 's'} · {actions.length} action{actions.length === 1 ? '' : 's'}</span></div>
+      <div className="operation-execution__tables">
+        <div className="operation-execution__table">
+          <table><caption>Operation metrics</caption><thead><tr><th>Operation</th><th>Completed</th><th>Failed</th><th>P95</th></tr></thead><tbody>{operations.map((operation) => <tr key={operation.operationId}><td><code>{operation.operationId}</code></td><td>{operation.completedRequests.toLocaleString()} / {operation.generatedRequests.toLocaleString()}</td><td>{operation.failedRequests.toLocaleString()}</td><td>{operation.latencyP95Ms.toLocaleString()} ms</td></tr>)}</tbody></table>
+        </div>
+        <div className="operation-execution__table">
+          <table><caption>Action metrics</caption><thead><tr><th>Action</th><th>Kind</th><th>Completed</th><th>Failed</th><th>Avg.</th><th>Records</th><th>Bytes</th></tr></thead><tbody>{actions.map((action) => <tr key={`${action.operationId}:${action.actionId}`}><td><code>{action.actionId}</code></td><td>{action.actionKind}</td><td>{action.completed.toLocaleString()}</td><td>{action.failed.toLocaleString()}</td><td>{action.averageDurationMs.toLocaleString()} ms</td><td>{action.recordsExamined.toLocaleString()}</td><td>{action.bytesProcessed.toLocaleString()}</td></tr>)}</tbody></table>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function ResultsPanel({ result, progress, running, nodes, onShowTraceNode, theme }: { result: SimulationResult | null; progress: SimulationProgress | null; running: boolean; nodes: Array<{ id: string; name: string }>; onShowTraceNode: (nodeId: string) => void; theme?: string | undefined }) {
   const [traceRequest, setTraceRequest] = useState<{ traceId: string; sequence: number } | null>(null)
   if (!result && running) {
@@ -240,6 +259,7 @@ function ResultsPanel({ result, progress, running, nodes, onShowTraceNode, theme
       </div>
       <div className="chart-block"><div className="block-title"><strong>Throughput over virtual time</strong><span>{result.simulatedDurationMs / 1_000}s run · shaded fault windows</span></div><MetricChart points={result.timeSeries} events={result.events} simulatedDurationMs={result.simulatedDurationMs} theme={theme} /></div>
       <div className="node-table-wrap"><table className="node-table"><thead><tr><th>Component</th><th>Util.</th><th>Avg queue</th><th>Max queue</th><th>Domain metrics</th></tr></thead><tbody>{result.nodes.map((node) => <tr key={node.nodeId}><td><strong>{node.nodeName}</strong><span>{node.nodeType}</span></td><td>{(node.utilization * 100).toFixed(1)}%</td><td>{node.averageQueueLength.toFixed(1)}</td><td>{node.maxQueueLength}</td><td><span className="domain-metrics">{formatDomainMetrics(node.details)}</span></td></tr>)}</tbody></table></div>
+      <OperationExecutionMetrics result={result} />
       <FaultTraceEvidence result={result} />
       <BottleneckExplanations result={result} onShowNode={onShowTraceNode} onShowTrace={(traceId) => setTraceRequest((current) => ({ traceId, sequence: (current?.sequence ?? 0) + 1 }))} />
       <TraceExplorer key={`${result.runId}:${traceRequest?.sequence ?? 0}`} result={result} nodes={nodes} onShowOnCanvas={onShowTraceNode} theme={theme} {...(traceRequest ? { requestedTraceId: traceRequest.traceId } : {})} />

@@ -1,6 +1,6 @@
 import type { RuntimeEvent, Scenario, SimulationResult } from '@system-design/model'
 import type { RuntimeTelemetryAggregate } from './event-sink'
-import { reduceLegacyTraces, reduceNodeMetrics, reduceSpans, reduceSummary, reduceTimeSeries } from './reducers'
+import { reduceActionMetrics, reduceLegacyTraces, reduceNodeMetrics, reduceOperationMetrics, reduceSpans, reduceSummary, reduceTimeSeries } from './reducers'
 import { round } from './math'
 
 export interface CompletedRuntime {
@@ -26,6 +26,6 @@ export const buildSimulationResult = (simulation: CompletedRuntime, scenario: Sc
   return {
     runId, scenarioId: scenario.id, seed: scenario.seed, simulatedDurationMs: scenario.simulation.durationSeconds * 1_000, wallClockDurationMs: round(wallClockDurationMs),
     summary, nodes: reduceNodeMetrics(events, scenario.nodes, aggregate), timeSeries: reduceTimeSeries(events, scenario, aggregate),
-    traces: reduceLegacyTraces(events, nodeNames, scenario.simulation.traceLimit), events, spans: reduceSpans(events), warnings,
+    traces: reduceLegacyTraces(events, nodeNames, scenario.simulation.traceLimit), events, spans: reduceSpans(events), operations: reduceOperationMetrics(events, aggregate), actions: reduceActionMetrics(events, aggregate), warnings,
   }
 }

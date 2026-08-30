@@ -18,7 +18,7 @@ const result = (runId: string, scenarioId: string, seed: string, throughput: num
     utilization: 0.75, averageQueueLength: 2, maxQueueLength: 4, details: { cacheHitRate: 0.8, consumerLag: 3 },
   }],
   timeSeries: [point(1, throughput - 1), point(2, throughput + 1)],
-  traces: [], events: [], spans: [], warnings: [],
+  operations: [], actions: [], traces: [], events: [], spans: [], warnings: [],
 })
 
 const run = (runId: string, project: ProjectFile, throughput: number): SimulationRunRecord => ({

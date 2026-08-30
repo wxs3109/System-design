@@ -100,6 +100,11 @@ export class VirtualCacheState {
     return evictedKey === undefined ? {} : { evictedKey }
   }
 
+  delete(key: string, nowMs: number) {
+    this.advance(nowMs)
+    return this.entries.delete(key)
+  }
+
   expire(nowMs: number): string[] {
     this.advance(nowMs)
     return this.removeExpired(nowMs)

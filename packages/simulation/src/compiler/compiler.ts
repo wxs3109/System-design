@@ -2,6 +2,7 @@ import { parseProjectFile, projectToScenario, scenarioSchema, type ComponentNode
 import { arePortSemanticsCompatible, componentRegistry } from '@system-design/components'
 import { getNodeBehavior } from '../components/behavior'
 import { compilePolicies, type CompiledPolicy } from '../policies/compiler'
+import { compileOperationPlans, type CompiledOperations } from './operation-plan'
 
 export type SimulationInput = Scenario | ProjectFileV2 | ProjectFile
 export interface CompiledConnection {
@@ -23,6 +24,7 @@ export interface CompiledScenario {
   outgoing: Map<string, CompiledConnection[]>
   edges: CompiledConnection[]
   policies: Map<string, CompiledPolicy[]>
+  operations: CompiledOperations
 }
 
 const legacyConnection = (edge: Connection): CompiledConnection => ({ ...edge, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
@@ -37,8 +39,9 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
   let edges: CompiledConnection[]
   let experimentId: string
   let policies = new Map<string, CompiledPolicy[]>()
+  let project: ProjectFile | undefined
   if (version === 2 || version === 3) {
-    const project = parseProjectFile(input)
+    project = parseProjectFile(input)
     const topologyNodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
     for (const edge of project.topology.edges) {
       const source = topologyNodes.get(edge.source)!
@@ -74,7 +77,8 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
     const synchronousModes = new Set(sourceEdges.filter((edge) => edge.routingMode !== 'async-publish').map((edge) => edge.routingMode))
     if (synchronousModes.size > 1) throw new Error(`Node ${source} mixes synchronous routing modes. Split the behavior into explicit components.`)
   }
-  return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies }
+  const operations = project?.schemaVersion === 3 ? compileOperationPlans(project, edges, outgoing) : { phases: [], plans: new Map(), warnings: [] }
+  return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies, operations }
 }
 
 export const compileScenario = (input: unknown): CompiledScenario => compileSimulationInput(input)

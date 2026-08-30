@@ -6,6 +6,8 @@ export interface EventInput {
   traceId?: string
   spanId?: string
   parentSpanId?: string
+  operationId?: string
+  actionId?: string
   nodeId?: string
   edgeId?: string
   attempt?: number
@@ -31,6 +33,26 @@ export interface RuntimeTelemetryAggregate {
   failedRequestsByInterval: ReadonlyMap<number, number>
   completedLatenciesByInterval: ReadonlyMap<number, readonly number[]>
   queueSnapshotsByInterval: ReadonlyMap<number, ReadonlyMap<string, number>>
+  operations: ReadonlyMap<string, OperationTelemetryAggregate>
+  actions: ReadonlyMap<string, ActionTelemetryAggregate>
+}
+
+export interface OperationTelemetryAggregate {
+  generatedRequests: number
+  completedRequests: number
+  failedRequests: number
+  completedLatencies: readonly number[]
+}
+
+export interface ActionTelemetryAggregate {
+  operationId: string
+  actionId: string
+  actionKind: string
+  completed: number
+  failed: number
+  totalDurationMs: number
+  recordsExamined: number
+  bytesProcessed: number
 }
 
 export class RuntimeEventSink {
@@ -50,6 +72,8 @@ export class RuntimeEventSink {
   private failedRequestsByInterval = new Map<number, number>()
   private completedLatenciesByInterval = new Map<number, number[]>()
   private queueSnapshotsByInterval = new Map<number, Map<string, number>>()
+  private operations = new Map<string, { generatedRequests: number; completedRequests: number; failedRequests: number; completedLatencies: number[] }>()
+  private actions = new Map<string, ActionTelemetryAggregate>()
 
   constructor(
     readonly runId: string,
@@ -64,16 +88,16 @@ export class RuntimeEventSink {
   emit(input: EventInput): RuntimeEvent | undefined {
     const requestNumber = input.requestId === undefined || !this.retainedRequestDetails ? undefined : Number(input.requestId)
     const retained = !this.retainedRequestDetails || requestNumber === undefined || !Number.isFinite(requestNumber) || requestNumber <= this.retainedRequestLimit
-    const updatesAggregate = input.type === 'request-generated'
+    const updatesAggregate = input.type === 'request-generated' || input.type === 'operation-started' || input.type === 'operation-completed'
       || input.attributes?.terminal === true
       || (input.nodeId !== undefined && input.type === 'request-queued')
       || (input.nodeId !== undefined && input.requestId !== undefined && input.spanId !== undefined
-        && ((input.type === 'request-completed' && input.durationMs !== undefined)
+        && (((input.type === 'request-completed' || input.type === 'action-completed') && input.durationMs !== undefined)
           || input.type === 'request-failed'))
     if (!retained && !updatesAggregate) return undefined
     const interval = input.attributes?.terminal === true || input.type === 'node-snapshot' ? this.intervalFor(input.timestampMs) : undefined
     if (input.attributes?.terminal === true) {
-      if (input.type === 'request-completed') {
+      if (input.type === 'request-completed' || (input.type === 'operation-completed' && input.status === 'ok')) {
         this.completedRequests += 1
         const latency = input.attributes.totalLatencyMs
         if (typeof latency === 'number') {
@@ -85,16 +109,38 @@ export class RuntimeEventSink {
           }
         }
         if (interval !== undefined) this.increment(this.completedRequestsByInterval, interval)
-      } else if (input.type === 'request-failed') {
+      } else if (input.type === 'request-failed' || input.type === 'operation-completed') {
         this.failedRequests += 1
         if (interval !== undefined) this.increment(this.failedRequestsByInterval, interval)
       }
     }
-    if (input.type === 'request-generated') this.generatedRequests += 1
+    if (input.type === 'request-generated' || input.type === 'operation-started') this.generatedRequests += 1
+    if (input.operationId && (input.type === 'operation-started' || input.type === 'operation-completed')) {
+      const operation = this.operations.get(input.operationId) ?? { generatedRequests: 0, completedRequests: 0, failedRequests: 0, completedLatencies: [] }
+      if (input.type === 'operation-started') operation.generatedRequests += 1
+      else if (input.status === 'ok') {
+        operation.completedRequests += 1
+        operation.completedLatencies.push(input.durationMs ?? Number(input.attributes?.totalLatencyMs ?? 0))
+      } else operation.failedRequests += 1
+      this.operations.set(input.operationId, operation)
+    }
+    if (input.operationId && input.actionId && input.type === 'action-completed') {
+      const key = `${input.operationId}:${input.actionId}`
+      const action = this.actions.get(key) ?? {
+        operationId: input.operationId, actionId: input.actionId, actionKind: String(input.attributes?.actionKind ?? 'unknown'),
+        completed: 0, failed: 0, totalDurationMs: 0, recordsExamined: 0, bytesProcessed: 0,
+      }
+      if (input.status === 'ok') action.completed += 1
+      else action.failed += 1
+      action.totalDurationMs += input.durationMs ?? 0
+      action.recordsExamined += Number(input.attributes?.recordsExamined ?? 0)
+      action.bytesProcessed += Number(input.attributes?.bytesProcessed ?? 0)
+      this.actions.set(key, action)
+    }
     if (input.nodeId && input.requestId && input.spanId) {
       // The runtime emits exactly one duration-bearing completion or non-terminal failure for a node span.
-      if (input.type === 'request-completed' && input.durationMs !== undefined) this.increment(this.processedRequestsByNode, input.nodeId)
-      if (input.type === 'request-failed' && input.attributes?.terminal !== true) this.increment(this.failedRequestsByNode, input.nodeId)
+      if ((input.type === 'request-completed' || input.type === 'action-completed') && input.durationMs !== undefined && input.status === 'ok') this.increment(this.processedRequestsByNode, input.nodeId)
+      if ((input.type === 'request-failed' && input.attributes?.terminal !== true) || (input.type === 'action-completed' && input.status !== 'ok')) this.increment(this.failedRequestsByNode, input.nodeId)
     }
     if (input.nodeId && input.type === 'request-queued') {
       const queueLength = Number(input.attributes?.queueLength ?? 0)
@@ -115,6 +161,8 @@ export class RuntimeEventSink {
       ...(input.traceId === undefined ? {} : { traceId: input.traceId }),
       ...(input.spanId === undefined ? {} : { spanId: input.spanId }),
       ...(input.parentSpanId === undefined ? {} : { parentSpanId: input.parentSpanId }),
+      ...(input.operationId === undefined ? {} : { operationId: input.operationId }),
+      ...(input.actionId === undefined ? {} : { actionId: input.actionId }),
       ...(input.nodeId === undefined ? {} : { nodeId: input.nodeId }),
       ...(input.edgeId === undefined ? {} : { edgeId: input.edgeId }),
       ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
@@ -144,6 +192,8 @@ export class RuntimeEventSink {
       failedRequestsByInterval: new Map(this.failedRequestsByInterval),
       completedLatenciesByInterval: new Map([...this.completedLatenciesByInterval].map(([interval, latencies]) => [interval, latencies.slice()])),
       queueSnapshotsByInterval: new Map([...this.queueSnapshotsByInterval].map(([interval, snapshots]) => [interval, new Map(snapshots)])),
+      operations: new Map([...this.operations].map(([operationId, operation]) => [operationId, { ...operation, completedLatencies: operation.completedLatencies.slice() }])),
+      actions: new Map([...this.actions].map(([key, action]) => [key, { ...action }])),
     }
   }
 

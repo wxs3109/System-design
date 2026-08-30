@@ -41,6 +41,25 @@ export interface TraceStep {
   timeMs: number
 }
 
+export interface OperationMetrics {
+  operationId: string
+  generatedRequests: number
+  completedRequests: number
+  failedRequests: number
+  latencyP95Ms: number
+}
+
+export interface ActionMetrics {
+  operationId: string
+  actionId: string
+  actionKind: string
+  completed: number
+  failed: number
+  averageDurationMs: number
+  recordsExamined: number
+  bytesProcessed: number
+}
+
 export interface SimulationResult {
   runId: string
   scenarioId: string
@@ -53,5 +72,7 @@ export interface SimulationResult {
   traces: TraceStep[]
   events: RuntimeEvent[]
   spans: TraceSpan[]
+  operations: OperationMetrics[]
+  actions: ActionMetrics[]
   warnings: string[]
 }

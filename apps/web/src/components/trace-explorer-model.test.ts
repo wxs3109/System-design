@@ -85,4 +85,23 @@ describe('trace explorer projections', () => {
       { type: 'fault-activated', offsetMs: 10, laneIndex: 1, kind: 'fault' },
     ])
   })
+
+  it('uses operation lifecycle events as the trace boundary and terminal outcome', () => {
+    const operationSpan = span({
+      traceId: 'operation-trace', requestId: '7', spanId: 'operation-trace:operation', nodeId: 'traffic',
+      operationId: 'create-order', startedAtMs: 5, endedAtMs: 45, durationMs: 40, queueDurationMs: 0, status: 'error', reason: 'queue_full',
+    })
+    const actionSpan = span({
+      traceId: 'operation-trace', requestId: '7', spanId: 'operation-trace:action:write', parentSpanId: 'operation-trace:operation',
+      nodeId: 'database', operationId: 'create-order', actionId: 'write', startedAtMs: 10, endedAtMs: 45, durationMs: 35,
+      queueDurationMs: 20, status: 'error', reason: 'queue_full',
+    })
+    const records = buildTraceRecords(result([operationSpan, actionSpan], [
+      event({ timestampMs: 5, requestId: '7', traceId: 'operation-trace', spanId: 'operation-trace:operation', nodeId: 'traffic', operationId: 'create-order', type: 'operation-started' }),
+      event({ timestampMs: 45, sequence: 1, requestId: '7', traceId: 'operation-trace', spanId: 'operation-trace:operation', nodeId: 'traffic', operationId: 'create-order', type: 'operation-completed', status: 'error', reason: 'queue_full', attributes: { terminal: true, totalLatencyMs: 40 } }),
+    ]))
+
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ traceId: 'operation-trace', requestId: '7', startedAtMs: 5, endedAtMs: 45, durationMs: 40, status: 'error', reason: 'queue_full', terminalNodeId: 'traffic' })
+  })
 })

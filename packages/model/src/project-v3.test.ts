@@ -53,4 +53,14 @@ describe('ProjectFile v3', () => {
   it('keeps empty current projects explicitly capacity-only', () => {
     expect(createEmptyProject()).toMatchObject({ schemaVersion: 3, modelingMode: 'capacity-only', definitions: { schemaVersion: 1 }, experiments: [{ operationWorkloads: [] }] })
   })
+
+  it('allows traffic and hot-key faults to target operation workloads in the same experiment', () => {
+    const fixture = createOrderSystemContractFixture()
+    fixture.experiments[0]!.faults.push({
+      id: 'operation-spike', type: 'traffic-spike', target: { kind: 'workload', id: 'order-operations' },
+      startAtSeconds: 0, durationSeconds: 1, factor: 2, enabled: true,
+    })
+    expect(projectFileV3Schema.safeParse(fixture).success).toBe(true)
+    expect(projectToScenario(fixture).faults).toContainEqual(expect.objectContaining({ id: 'operation-spike', target: { kind: 'workload', id: 'order-operations' } }))
+  })
 })

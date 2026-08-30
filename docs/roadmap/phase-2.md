@@ -132,19 +132,23 @@ Status: complete. Definitions and topology are two views over the same `ProjectF
 
 Deliverables:
 
-- [ ] compile each workload operation into a validated executable interaction plan;
-- [ ] carry operation ID, payload size, entity/data-object ID, action, key/partition value, query shape, and event identity in request context;
-- [ ] route only across edges and ports bound to the active interaction instead of broadcasting one anonymous request shape;
-- [ ] execute API-specific service cost and downstream actions;
-- [ ] execute database point lookup, indexed lookup, range access, scan, insert, update, and delete cost models against declared cardinality, selectivity, row/document size, index availability, shards, and replicas;
-- [ ] execute named cache-key and event publish/consume actions with existing cache/stream/queue primitives;
-- [ ] emit operation- and action-specific spans, events, metrics, warnings, and explanations;
-- [ ] keep all stochastic choices deterministic under project, engine, run, and seed identity;
-- [ ] clearly reject or label contract fields that remain descriptive and do not yet affect execution.
+- [x] compile each workload operation into a validated executable interaction plan;
+- [x] carry operation ID, payload size, entity/data-object ID, action, key/partition value, query shape, and event identity in request context;
+- [x] route only across edges and ports bound to the active interaction instead of broadcasting one anonymous request shape;
+- [x] execute API-specific service cost and downstream actions;
+- [x] execute database point lookup, indexed lookup, range access, scan, insert, update, and delete cost models against declared cardinality, estimated rows, row/document size, index availability, shards, and replicas;
+- [x] execute named cache-key and event publish/consume actions with existing cache/stream/queue primitives;
+- [x] emit operation- and action-specific spans, events, metrics, warnings, and explanations;
+- [x] keep all stochastic choices deterministic under project, engine, run, and seed identity;
+- [x] clearly reject or label contract fields that remain descriptive and do not yet affect execution.
 
 The database model remains an explainable system-design approximation, not a SQL optimizer or storage-engine emulator. Its formulas, supported query shapes, transaction limits, and consistency assumptions must be documented and calibrated through editable parameters.
 
 Exit criteria: changing an operation mix, removing a supporting index, increasing cardinality or payload size, introducing a hot partition key, or changing a cache path produces deterministic and directionally justified changes in latency, throughput, queueing, shard load, and traces. No order-specific or case-specific runtime branch is allowed.
+
+Status: complete. The generic compiler resolves operation workloads to versioned API/interaction plans, infers caller context from prior actions, validates synchronous versus asynchronous topology paths, and preserves capacity-only execution. The runtime executes ordered and conditional actions through real component resources, queues and faults; database costs, named cache operations, and event payloads feed operation/action telemetry. Results expose operation counts and p95 latency plus per-action duration, records examined, and bytes processed. Unsupported contract semantics produce descriptive warnings and are bounded in [Simulation model assumptions](../model-assumptions.md). P2.5 now owns the full order-system browser acceptance and comparative scenarios.
+
+Deferred integration boundary: P2.4 does not yet compose edge retry/circuit-breaker policies, async backpressure gates, or load-balancer selection into operation action paths, and action failures terminate an operation before a reserved `failure` condition can recover it. These limits are explicit in the model assumptions and must be closed before Phase 2 is considered done; they do not change the completed P2.4 contract-to-runtime vertical slice.
 
 ### P2.5 — Generic vertical acceptance: order system
 
@@ -239,7 +243,7 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 - [x] the palette follows category → variant → optional preset, with no separate preset shelf;
 - [x] ProjectFile v3 represents APIs, data models, events, interactions, and operation-aware workloads;
-- [ ] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
+- [x] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
 - [ ] the generic order-system acceptance project proves the end-to-end workflow;
 - [ ] representative systems use shared behavior variants without case-specific runtime or editor branches;
 - [ ] at least one external package installs and runs through the public SDK;
@@ -250,4 +254,4 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 
 ## 8. Immediate execution order
 
-Implement P2.3 next and commit it independently. Then complete P2.4 and P2.5 in order. Do not add Scheduler, CDN, Search Index, or new role names before the business contracts and operation-aware runtime pass the order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.
+Implement P2.5 next and commit it independently. Do not add Scheduler, CDN, Search Index, or new role names before the operation-aware runtime passes the generic order-system acceptance gate. Do not freeze a public SDK until both the domain contracts and later behavior variants have exposed the extension points it actually needs.

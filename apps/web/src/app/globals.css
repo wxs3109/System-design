@@ -310,6 +310,18 @@ button { color: inherit; }
 .node-table td strong { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node-table td span { color: var(--muted); font-size: 7px; text-transform: uppercase; }
 .node-table td .domain-metrics { display: block; min-width: 88px; color: var(--muted-bright); font-size: 7px; line-height: 1.4; text-transform: none; white-space: normal; }
+.operation-execution { clear: both; padding-top: 8px; }
+.operation-execution__heading { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+.operation-execution__heading strong { font-size: 9px; }
+.operation-execution__heading span { color: var(--muted); font-size: 8px; }
+.operation-execution__tables { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(420px, 1.2fr); gap: 8px; }
+.operation-execution__table { max-height: 150px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; }
+.operation-execution table { width: 100%; border-collapse: collapse; font-size: 8px; }
+.operation-execution caption { padding: 5px 6px; color: var(--muted-bright); background: #0e1622; font-weight: 600; text-align: left; }
+.operation-execution th { position: sticky; top: 0; padding: 5px 6px; color: var(--muted); background: var(--panel); font-weight: 600; text-align: right; white-space: nowrap; }
+.operation-execution th:first-child, .operation-execution td:first-child { text-align: left; }
+.operation-execution td { padding: 5px 6px; color: var(--muted-bright); border-top: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.operation-execution code { color: var(--cyan); font-size: 8px; }
 .warnings { clear: both; display: flex; align-items: center; gap: 6px; color: #fcd34d; font-size: 8px; padding-top: 5px; }
 .fault-evidence { clear: both; padding-top: 8px; }
 .fault-evidence__heading { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
@@ -574,6 +586,7 @@ button { color: inherit; }
   .metrics-grid, .chart-block { float: none; width: 100%; }
   .metrics-grid { padding-right: 0; grid-template-columns: repeat(2, 1fr); }
   .chart-block { margin-top: 8px; border-left: 0; border-top: 1px solid var(--border); }
+  .operation-execution__tables { grid-template-columns: 1fr; }
   .comparison-controls { grid-template-columns: 1fr; }
   .comparison-controls > svg { display: none; }
   .comparison-metrics, .comparison-plot { float: none; width: 100%; padding: 0; }

@@ -1,7 +1,7 @@
-import type { ComponentNode, NodeMetrics, RuntimeEvent, Scenario, SummaryMetrics, TimeSeriesPoint, TraceSpan, TraceStep } from '@system-design/model'
+import type { ActionMetrics, ComponentNode, NodeMetrics, OperationMetrics, RuntimeEvent, Scenario, SummaryMetrics, TimeSeriesPoint, TraceSpan, TraceStep } from '@system-design/model'
 import { percentile, round } from './math'
 
-const terminalEvents = new Set<RuntimeEvent['type']>(['request-completed', 'request-failed'])
+const terminalEvents = new Set<RuntimeEvent['type']>(['request-completed', 'request-failed', 'operation-completed'])
 
 export interface SummaryAggregate {
   generatedRequests: number
@@ -26,10 +26,10 @@ export interface TimeSeriesAggregate {
 
 export const reduceSummary = (events: readonly RuntimeEvent[], durationSeconds: number, aggregate?: SummaryAggregate): SummaryMetrics => {
   const terminal = aggregate ? [] : events.filter((event) => terminalEvents.has(event.type) && event.attributes.terminal === true)
-  const generated = aggregate?.generatedRequests ?? events.filter((event) => event.type === 'request-generated').length
-  const completed = aggregate?.completedRequests ?? terminal.filter((event) => event.type === 'request-completed').length
-  const failed = aggregate?.failedRequests ?? terminal.filter((event) => event.type === 'request-failed').length
-  const latencies = [...(aggregate?.completedLatencies ?? terminal.filter((event) => event.type === 'request-completed').map((event) => Number(event.attributes.totalLatencyMs ?? 0)))].sort((left, right) => left - right)
+  const generated = aggregate?.generatedRequests ?? events.filter((event) => event.type === 'request-generated' || event.type === 'operation-started').length
+  const completed = aggregate?.completedRequests ?? terminal.filter((event) => event.type === 'request-completed' || (event.type === 'operation-completed' && event.status === 'ok')).length
+  const failed = aggregate?.failedRequests ?? terminal.filter((event) => event.type === 'request-failed' || (event.type === 'operation-completed' && event.status !== 'ok')).length
+  const latencies = [...(aggregate?.completedLatencies ?? terminal.filter((event) => event.type === 'request-completed' || (event.type === 'operation-completed' && event.status === 'ok')).map((event) => Number(event.attributes.totalLatencyMs ?? 0)))].sort((left, right) => left - right)
   return {
     generatedRequests: generated, completedRequests: completed, failedRequests: failed, throughputPerSecond: round(completed / durationSeconds),
     errorRate: round(generated === 0 ? 0 : failed / generated), latencyP50Ms: round(percentile(latencies, 0.5)), latencyP95Ms: round(percentile(latencies, 0.95)), latencyP99Ms: round(percentile(latencies, 0.99)),
@@ -40,8 +40,8 @@ export const reduceNodeMetrics = (events: readonly RuntimeEvent[], nodes: readon
   const nodeEvents = events.filter((event) => event.nodeId === node.id)
   const snapshots = nodeEvents.filter((event) => event.type === 'node-snapshot')
   const latest = aggregate?.latestNodeSnapshotByNode.get(node.id) ?? snapshots.at(-1)
-  const completed = new Set(nodeEvents.filter((event) => event.type === 'request-completed' && event.durationMs !== undefined && event.requestId && event.spanId).map((event) => `${event.requestId}:${event.spanId}:${event.nodeId}`))
-  const failed = new Set(nodeEvents.filter((event) => event.type === 'request-failed' && event.attributes.terminal !== true && event.requestId && event.spanId).map((event) => `${event.requestId}:${event.spanId}:${event.nodeId}`))
+  const completed = new Set(nodeEvents.filter((event) => (event.type === 'request-completed' || event.type === 'action-completed') && event.status === 'ok' && event.durationMs !== undefined && event.requestId && event.spanId).map((event) => `${event.requestId}:${event.spanId}:${event.nodeId}`))
+  const failed = new Set(nodeEvents.filter((event) => ((event.type === 'request-failed' && event.attributes.terminal !== true) || (event.type === 'action-completed' && event.status !== 'ok')) && event.requestId && event.spanId).map((event) => `${event.requestId}:${event.spanId}:${event.nodeId}`))
   const details = Object.fromEntries(Object.entries(latest?.attributes ?? {}).filter(([key]) => !['queueLength', 'capacity', 'unitsInUse', 'utilization', 'averageQueueLength', 'maxQueueLength'].includes(key)))
   return {
     nodeId: node.id, nodeName: node.name, nodeType: node.type,
@@ -77,9 +77,9 @@ export const reduceTimeSeries = (events: readonly RuntimeEvent[], scenario: Scen
   for (let timeMs = interval; timeMs <= scenario.simulation.durationSeconds * 1_000; timeMs += interval) {
     const visible = events.filter((event) => event.timestampMs <= timeMs)
     const terminal = visible.filter((event) => terminalEvents.has(event.type) && event.attributes.terminal === true)
-    const completed = terminal.filter((event) => event.type === 'request-completed').length
-    const failed = terminal.filter((event) => event.type === 'request-failed').length
-    const windowLatencies = terminal.filter((event) => event.type === 'request-completed' && event.timestampMs > timeMs - interval).map((event) => Number(event.attributes.totalLatencyMs ?? 0)).sort((a, b) => a - b)
+    const completed = terminal.filter((event) => event.type === 'request-completed' || (event.type === 'operation-completed' && event.status === 'ok')).length
+    const failed = terminal.filter((event) => event.type === 'request-failed' || (event.type === 'operation-completed' && event.status !== 'ok')).length
+    const windowLatencies = terminal.filter((event) => (event.type === 'request-completed' || (event.type === 'operation-completed' && event.status === 'ok')) && event.timestampMs > timeMs - interval).map((event) => Number(event.attributes.totalLatencyMs ?? 0)).sort((a, b) => a - b)
     const latestSnapshotByNode = new Map<string, RuntimeEvent>()
     visible.filter((event) => event.type === 'node-snapshot' && event.nodeId).forEach((event) => latestSnapshotByNode.set(event.nodeId!, event))
     points.push({
@@ -97,7 +97,7 @@ export const reduceSpans = (events: readonly RuntimeEvent[]): TraceSpan[] => {
   const spans: TraceSpan[] = []
   for (const event of events) {
     if (!event.spanId || !event.traceId || !event.requestId || !event.nodeId) continue
-    if (event.type === 'attempt-started') started.set(event.spanId, event)
+    if (event.type === 'attempt-started' || event.type === 'action-started' || event.type === 'operation-started') started.set(event.spanId, event)
     if (event.type === 'request-started') {
       if (started.get(event.spanId)?.type === 'attempt-started') queueDurations.set(event.spanId, event.queueDurationMs ?? 0)
       else started.set(event.spanId, event)
@@ -106,11 +106,12 @@ export const reduceSpans = (events: readonly RuntimeEvent[]): TraceSpan[] => {
     if (!start) continue
     const isAttempt = start.type === 'attempt-started'
     const attemptEnded = isAttempt && (event.type === 'timeout-fired' || event.type === 'dependency-returned' || (event.type === 'request-failed' && event.reason === 'circuit_open'))
-    const requestEnded = !isAttempt && (event.type === 'request-completed' || event.type === 'request-failed')
+    const requestEnded = !isAttempt && (event.type === 'request-completed' || event.type === 'request-failed' || event.type === 'action-completed' || event.type === 'operation-completed')
     if (attemptEnded || requestEnded) {
       spans.push({
         runId: event.runId, traceId: event.traceId, spanId: event.spanId, ...(event.parentSpanId === undefined ? {} : { parentSpanId: event.parentSpanId }),
         requestId: event.requestId, nodeId: event.nodeId, ...(event.edgeId === undefined ? {} : { edgeId: event.edgeId }), attempt: event.attempt,
+        ...(event.operationId === undefined ? {} : { operationId: event.operationId }), ...(event.actionId === undefined ? {} : { actionId: event.actionId }),
         startedAtMs: start.timestampMs, endedAtMs: event.timestampMs, durationMs: round(event.timestampMs - start.timestampMs),
         queueDurationMs: isAttempt ? queueDurations.get(event.spanId) ?? 0 : start.queueDurationMs ?? 0, status: event.status === 'ok' ? 'ok' : 'error', reason: event.reason,
       })
@@ -124,3 +125,40 @@ export const reduceSpans = (events: readonly RuntimeEvent[]): TraceSpan[] => {
 export const reduceLegacyTraces = (events: readonly RuntimeEvent[], nodeNames: ReadonlyMap<string, string>, traceLimit: number): TraceStep[] => events
   .filter((event) => event.requestId && Number(event.requestId) <= traceLimit && event.nodeId && ['request-generated', 'request-queued', 'request-started', 'request-completed', 'request-failed'].includes(event.type))
   .map((event) => ({ requestId: Number(event.requestId), nodeId: event.nodeId!, nodeName: nodeNames.get(event.nodeId!) ?? event.nodeId!, event: event.type.replace('request-', '') as TraceStep['event'], timeMs: event.timestampMs }))
+
+export const reduceOperationMetrics = (events: readonly RuntimeEvent[], aggregate?: Pick<import('./event-sink').RuntimeTelemetryAggregate, 'operations'>): OperationMetrics[] => {
+  if (aggregate) return [...aggregate.operations].map(([operationId, value]) => ({
+    operationId, generatedRequests: value.generatedRequests, completedRequests: value.completedRequests, failedRequests: value.failedRequests,
+    latencyP95Ms: round(percentile([...value.completedLatencies].sort((left, right) => left - right), 0.95)),
+  }))
+  const byOperation = new Map<string, { generated: number; completed: number; failed: number; latencies: number[] }>()
+  for (const event of events) {
+    if (!event.operationId || (event.type !== 'operation-started' && event.type !== 'operation-completed')) continue
+    const value = byOperation.get(event.operationId) ?? { generated: 0, completed: 0, failed: 0, latencies: [] }
+    if (event.type === 'operation-started') value.generated += 1
+    else if (event.status === 'ok') { value.completed += 1; value.latencies.push(event.durationMs ?? Number(event.attributes.totalLatencyMs ?? 0)) }
+    else value.failed += 1
+    byOperation.set(event.operationId, value)
+  }
+  return [...byOperation].map(([operationId, value]) => ({ operationId, generatedRequests: value.generated, completedRequests: value.completed, failedRequests: value.failed, latencyP95Ms: round(percentile(value.latencies.sort((a, b) => a - b), 0.95)) }))
+}
+
+export const reduceActionMetrics = (events: readonly RuntimeEvent[], aggregate?: Pick<import('./event-sink').RuntimeTelemetryAggregate, 'actions'>): ActionMetrics[] => {
+  if (aggregate) return [...aggregate.actions.values()].map((value) => ({
+    operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed,
+    averageDurationMs: round(value.totalDurationMs / Math.max(1, value.completed + value.failed)), recordsExamined: value.recordsExamined, bytesProcessed: value.bytesProcessed,
+  }))
+  const byAction = new Map<string, { operationId: string; actionId: string; actionKind: string; completed: number; failed: number; duration: number; records: number; bytes: number }>()
+  for (const event of events) {
+    if (event.type !== 'action-completed' || !event.operationId || !event.actionId) continue
+    const key = `${event.operationId}:${event.actionId}`
+    const value = byAction.get(key) ?? { operationId: event.operationId, actionId: event.actionId, actionKind: String(event.attributes.actionKind ?? 'unknown'), completed: 0, failed: 0, duration: 0, records: 0, bytes: 0 }
+    if (event.status === 'ok') value.completed += 1
+    else value.failed += 1
+    value.duration += event.durationMs ?? 0
+    value.records += Number(event.attributes.recordsExamined ?? 0)
+    value.bytes += Number(event.attributes.bytesProcessed ?? 0)
+    byAction.set(key, value)
+  }
+  return [...byAction.values()].map((value) => ({ operationId: value.operationId, actionId: value.actionId, actionKind: value.actionKind, completed: value.completed, failed: value.failed, averageDurationMs: round(value.duration / Math.max(1, value.completed + value.failed)), recordsExamined: value.records, bytesProcessed: value.bytes }))
+}

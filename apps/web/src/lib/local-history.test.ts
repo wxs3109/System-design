@@ -15,7 +15,7 @@ const createRepository = () => {
 const resultFor = (runId: string, projectId: string): SimulationResult => ({
   runId, scenarioId: projectId, seed: 'system-design', simulatedDurationMs: 1_000, wallClockDurationMs: 1,
   summary: { generatedRequests: 1, completedRequests: 1, failedRequests: 0, throughputPerSecond: 1, errorRate: 0, latencyP50Ms: 1, latencyP95Ms: 1, latencyP99Ms: 1 },
-  nodes: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
+  nodes: [], operations: [], actions: [], timeSeries: [], traces: [], events: [], spans: [], warnings: [],
 })
 
 const asProjectV2 = (project: ReturnType<typeof createEmptyProject>): ProjectFileV2 => ({

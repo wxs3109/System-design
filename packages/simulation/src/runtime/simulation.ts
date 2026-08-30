@@ -2,6 +2,7 @@ import { Entity, Queue as SimQueue, Simulation } from 'simscript'
 import seedrandom from 'seedrandom'
 import type { ComponentNode, Fault, FaultTarget, FaultType, ReasonCode, RuntimeEvent, Scenario, Workload } from '@system-design/model'
 import type { CompiledConnection, CompiledScenario } from '../compiler/compiler'
+import type { CompiledOperationAction, CompiledOperationPhase, CompiledOperationPlan } from '../compiler/operation-plan'
 import { getNodeBehavior } from '../components/behavior'
 import { createComponentStateRuntime, type ComponentDomainEvent } from '../components/data-runtime'
 import { applyCapacityFaults, applyLatencyFaults, composeLossProbability, faultEndsAtMs, faultReason, faultStartsAtMs, resolveActiveFaults } from '../faults/resolver'
@@ -11,6 +12,7 @@ import { BackpressureGate, TokenBucket } from '../policies/delivery'
 import { policiesFor } from '../policies/compiler'
 import { CircuitBreaker, retryDelayMs, type CircuitCompletionResult, type CircuitPermit, type CircuitTransition, type ReliabilityCall } from '../policies/reliability'
 import type { LoadBalancerRuntimeState, ReliabilityCompletionContext, RequestGroup, RequestState, RuntimeNode } from './types'
+import { actionAttributes, estimateDataAccessCost, sampleKey, sampleValueBytes } from '../components/operation-cost'
 
 export class SystemDesignSimulation extends Simulation {
   readonly scenario: Scenario
@@ -65,8 +67,20 @@ export class SystemDesignSimulation extends Simulation {
     for (const fault of this.scenario.faults) {
       if (fault.enabled) this.activate(new FaultLifecycle(fault))
     }
-    for (const workload of this.scenario.workloads) this.activate(new WorkloadGenerator(workload))
+    const operationSources = new Set(this.compiled.operations.phases.map((phase) => phase.sourceNodeId))
+    for (const workload of this.scenario.workloads) if (!operationSources.has(workload.sourceNodeId)) this.activate(new WorkloadGenerator(workload))
+    for (const phase of this.compiled.operations.phases) this.activate(new OperationWorkloadGenerator(phase))
     this.activate(new MetricsSampler())
+  }
+
+  emitOperationEvent(request: RequestState, type: 'operation-started' | 'operation-completed', status: 'pending' | 'ok' | 'error', extra: { durationMs?: number; reason?: ReasonCode } = {}) {
+    const plan = request.operationPlan
+    if (!plan) return
+    this.eventSink.emit({
+      timestampMs: round(this.timeNow), requestId: String(request.id), traceId: request.traceId, spanId: request.spanId, nodeId: plan.sourceNodeId,
+      operationId: plan.operation.operationId, type, status, bytes: request.bytes, ...extra,
+      attributes: { terminal: type === 'operation-completed', interactionId: plan.interactionId, apiId: plan.operation.apiId, ...(extra.durationMs === undefined ? {} : { totalLatencyMs: extra.durationMs }) },
+    })
   }
 
   emitRequestEvent(request: RequestState, node: ComponentNode, type: 'request-generated' | 'request-arrived' | 'request-queued' | 'request-started' | 'request-completed' | 'request-failed', status: 'pending' | 'ok' | 'error' | 'rejected', extra: { edgeId?: string; durationMs?: number; queueDurationMs?: number; reason?: ReasonCode; attributes?: Record<string, string | number | boolean> } = {}) {
@@ -259,6 +273,204 @@ class WorkloadGenerator extends Entity<SystemDesignSimulation> {
       const delay = workload.pattern === 'constant' ? interval : -Math.log(Math.max(Number.EPSILON, 1 - simulation.random())) * interval
       await this.delay(delay)
     }
+  }
+}
+
+const weightedPlan = (phase: CompiledOperationPhase, random: () => number) => {
+  const total = phase.plans.reduce((sum, entry) => sum + entry.weight, 0)
+  let choice = random() * total
+  for (const entry of phase.plans) { choice -= entry.weight; if (choice <= 0) return entry.plan }
+  return phase.plans.at(-1)!.plan
+}
+
+class OperationWorkloadGenerator extends Entity<SystemDesignSimulation> {
+  constructor(private readonly phase: CompiledOperationPhase) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const phase = this.phase
+    const startsAtMs = phase.startAtSeconds * 1_000
+    const endsAtMs = Math.min(simulation.scenario.simulation.durationSeconds * 1_000, (phase.startAtSeconds + phase.durationSeconds) * 1_000)
+    if (startsAtMs > simulation.timeNow) await this.delay(startsAtMs - simulation.timeNow)
+    while (simulation.timeNow < endsAtMs && simulation.generated < simulation.scenario.simulation.maxRequests) {
+      simulation.generated += 1
+      simulation.requestId += 1
+      const plan = weightedPlan(phase, simulation.random)
+      const traceId = `trace-${simulation.requestId}`
+      const bytes = plan.requestBytes
+      const hotKeyFaults = simulation.activeFaults('workload', phase.workloadId, 'hot-key')
+      const hotKeyDistribution = hotKeyFaults.length === 0 ? plan.keyDistribution : {
+        kind: 'hotspot' as const, keySpaceSize: plan.keyDistribution?.keySpaceSize ?? 1_000_000, hotKeyCount: 1,
+        hotTrafficFraction: 1 - hotKeyFaults.reduce((remaining, fault) => remaining * (1 - (fault.factor ?? 0.8)), 1),
+      }
+      const request: RequestState = {
+        id: simulation.requestId, createdAtMs: simulation.timeNow, bytes, payloadBytes: bytes, hops: 0, traceId, spanId: `${traceId}:operation`,
+        operationPlan: plan, operationId: plan.operation.operationId, key: sampleKey(hotKeyDistribution, simulation.random, simulation.requestId),
+      }
+      simulation.emitOperationEvent(request, 'operation-started', 'pending')
+      simulation.activate(new OperationExecution(request, plan))
+      const trafficMultiplier = simulation.activeFaults('workload', phase.workloadId, 'traffic-spike').reduce((value, fault) => value * (fault.factor ?? 3), 1)
+      const interval = 1_000 / (phase.requestsPerSecond * trafficMultiplier)
+      const delay = phase.pattern === 'constant' ? interval : -Math.log(Math.max(Number.EPSILON, 1 - simulation.random())) * interval
+      await this.delay(delay)
+    }
+  }
+}
+
+type ActionOutcome = 'success' | 'failure' | 'cache-hit' | 'cache-miss'
+
+class OperationExecution extends Entity<SystemDesignSimulation> {
+  constructor(private readonly request: RequestState, private readonly plan: CompiledOperationPlan) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const outcomes = new Map<string, ActionOutcome>()
+    for (const action of this.plan.actions) {
+      const dependenciesSucceeded = action.dependsOn.every((dependency) => {
+        const outcome = outcomes.get(dependency)
+        return outcome !== undefined && outcome !== 'failure'
+      })
+      const conditionSatisfied = !action.condition || outcomes.get(action.condition.actionId) === action.condition.outcome
+      if (!dependenciesSucceeded || !conditionSatisfied) {
+        simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: `${this.request.traceId}:action:${action.id}`, parentSpanId: this.request.spanId, nodeId: action.nodeId, operationId: this.plan.operation.operationId, actionId: action.id, type: 'action-skipped', status: 'cancelled', attributes: actionAttributes(action) })
+        outcomes.set(action.id, 'failure')
+        continue
+      }
+      const execution = new OperationActionExecution(this.request, this.plan, action)
+      if (action.kind === 'event-publish' || action.kind === 'event-consume') {
+        simulation.activate(execution)
+        outcomes.set(action.id, 'success')
+        continue
+      }
+      await simulation.activate(execution)
+      outcomes.set(action.id, execution.outcome)
+      if (execution.outcome === 'failure') {
+        simulation.failed += 1
+        simulation.emitOperationEvent(this.request, 'operation-completed', 'error', { durationMs: round(simulation.timeNow - this.request.createdAtMs), reason: execution.reason })
+        return
+      }
+    }
+    simulation.completed += 1
+    simulation.emitOperationEvent(this.request, 'operation-completed', 'ok', { durationMs: round(simulation.timeNow - this.request.createdAtMs) })
+  }
+}
+
+class OperationActionExecution extends Entity<SystemDesignSimulation> {
+  outcome: ActionOutcome = 'failure'
+  reason: ReasonCode = 'intrinsic_error'
+
+  constructor(private readonly root: RequestState, private readonly plan: CompiledOperationPlan, private readonly action: CompiledOperationAction) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const spanId = `${this.root.traceId}:action:${this.action.id}`
+    const runtime = simulation.runtimes.get(this.action.nodeId)
+    const startedAtMs = simulation.timeNow
+    const attributes = actionAttributes(this.action)
+    simulation.eventSink.emit({ timestampMs: round(startedAtMs), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: this.action.nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'action-started', status: 'pending', attributes })
+    if (!runtime) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
+    for (const edgeId of this.action.edgeIds) {
+      const edge = simulation.compiled.edges.find((candidate) => candidate.id === edgeId)
+      if (!edge) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.source, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-started', status: 'pending', bytes: this.root.bytes, attributes })
+      const edgeFailure = simulation.activeFaults('edge', edgeId, 'region-outage').length > 0 ? 'region_outage' as const
+        : (() => { const probability = composeLossProbability(simulation.activeFaults('edge', edgeId, 'packet-loss')); return probability > 0 && simulation.random() < probability ? 'packet_loss' as const : undefined })()
+      if (edgeFailure) {
+        simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.target, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-returned', status: 'error', reason: edgeFailure, durationMs: round(simulation.timeNow - startedAtMs), bytes: this.root.bytes, attributes })
+        this.finish(false, edgeFailure, startedAtMs, attributes); return
+      }
+      const edgeLatency = applyLatencyFaults(0, simulation.activeFaults('edge', edgeId, 'latency-spike'))
+      if (edgeLatency > 0) await this.delay(edgeLatency)
+      if (edge.target !== this.action.nodeId) {
+        const transit = await this.processNode(edge.target, { ...this.root, incomingEdgeId: edgeId, bytes: this.root.bytes }, attributes, false)
+        if (!transit.success) { this.finish(false, transit.reason, startedAtMs, attributes); return }
+      }
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.target, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-returned', status: 'ok', durationMs: round(simulation.timeNow - startedAtMs), bytes: this.root.bytes, attributes })
+    }
+    const request: RequestState = {
+      ...this.root, spanId, parentSpanId: this.root.spanId, operationAction: this.action, actionId: this.action.id,
+      ...(this.action.edgeIds.length === 0 ? {} : { incomingEdgeId: this.action.edgeIds[this.action.edgeIds.length - 1]! }),
+      bytes: this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.action.requestBytes ?? this.root.bytes,
+      ...(this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.root.payloadBytes) === undefined ? {} : { payloadBytes: this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.root.payloadBytes },
+      ...(this.action.data === undefined ? {} : { entityId: this.action.data.objectId, queryShape: this.action.data.operation, operation: ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'write' as const : 'read' as const }),
+      ...(this.action.event === undefined ? {} : { eventId: this.action.event.eventId }),
+    }
+    const sampledValueBytes = sampleValueBytes(this.plan.valueSizeDistribution, request.bytes, simulation.random)
+    if (this.action.data || this.action.cache || this.action.event) request.bytes = sampledValueBytes
+    const payloadCostMs = (this.action.data || this.action.cache || this.action.event) ? sampledValueBytes / 262_144 : 0
+    const domainDecision = runtime.state?.begin(request, simulation.timeNow, simulation.random)
+    const domainRequest = domainDecision?.patch ? { ...request, ...domainDecision.patch } : request
+    for (const event of domainDecision?.events ?? []) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+    const final = await this.processNode(runtime.node.id, domainRequest, attributes, true)
+    if (!final.success) {
+      runtime.state?.complete(domainRequest, false, simulation.timeNow)
+      runtime.state?.outcome?.(domainRequest)
+      this.finish(false, final.reason, startedAtMs, attributes); return
+    }
+    if (payloadCostMs > 0) await this.delay(payloadCostMs)
+    let dataCost: ReturnType<typeof estimateDataAccessCost> | undefined
+    if (this.action.data && runtime.node.type === 'database') {
+      dataCost = estimateDataAccessCost(this.action.data, runtime.node.config.queryTimeMs)
+    }
+    const domainEvents = runtime.state?.complete(domainRequest, true, simulation.timeNow) ?? []
+    for (const event of this.action.data ? domainEvents.filter((candidate) => candidate.type !== 'database-read' && candidate.type !== 'database-written') : domainEvents) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+    if (this.action.data) {
+      const type = ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'database-written' as const : 'database-read' as const
+      const routeEvent = domainEvents.find((event) => event.type === type)
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type, status: 'ok', ...(dataCost?.bytesProcessed === undefined ? {} : { bytes: dataCost.bytesProcessed }), attributes: { ...attributes, ...(routeEvent?.attributes ?? {}), recordsExamined: dataCost?.recordsExamined ?? 0, bytesProcessed: dataCost?.bytesProcessed ?? 0, explanation: dataCost?.explanation ?? '' } })
+    }
+    if (this.action.event) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: this.action.event.operation === 'publish' ? 'message-published' : 'message-consumed', status: 'ok', bytes: this.action.event.estimatedPayloadBytes, attributes })
+    const cacheOutcome = runtime.state?.outcome?.(domainRequest)
+    if (this.action.responseBytes !== undefined) await this.delay(this.action.responseBytes / 262_144)
+    this.outcome = cacheOutcome === 'hit' ? 'cache-hit' : cacheOutcome === 'miss' ? 'cache-miss' : 'success'
+    this.reason = 'none'
+    this.finish(true, 'none', startedAtMs, { ...attributes, ...(dataCost ? { recordsExamined: dataCost.recordsExamined, bytesProcessed: dataCost.bytesProcessed, explanation: dataCost.explanation } : {}) })
+  }
+
+  private async processNode(nodeId: string, request: RequestState, attributes: Record<string, string | number | boolean>, finalNode: boolean): Promise<{ success: true; duration: number } | { success: false; reason: ReasonCode }> {
+    const simulation = this.simulation
+    const runtime = simulation.runtimes.get(nodeId)
+    if (!runtime || runtime.node.type === 'traffic') return runtime ? { success: true, duration: 0 } : { success: false, reason: 'missing_node' }
+    const rateLimit = simulation.rateLimits.get(nodeId)
+    if (rateLimit) {
+      const accepted = rateLimit.admit(simulation.timeNow)
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: accepted ? 'rate-limit-accepted' : 'rate-limit-rejected', status: accepted ? 'ok' : 'rejected', reason: accepted ? 'none' : 'rate_limited', attributes: { ...attributes, tokensRemaining: rateLimit.available } })
+      if (!accepted) { runtime.failed += 1; runtime.rejected += 1; return { success: false, reason: 'rate_limited' } }
+    }
+    const fault = simulation.failureReason(runtime.node, request)
+    if (fault) { runtime.failed += 1; return { success: false, reason: fault } }
+    const effectiveCapacity = simulation.effectiveCapacity(runtime.node)
+    runtime.resource.capacity = effectiveCapacity
+    if (runtime.resource.unitsInUse >= effectiveCapacity && runtime.waiting.pop >= getNodeBehavior(runtime.node).maximumWaiting(runtime.node)) {
+      runtime.failed += 1; runtime.rejected += 1; return { success: false, reason: 'queue_full' }
+    }
+    if (runtime.resource.unitsInUse >= effectiveCapacity) {
+      this.enterQueueImmediately(runtime.waiting); runtime.maxWaiting = Math.max(runtime.maxWaiting, runtime.waiting.pop)
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'request-queued', status: 'pending', attributes: { ...attributes, queueLength: runtime.waiting.pop } })
+    }
+    await this.enterQueue(runtime.resource)
+    if (runtime.waiting.items.has(this)) this.leaveQueue(runtime.waiting)
+    runtime.admitted += 1
+    const rawDuration = finalNode && this.action.data && runtime.node.type === 'database'
+      ? estimateDataAccessCost(this.action.data, runtime.node.config.queryTimeMs).serviceTimeMs
+      : simulation.serviceTime(runtime.node as Exclude<ComponentNode, { type: 'traffic' }>, request)
+    const incomingEdgeId = request.incomingEdgeId
+    const timeout = incomingEdgeId ? policiesFor(simulation.compiled.policies, 'edge', incomingEdgeId, 'timeout')[0] : undefined
+    const duration = timeout ? Math.min(rawDuration, timeout.config.timeoutMs) : rawDuration
+    await this.delay(duration)
+    this.leaveQueue(runtime.resource)
+    runtime.processed += 1
+    if (timeout && rawDuration > timeout.config.timeoutMs) { runtime.failed += 1; return { success: false, reason: 'timeout' } }
+    const failure = simulation.failureReason(runtime.node, request) ?? (simulation.random() < getNodeBehavior(runtime.node).intrinsicErrorRate(runtime.node) ? 'intrinsic_error' as const : undefined)
+    if (failure) { runtime.failed += 1; return { success: false, reason: failure } }
+    return { success: true, duration }
+  }
+
+  private finish(success: boolean, reason: ReasonCode, startedAtMs: number, attributes: Record<string, string | number | boolean>) {
+    const simulation = this.simulation
+    this.outcome = success ? this.outcome : 'failure'
+    this.reason = reason
+    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId: this.action.nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'action-completed', status: success ? 'ok' : 'error', durationMs: round(simulation.timeNow - startedAtMs), reason, attributes })
   }
 }
 

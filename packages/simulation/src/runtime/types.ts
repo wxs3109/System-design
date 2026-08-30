@@ -3,6 +3,7 @@ import type { ComponentNode, ReasonCode } from '@system-design/model'
 import type { RoutingMode } from '@system-design/model'
 import type { ReliabilityAttempt, ReliabilityCall } from '../policies/reliability'
 import type { ComponentStateRuntime } from '../components/data-runtime'
+import type { CompiledOperationAction, CompiledOperationPlan } from '../compiler/operation-plan'
 
 export interface RequestState {
   id: number
@@ -29,6 +30,14 @@ export interface RequestState {
   resumeNodeId?: string
   resumeOutgoingPort?: string
   resumeRequestSpanId?: string
+  operationPlan?: CompiledOperationPlan
+  operationAction?: CompiledOperationAction
+  operationId?: string
+  actionId?: string
+  payloadBytes?: number
+  entityId?: string
+  queryShape?: string
+  eventId?: string
 }
 
 export interface RequestGroup {

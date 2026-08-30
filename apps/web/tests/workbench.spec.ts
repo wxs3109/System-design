@@ -198,6 +198,21 @@ test('identifies an imported ProjectFile v3 with business contracts', async ({ p
   await expect(page.getByText('6 components')).toBeVisible()
 })
 
+test('runs an operation workload and exposes operation and action execution metrics', async ({ page }) => {
+  const fixture = createOrderSystemContractFixture()
+  fixture.experiments[0]!.operationWorkloads[0]!.phases = [{ id: 'acceptance', startAtSeconds: 0, durationSeconds: 1, requestsPerSecond: 2, pattern: 'constant' }]
+  fixture.experiments[0]!.simulation = { durationSeconds: 1, sampleIntervalMs: 500, maxRequests: 10, traceLimit: 10, maxHops: 64 }
+  await page.goto('/')
+  await page.locator('input[type=file]').setInputFiles({ name: 'operation-aware.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) })
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+
+  const execution = page.getByRole('region', { name: 'Operation execution metrics' })
+  await expect(execution).toBeVisible({ timeout: 15_000 })
+  await expect(execution.getByRole('table', { name: 'Operation metrics' }).getByText('create-order', { exact: true })).toBeVisible()
+  await expect(execution.getByRole('table', { name: 'Action metrics' }).getByText('write-order')).toBeVisible()
+  await expect(execution.getByRole('table', { name: 'Action metrics' }).getByText('data-access')).toBeVisible()
+})
+
 test('edits business definitions in one ProjectFile with inline validation, undo and reload persistence', async ({ page }) => {
   await page.goto('/')
   const fixture = createOrderSystemContractFixture()
