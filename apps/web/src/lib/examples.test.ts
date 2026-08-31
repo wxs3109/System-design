@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { projectFileV3Schema } from '@system-design/model'
 import { runSimulation } from '@system-design/simulation'
-import { createCloudDriveDeliveryExample, createCollaborativeEditingExample, createIncidentFanOutExample, createLogSearchExample, createOrderEventFanOutExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from './examples'
+import { createCloudDriveDeliveryExample, createCollaborativeEditingExample, createIncidentFanOutExample, createLogSearchExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from './examples'
 
 describe('CDN examples', () => {
   it.each([
@@ -188,5 +188,44 @@ describe('Realtime Gateway examples', () => {
     const editingDetails = editing.nodes.find((node) => node.nodeId === 'editing-realtime-gateway')?.details
     expect(Number(editingDetails?.realtimeDroppedCopies)).toBeGreaterThan(0)
     expect(Number(editingDetails?.realtimeOverflowDisconnects)).toBeGreaterThan(0)
+  })
+})
+
+describe('Workflow examples', () => {
+  it.each([
+    ['payment checkout', createPaymentCheckoutWorkflowExample, 'checkout-coordinator', 3, 'checkout:{key}', false],
+    ['order fulfillment', createOrderFulfillmentWorkflowExample, 'fulfillment-coordinator', 4, 'fulfillment:{key}', true],
+  ] as const)('provides a valid, executable %s project', async (_name, createExample, coordinatorId, stepCount, keyPattern, shouldCompensate) => {
+    const project = createExample()
+    expect(projectFileV3Schema.safeParse(project).success).toBe(true)
+    expect(project.modelingMode).toBe('business-aware')
+    expect(project.definitions.workflows).toHaveLength(1)
+    const workflow = project.topology.nodes.find((node) => node.type === 'workflow')
+    expect(workflow?.id).toBe(coordinatorId)
+    expect(project.definitions.workflows[0]?.steps).toHaveLength(stepCount)
+    expect(project.definitions.interactions[0]?.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'workflow', nodeId: coordinatorId, idempotencyKeyPattern: keyPattern }),
+    ]))
+
+    const result = await runSimulation(project, `${project.id}-example`)
+    const details = result.nodes.find((node) => node.nodeId === coordinatorId)?.details
+    expect(Number(details?.workflowStartedInstances)).toBeGreaterThan(0)
+    expect(Number(details?.workflowStepCheckpoints)).toBeGreaterThan(0)
+    expect(Number(details?.workflowCompensatedInstances) > 0).toBe(shouldCompensate)
+    expect(result.events.some((event) => event.type === 'workflow-instance-started' && event.nodeId === coordinatorId)).toBe(true)
+  })
+
+  it('uses distinct payment and fulfillment system shapes instead of relabeling one project', () => {
+    const checkout = createPaymentCheckoutWorkflowExample()
+    const fulfillment = createOrderFulfillmentWorkflowExample()
+    const checkoutTerminal = checkout.topology.nodes.find((node) => node.id === 'confirmation-service')
+    const fulfillmentTerminal = fulfillment.topology.nodes.find((node) => node.id === 'notification-service')
+    if (checkoutTerminal?.type !== 'service' || fulfillmentTerminal?.type !== 'service') throw new Error('Expected terminal Service nodes.')
+    expect(checkoutTerminal.config.errorRate).toBe(0)
+    expect(fulfillmentTerminal.config.errorRate).toBe(1)
+    expect(checkout.topology.nodes).toHaveLength(6)
+    expect(fulfillment.topology.nodes).toHaveLength(7)
+    expect(checkout.definitions.workflows[0]?.steps).toHaveLength(3)
+    expect(fulfillment.definitions.workflows[0]?.steps).toHaveLength(4)
   })
 })

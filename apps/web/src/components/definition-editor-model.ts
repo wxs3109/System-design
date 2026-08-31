@@ -8,10 +8,11 @@ import {
   type JsonSchemaDocument,
   type OperationWorkload,
   type ProjectFile,
+  type WorkflowDefinition,
 } from '@system-design/model'
-export type DefinitionKind = 'jsonSchemas' | 'apis' | 'dataModels' | 'events' | 'cacheKeys' | 'interactions' | 'operationWorkloads'
+export type DefinitionKind = 'jsonSchemas' | 'apis' | 'dataModels' | 'events' | 'cacheKeys' | 'workflows' | 'interactions' | 'operationWorkloads'
 export type DataModelKind = DataModel['kind']
-export type DefinitionResource = JsonSchemaDocument | ApiDefinition | DataModel | EventDefinition | CacheKeyDefinition | InteractionDefinition | OperationWorkload
+export type DefinitionResource = JsonSchemaDocument | ApiDefinition | DataModel | EventDefinition | CacheKeyDefinition | WorkflowDefinition | InteractionDefinition | OperationWorkload
 
 export interface DefinitionSelection {
   kind: DefinitionKind
@@ -30,6 +31,7 @@ export const definitionGroups: ReadonlyArray<{ kind: DefinitionKind; label: stri
   { kind: 'dataModels', label: 'Data Models', emptyLabel: 'No data models' },
   { kind: 'events', label: 'Events', emptyLabel: 'No events' },
   { kind: 'cacheKeys', label: 'Cache Keys', emptyLabel: 'No cache keys' },
+  { kind: 'workflows', label: 'Workflows', emptyLabel: 'No workflows' },
   { kind: 'interactions', label: 'Interactions', emptyLabel: 'No interactions' },
   { kind: 'operationWorkloads', label: 'Operation Workloads', emptyLabel: 'No operation workloads' },
 ]
@@ -47,6 +49,7 @@ const resourceDetail = (kind: DefinitionKind, resource: DefinitionResource) => {
   }
   if (kind === 'events') return (resource as EventDefinition).delivery
   if (kind === 'cacheKeys') return (resource as CacheKeyDefinition).pattern
+  if (kind === 'workflows') return `${(resource as WorkflowDefinition).steps.length} steps`
   if (kind === 'interactions') return `${(resource as InteractionDefinition).actions.length} actions`
   if (kind === 'operationWorkloads') return `${(resource as OperationWorkload).operationMix.length} operation mix entries`
   return `v${(resource as JsonSchemaDocument).version}`
@@ -87,6 +90,7 @@ export const replaceDefinitionResource = (project: ProjectFile, selection: Defin
   else if (selection.kind === 'dataModels') definitions.dataModels = replaceInArray(definitions.dataModels, selection, replacement)
   else if (selection.kind === 'events') definitions.events = replaceInArray(definitions.events, selection, replacement)
   else if (selection.kind === 'cacheKeys') definitions.cacheKeys = replaceInArray(definitions.cacheKeys, selection, replacement)
+  else if (selection.kind === 'workflows') definitions.workflows = replaceInArray(definitions.workflows, selection, replacement)
   else definitions.interactions = replaceInArray(definitions.interactions, selection, replacement)
   return { ...project, definitions }
 }
@@ -162,6 +166,18 @@ export const createDefinitionResource = (project: ProjectFile, kind: DefinitionK
     const id = uniqueId('cache-key', allResourceIds(project, kind))
     return { id, version: 1, name: 'New cache key', pattern: 'resource:{id}', estimatedValueBytes: 512 }
   }
+  if (kind === 'workflows') {
+    const target = requireFirst(services, 'Add a Service component before defining a workflow.')
+    const owner = requireFirst(project.topology.nodes.filter((node) => node.type === 'workflow'), 'Add a Workflow component before defining a workflow.')
+    const id = uniqueId('workflow', allResourceIds(project, kind))
+    return {
+      id, version: 1, name: 'New workflow', ownerNodeId: owner.id,
+      steps: [{
+        id: 'step-1', name: 'First step', targetNodeId: target.id, timeoutMs: 1_000,
+        retry: { maxAttempts: 3, backoff: 'exponential', baseDelayMs: 50, maxDelayMs: 2_000, jitterRatio: 0 },
+      }],
+    }
+  }
   if (kind === 'interactions') {
     const api = requireFirst(project.definitions.apis, 'Add an API before defining an interaction.')
     const operation = requireFirst(api.operations, 'The selected API must contain an operation.')
@@ -207,6 +223,7 @@ export const referencedNodeIds = (resource: DefinitionResource): string[] => {
   if ('ownerNodeId' in resource) ids.push(resource.ownerNodeId)
   if ('producerNodeId' in resource) ids.push(resource.producerNodeId, ...resource.consumerNodeIds)
   if ('sourceNodeId' in resource && !('actions' in resource)) ids.push(resource.sourceNodeId)
+  if ('steps' in resource) resource.steps.forEach((step) => { ids.push(step.targetNodeId); if (step.compensation) ids.push(step.compensation.targetNodeId) })
   if ('actions' in resource) resource.actions.forEach((action) => {
     if ('sourceNodeId' in action) ids.push(action.sourceNodeId)
     if ('targetNodeId' in action) ids.push(action.targetNodeId)

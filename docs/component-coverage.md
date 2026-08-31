@@ -20,13 +20,14 @@ Project contracts are not component variants. Defining an Orders table once and 
 
 ## Shipped executable behaviors
 
-Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants. Phase 2 has added five reusable behaviors under the same registry contract:
+Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants. Phase 2 has added six reusable behaviors under the same registry contract:
 
-Phase 2 behavior expansion has also shipped Scheduler, CDN, Search Index, Topic, and Realtime Gateway. Search Index is reused by the Product Search and streaming Log Search acceptance projects and consumes the same Document Model and interaction contracts as the generic editor. Topic is likewise reused by the Order event fan-out and Incident fan-out projects to prove independent subscriber state and expiry. Realtime Gateway is reused by Realtime chat and Collaborative editing to prove connection lifecycle, shared-channel fan-out, and slow-client backpressure. None is a named preset or a case-specific page.
+Phase 2 behavior expansion has also shipped Scheduler, CDN, Search Index, Topic, Realtime Gateway, and Workflow. Search Index is reused by the Product Search and streaming Log Search acceptance projects and consumes the same Document Model and interaction contracts as the generic editor. Topic is likewise reused by Order event fan-out and Incident fan-out; Realtime Gateway by Realtime chat and Collaborative editing; Workflow by Payment checkout and compensating Order fulfillment. Workflow Definitions and actions use the same generic Definitions/Interaction/compiler path for both business systems and capacity-only probes, including success, deduplication, timeout/retry, and compensation outcomes. None is a named preset or a case-specific page.
 
 | Category | Behavior | Modeled boundary |
 |---|---|---|
 | Automation | Scheduler | Periodic/batch release, seeded jitter, missed-run policy, and concurrency limits |
+| Automation | Workflow | In-run durable checkpoints, scoped idempotency, per-step timeout/retry, and reverse compensation |
 | Traffic | Traffic Generator | Constant or Poisson request arrivals, size, duration, and generation cap |
 | Network | Network Link | Latency, jitter, byte transfer, concurrency, queueing, and packet loss |
 | Gateway & Routing | Load Balancer | Weighted, round-robin, or health-aware target selection |
@@ -56,7 +57,7 @@ Database v1 remains readable for compatibility; Database v2 is the current palet
 | Notifications | Producer service, Event contracts, independent Topic subscriptions, per-subscription backlog/ACK, retention, scheduled releases, and backpressure | Subscription filters, retry schedules, delivery calendars/rules, and provider quotas | Existing **Topic** and **Scheduler** variants plus later contracts/policies; provider is a Service variant |
 | Cloud drive | File/metadata contracts, metadata database, object storage, upload service, async work, CDN delivery, and bandwidth | Multipart transfer, resumable-session correctness, object versions, and shared-link contention | Existing composition; transfer details remain explicit non-goals |
 | Social feed | API/entity/access contracts, Cache, Topic/Stream fan-out, database, hotspots, and comparison | Durable per-user feed materialization, ranking, and consistency semantics | Existing composition; later contracts/variants only for independently testable gaps |
-| Payments | Payment operation/entity contracts, synchronous services, database, queue, timeout, retry, and circuit breaker | Idempotency enforcement, durable step state, compensation, and transactional outbox | A **Workflow** behavior variant and later consistency policies |
+| Payments | Payment operation/entity contracts, synchronous services, Workflow idempotency/checkpoints/timeout/retry/compensation, database, queue, and circuit breaker | Transactional outbox, exactly-once side effects, and cross-run recovery | Existing **Workflow** boundary plus later consistency policies |
 | Web crawler | Crawl/Document contracts, Scheduler releases, worker capacity, queues, storage, bandwidth, Search Index, and backpressure | Per-host politeness, URL deduplication, robots semantics, and distributed crawl coordination | Existing composition plus later independently testable policies |
 | Multi-region service | Regions/zones, health-aware routing, faults, and database replica delay | Operation placement, DNS/geo steering, TTL propagation, cross-region failover, and replication links | Project contracts plus a **Global Router** behavior variant; replication remains a later model |
 
@@ -72,7 +73,7 @@ The shipped layer provides:
 4. Workload mixes that target concrete operation IDs and preserve key/payload distributions.
 5. Runtime request context, events, traces, and metrics that consume and expose those bindings.
 
-The acceptance gate is behavioral: indexed lookup versus scan, small versus large payload, uniform versus hot keys, and different operation mixes yield deterministic and explainable differences. Topic extends that gate to independent subscriptions: adding a subscriber multiplies fan-out copies, a failed or offline subscriber does not advance another subscriber, and retention changes expiry evidence. Realtime Gateway extends it to long-lived client state: channel membership determines fan-out, per-connection bandwidth determines drain and backlog, and the selected overflow policy determines whether a slow recipient drops a message or is disconnected.
+The acceptance gate is behavioral: indexed lookup versus scan, small versus large payload, uniform versus hot keys, and different operation mixes yield deterministic and explainable differences. Topic extends that gate to independent subscriptions: adding a subscriber multiplies fan-out copies, a failed or offline subscriber does not advance another subscriber, and retention changes expiry evidence. Realtime Gateway extends it to long-lived client state: channel membership determines fan-out, per-connection bandwidth determines drain and backlog, and the selected overflow policy determines whether a slow recipient drops a message or is disconnected. Workflow extends it again: an idempotency-key replay does not repeat checkpointed work, a slow activity crosses its declared deadline, retry settings change attempts and delay, and terminal failure runs only completed compensatable steps in reverse order.
 
 ## Prioritized additions
 
@@ -84,7 +85,7 @@ The order is based on how many acceptance probes each primitive unlocks and whet
 4. **Search Index** — shipped; indexing delay, refresh visibility, shard/replica query fan-out, and merge latency.
 5. **Topic** — shipped; independent subscriptions, per-subscription backlog/acknowledgement, retention, and fan-out.
 6. **Realtime Gateway** — shipped; long-lived connections, rooms/channels, broadcast amplification, per-connection outbound drain, and `drop-message` / `disconnect` backpressure.
-7. **Workflow** — durable step state, idempotency, bounded retry, timeout, and compensation.
+7. **Workflow** — shipped; in-run durable step state, idempotency, bounded retry, timeout, and reverse compensation.
 8. **Global Router** — geo/weighted/health routing, cached decisions, TTL, and failover delay.
 
 These are generic behavior variants and project contracts, not vendor products. API Gateway, Worker, Function, SQL Database, NoSQL Database, transcoder, crawler, ranking service, and notification provider are offered only when an owning category has a variant that faithfully covers their documented boundary. A role name alone is at most a preset. Function becomes a distinct behavior variant only when cold starts, scale-to-zero, concurrency allocation, or billing are actually modeled.

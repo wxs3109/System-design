@@ -20,6 +20,11 @@ const behaviors = [
   defineBehavior<Extract<ComponentNode, { type: 'scheduler' }>>({
     type: 'scheduler', capacity: () => Number.MAX_SAFE_INTEGER, maximumWaiting: () => 0, baseServiceTimeMs: () => 0, jitterMs: () => 0, intrinsicErrorRate: () => 0,
   }),
+  defineBehavior<Extract<ComponentNode, { type: 'workflow' }>>({
+    type: 'workflow', capacity: (node) => node.config.maxConcurrentInstances, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node) => node.config.persistenceTimeMs + node.config.defaultStepTimeMs,
+    jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
+  }),
   defineBehavior<Extract<ComponentNode, { type: 'network' }>>({
     type: 'network', capacity: (node) => node.config.parallelism, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node, request) => node.config.latencyMs + (request.bytes * 8) / (node.config.bandwidthMbps * 1_000),

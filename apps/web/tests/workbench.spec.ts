@@ -376,6 +376,40 @@ test('runs Realtime Gateway examples and exposes broadcast and backpressure evid
   await expect(editingActions.getByRole('row').filter({ hasText: 'broadcast-document-operation' }).getByText(/connection fan-out · document:shared/)).toBeVisible()
 })
 
+test('edits and runs Workflow examples with durable and compensation evidence', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Payment checkout/ }).click()
+  await expect(page.getByText('6 components')).toBeVisible()
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  const explorer = page.getByRole('navigation', { name: 'Project definitions' })
+  await explorer.getByRole('button', { name: /Checkout checkout · v1 3 steps/ }).click()
+  const editor = page.getByLabel('Definition editor')
+  await expect(editor.getByLabel('Workflow node')).toHaveValue('checkout-coordinator')
+  await expect(editor.getByLabel('Step ID')).toHaveCount(3)
+  await expect(editor.getByLabel('Maximum attempts').first()).toHaveValue('2')
+  await editor.getByLabel('Maximum attempts').first().fill('4')
+  await expect(editor.getByText('Saved to project · undo available')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+  const checkoutRow = page.getByRole('row').filter({ hasText: 'Checkout coordinator' })
+  await expect(checkoutRow.getByText(/completed workflows/)).toBeVisible()
+  await expect(checkoutRow.getByText(/checkpoints/)).toBeVisible()
+  const checkoutAction = page.getByRole('table', { name: 'Action metrics' }).getByRole('row').filter({ hasText: 'coordinate-checkout' })
+  await expect(checkoutAction.getByText('workflow', { exact: true })).toBeVisible()
+  await expect(checkoutAction.getByText(/workflow succeeded/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Order fulfillment/ }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+  const bookingRow = page.getByRole('row').filter({ hasText: 'Fulfillment coordinator' })
+  await expect(bookingRow.getByText(/compensated workflows [1-9]/)).toBeVisible()
+  const bookingAction = page.getByRole('table', { name: 'Action metrics' }).getByRole('row').filter({ hasText: 'coordinate-fulfillment' })
+  await expect(bookingAction.getByText(/workflow compensated/)).toBeVisible()
+})
+
 test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({
@@ -423,7 +457,7 @@ test('migrates a v1 import and exports a capacity-only ProjectFile v3', async ({
   expect(project.schemaVersion).toBe(3)
   expect(project.modelingMode).toBe('capacity-only')
   expect(project.definitions).toEqual({
-    schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], interactions: [],
+    schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], workflows: [], interactions: [],
   })
   expect(project.topology.nodes[0].componentVersion).toBe(1)
   expect(project.experiments[0].seed).toBe('legacy-seed')

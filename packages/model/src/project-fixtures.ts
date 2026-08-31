@@ -69,6 +69,7 @@ export const createOrderSystemContractFixture = (): ProjectFileV3 => projectFile
     ],
     events: [{ id: 'order-created', version: 1, name: 'OrderCreated', payloadSchema: { schemaId: 'schema.OrderCreated', schemaVersion: 1 }, estimatedPayloadBytes: 512, partitionKey: '/orderId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'orders-service', consumerNodeIds: ['fulfillment-worker'] }],
     cacheKeys: [{ id: 'order-cache-key', version: 1, name: 'Order cache key', pattern: 'order:{id}', valueSchema: { schemaId: 'schema.Order', schemaVersion: 1 }, estimatedValueBytes: 2_048, ttlSeconds: 300 }],
+    workflows: [],
     interactions: [
       {
         id: 'create-order-flow', version: 1, name: 'Create order flow', entryOperation: { apiId: 'orders-api', apiVersion: 1, operationId: 'create-order' },

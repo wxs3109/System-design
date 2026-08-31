@@ -4,6 +4,8 @@ import { CdnState, ObjectStorageState, PartitionedStreamState, ShardedDatabaseSt
 import { SearchIndexState, type SearchRefreshResult } from './search-state'
 import { TopicState, type TopicExpiredDelivery, type TopicMessage } from './topic-state'
 import { RealtimeGatewayState } from './realtime-gateway-state'
+import { WorkflowState, type WorkflowDefinition as RuntimeWorkflowDefinition, type WorkflowTransition } from './workflow-state'
+import type { CompiledWorkflow } from '../compiler/operation-plan'
 
 export interface StatefulRequest {
   id: number
@@ -65,6 +67,84 @@ export interface ComponentStateRuntime {
   dependencyComplete?(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
   snapshot(nowMs: number): ComponentStateSnapshot
   outcome?(request: StatefulRequest): 'hit' | 'miss' | undefined
+}
+
+const workflowDefinition = (workflow: CompiledWorkflow): RuntimeWorkflowDefinition => {
+  const divider = workflow.definitionId.lastIndexOf('@')
+  const policy = (activity: CompiledWorkflow['steps'][number] | NonNullable<CompiledWorkflow['steps'][number]['compensation']>) => ({
+    timeoutMs: activity.timeoutMs, maxAttempts: activity.retry.maxAttempts, initialBackoffMs: activity.retry.baseDelayMs,
+    backoffMultiplier: activity.retry.backoff === 'fixed' ? 1 : 2, maxBackoffMs: activity.retry.maxDelayMs, jitterRatio: activity.retry.jitterRatio,
+  })
+  return {
+    id: divider < 0 ? workflow.definitionId : workflow.definitionId.slice(0, divider),
+    version: divider < 0 ? 1 : Number(workflow.definitionId.slice(divider + 1)),
+    steps: workflow.steps.map((step) => ({ id: step.id, policy: policy(step), ...(step.compensation === undefined ? {} : { compensation: policy(step.compensation) }) })),
+  }
+}
+
+export class WorkflowRuntime implements ComponentStateRuntime {
+  readonly workflow: WorkflowState
+  private readonly pending = new Map<string, { executionId: string; attemptId: string }>()
+
+  constructor(private readonly node: Extract<ComponentNode, { type: 'workflow' }>) {
+    this.workflow = new WorkflowState({ maxConcurrentExecutions: node.config.maxConcurrentInstances })
+  }
+
+  start(compiled: CompiledWorkflow, idempotencyKey: string, nowMs: number) { return this.workflow.start(workflowDefinition(compiled), idempotencyKey, nowMs) }
+  claim(executionId: string, nowMs: number, random: () => number = () => 0.5) { return this.workflow.claim(executionId, nowMs, random) }
+  settle(attemptId: string, success: boolean, nowMs: number) { return this.workflow.settle(attemptId, success, nowMs) }
+
+  begin(request: StatefulRequest, nowMs: number): ComponentStateDecision {
+    const definition: RuntimeWorkflowDefinition = {
+      id: `capacity-${this.node.id}`, version: 1,
+      steps: [{ id: 'synthetic-step', policy: { timeoutMs: Math.max(1, this.node.config.defaultStepTimeMs * 10), maxAttempts: 1, initialBackoffMs: 0, backoffMultiplier: 1, maxBackoffMs: 0, jitterRatio: 0 } }],
+    }
+    const started = this.workflow.start(definition, `request-${request.id}`, nowMs)
+    if (!started.accepted) return { events: [{ type: 'workflow-instance-failed', status: 'rejected', attributes: { reason: started.reason } }] }
+    const claimed = this.workflow.claim(started.execution.executionId, nowMs)
+    if (claimed.kind !== 'attempt') return { events: this.events([...started.transitions, ...claimed.transitions]) }
+    this.pending.set(token(request), { executionId: started.execution.executionId, attemptId: claimed.attempt.id })
+    return { events: this.events([...started.transitions, ...claimed.transitions]) }
+  }
+
+  complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[] {
+    const pending = this.pending.get(token(request))
+    this.pending.delete(token(request))
+    if (!pending) return []
+    return this.events(this.workflow.settle(pending.attemptId, success, nowMs).transitions)
+  }
+
+  snapshot(nowMs: number): ComponentStateSnapshot {
+    const value = this.workflow.snapshot(nowMs)
+    return { metrics: {
+      workflowActiveInstances: value.activeExecutions, workflowPeakInstances: value.peakActiveExecutions, workflowStartedInstances: value.startedExecutions,
+      workflowRejectedInstances: value.rejectedExecutions, workflowIdempotencyReplays: value.idempotencyReplays, workflowIdempotencyConflicts: value.idempotencyConflicts,
+      workflowCompletedInstances: value.succeededExecutions, workflowFailedInstances: value.failedExecutions, workflowCompensatedInstances: value.compensatedExecutions,
+      workflowCompensationFailedInstances: value.compensationFailedExecutions, workflowStepAttempts: value.stepAttempts, workflowStepCheckpoints: value.stepSucceeded,
+      workflowStepFailures: value.stepFailed, workflowStepTimeouts: value.stepTimedOut, workflowRetries: value.retriesScheduled,
+      workflowCompensationAttempts: value.compensationAttempts, workflowCompensationFailures: value.compensationFailed + value.compensationTimedOut,
+    }, events: this.events(value.transitions) }
+  }
+
+  transitionEvents(transitions: readonly WorkflowTransition[]) { return this.events(transitions) }
+
+  private events(transitions: readonly WorkflowTransition[]): ComponentDomainEvent[] {
+    return transitions.map((transition) => ({
+      type: transition.type === 'execution-started' ? 'workflow-instance-started'
+        : transition.type === 'idempotency-replayed' ? 'workflow-idempotency-replayed'
+          : transition.type === 'attempt-started' ? 'workflow-step-attempted'
+            : transition.type === 'step-succeeded' ? 'workflow-step-checkpointed'
+              : transition.type === 'step-timed-out' ? 'workflow-step-timed-out'
+                : transition.type === 'retry-scheduled' ? 'workflow-retry-scheduled'
+                  : transition.type === 'compensation-started' ? 'workflow-compensation-started'
+                  : transition.type === 'compensation-succeeded' ? 'workflow-compensation-completed'
+                    : transition.type === 'compensation-failed' || transition.type === 'compensation-timed-out' ? 'workflow-compensation-completed'
+                        : transition.type === 'execution-succeeded' ? 'workflow-instance-completed'
+                          : transition.type === 'execution-failed' || transition.type === 'execution-compensated' || transition.type === 'execution-compensation-failed' ? 'workflow-instance-failed' : 'workflow-step-failed',
+      status: transition.type.includes('failed') || transition.type.includes('timed-out') || transition.type === 'execution-compensated' ? 'error' : transition.type === 'retry-scheduled' || transition.type === 'attempt-started' || transition.type === 'compensation-started' ? 'pending' : 'ok',
+      attributes: { executionId: transition.executionId, workflowId: transition.workflowId, ...(transition.stepId === undefined ? {} : { stepId: transition.stepId }), ...(transition.attempt === undefined ? {} : { attempt: transition.attempt }), ...(transition.retryAtMs === undefined ? {} : { retryAtMs: transition.retryAtMs }) },
+    }))
+  }
 }
 
 const token = (request: StatefulRequest) => `${request.id}:${request.spanId}`
@@ -588,6 +668,7 @@ const indexedMetrics = (prefix: string, values: readonly number[]) => Object.fro
 
 export const createComponentStateRuntime = (node: ComponentNode): ComponentStateRuntime | undefined => {
   switch (node.type) {
+    case 'workflow': return new WorkflowRuntime(node)
     case 'cache': return new CacheRuntime(node)
     case 'cdn': return new CdnRuntime(node)
     case 'search-index': return new SearchIndexRuntime(node)

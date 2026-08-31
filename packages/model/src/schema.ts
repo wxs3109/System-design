@@ -9,6 +9,7 @@ const positiveIntegerSchema = z.number().int().positive()
 export const componentTypeSchema = z.enum([
   'traffic',
   'scheduler',
+  'workflow',
   'network',
   'load-balancer',
   'realtime-gateway',
@@ -56,6 +57,15 @@ export const schedulerConfigSchema = z.object({
   if (config.jitterMs > config.intervalMs) {
     context.addIssue({ code: 'custom', path: ['jitterMs'], message: 'Scheduler jitter cannot exceed its interval.' })
   }
+})
+
+export const workflowConfigSchema = z.object({
+  maxConcurrentInstances: positiveIntegerSchema.max(1_000_000).default(1_000),
+  persistenceTimeMs: nonNegativeSchema.max(86_400_000).default(2),
+  defaultStepTimeMs: positiveSchema.max(86_400_000).default(100),
+  jitterMs: nonNegativeSchema.max(86_400_000).default(1),
+  errorRate: probabilitySchema.default(0),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(10_000),
 })
 
 export const networkConfigSchema = z.object({
@@ -244,6 +254,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('scheduler'),
     config: schedulerConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('workflow'),
+    config: workflowConfigSchema,
   }),
   z.object({
     ...commonNodeFields,
@@ -456,6 +471,7 @@ export const scenarioSchema = z.object({
 export type Position = z.infer<typeof positionSchema>
 export type ComponentNode = z.infer<typeof componentNodeSchema>
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>
+export type WorkflowConfig = z.infer<typeof workflowConfigSchema>
 export type CdnConfig = z.infer<typeof cdnConfigSchema>
 export type SearchIndexConfig = z.infer<typeof searchIndexConfigSchema>
 export type TopicConfig = z.infer<typeof topicConfigSchema>

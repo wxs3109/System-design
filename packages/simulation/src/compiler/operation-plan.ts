@@ -1,6 +1,7 @@
 import type {
   ApiOperation, ApiOperationReference, DataModel, InteractionAction, KeyDistribution, OperationMixEntry, ProjectFile, ValueSizeDistribution,
 } from '@system-design/model'
+import { serviceConfigSchema } from '@system-design/model'
 import type { CompiledConnection } from './compiler'
 
 export interface CompiledOperationAction {
@@ -19,7 +20,33 @@ export interface CompiledOperationAction {
   cache?: { operation: 'get' | 'put' | 'delete'; keyId: string; estimatedValueBytes: number; ttlSeconds?: number }
   event?: { operation: 'publish' | 'consume'; eventId: string; estimatedPayloadBytes: number; delivery: 'at-most-once' | 'at-least-once'; ordering: 'none' | 'partition-key' }
   realtime?: { operation: 'connect' | 'broadcast' | 'disconnect'; connectionPattern: string; channelPattern: string; messageBytes?: number }
+  workflow?: CompiledWorkflow
   descriptiveFields: string[]
+}
+
+export interface CompiledWorkflowActivity {
+  targetNodeId: string
+  edgeIds: string[]
+  operationId?: string
+  requestBytes?: number
+  responseBytes?: number
+  handlerTimeMs: number
+  serviceTimeMs: number
+  jitterMs: number
+  errorRate: number
+  timeoutMs: number
+  retry: { maxAttempts: number; backoff: 'fixed' | 'exponential'; baseDelayMs: number; maxDelayMs: number; jitterRatio: number }
+}
+
+export interface CompiledWorkflowStep extends CompiledWorkflowActivity {
+  id: string
+  compensation?: CompiledWorkflowActivity
+}
+
+export interface CompiledWorkflow {
+  definitionId: string
+  idempotencyKeyPattern: string
+  steps: CompiledWorkflowStep[]
 }
 
 export interface CompiledDataAccess {
@@ -150,6 +177,7 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
   const models = new Map(project.definitions.dataModels.map((model) => [referenceKey(model.id, model.version), model]))
   const cacheKeys = new Map(project.definitions.cacheKeys.map((key) => [referenceKey(key.id, key.version), key]))
   const events = new Map(project.definitions.events.map((event) => [referenceKey(event.id, event.version), event]))
+  const workflows = new Map(project.definitions.workflows.map((workflow) => [referenceKey(workflow.id, workflow.version), workflow]))
   const plans = new Map<string, CompiledOperationPlan>()
   const warnings = new Set<string>()
   const enabledNodeIds = new Set(project.topology.nodes.filter((node) => !node.disabled).map((node) => node.id))
@@ -237,6 +265,29 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
         }
       } else if (action.kind === 'realtime') {
         compiled.realtime = { operation: action.operation, connectionPattern: action.connectionPattern, channelPattern: action.channelPattern, ...(action.messageBytes === undefined ? {} : { messageBytes: action.messageBytes }) }
+      } else if (action.kind === 'workflow') {
+        const workflow = workflows.get(referenceKey(action.workflow.workflowId, action.workflow.workflowVersion))!
+        const compileActivity = (activity: typeof workflow.steps[number] | NonNullable<typeof workflow.steps[number]['compensation']>): CompiledWorkflowActivity => {
+          requireEnabledNode(activity.targetNodeId, interaction.id, action.id, 'target')
+          const path = shortestPath(action.nodeId, activity.targetNodeId, outgoing, new Set<CompiledConnection['routingMode']>(['weighted-one', 'fan-out']))
+          if (!path) throw new Error(`Workflow ${workflow.id} has no synchronous topology path from ${action.nodeId} to step target ${activity.targetNodeId}.`)
+          const operation = activity.operation ? operations.get(operationKey(activity.operation))?.operation : undefined
+          const target = topologyNodes.get(activity.targetNodeId)
+          if (!target || target.type !== 'service') throw new Error(`Workflow ${workflow.id} step target ${activity.targetNodeId} must be a Service.`)
+          const targetConfig = serviceConfigSchema.parse(target.config)
+          return {
+            targetNodeId: activity.targetNodeId, edgeIds: path.map((edge) => edge.id),
+            ...(operation === undefined ? {} : {
+              operationId: operation.id, requestBytes: operation.request?.estimatedBytes ?? 1_024, responseBytes: responseBytes(operation),
+            }), handlerTimeMs: operation?.handlerTimeMs ?? 0,
+            serviceTimeMs: targetConfig.serviceTimeMs, jitterMs: targetConfig.jitterMs, errorRate: targetConfig.errorRate,
+            timeoutMs: activity.timeoutMs, retry: { ...activity.retry },
+          }
+        }
+        compiled.workflow = {
+          definitionId: referenceKey(workflow.id, workflow.version), idempotencyKeyPattern: action.idempotencyKeyPattern,
+          steps: workflow.steps.map((step) => ({ id: step.id, ...compileActivity(step), ...(step.compensation === undefined ? {} : { compensation: compileActivity(step.compensation) }) })),
+        }
       }
       actionById.set(action.id, compiled)
       executionContextByActionId.set(action.id, executionContextNodeId)

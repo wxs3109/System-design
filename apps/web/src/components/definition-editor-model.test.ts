@@ -27,10 +27,11 @@ describe('definition editor project transforms', () => {
     project.topology.nodes = [
       { id: 'traffic', name: 'Traffic', type: 'traffic', componentVersion: 1, position: { x: 0, y: 0 }, config: {} },
       { id: 'service', name: 'Service', type: 'service', componentVersion: 1, position: { x: 0, y: 0 }, config: { replicas: 1, concurrencyPerReplica: 1, serviceTimeMs: 1, jitterMs: 0, errorRate: 0, maxQueueSize: 10 } },
+      { id: 'workflow', name: 'Workflow', type: 'workflow', componentVersion: 1, position: { x: 0, y: 0 }, config: { maxConcurrentInstances: 10, persistenceTimeMs: 1, defaultStepTimeMs: 10, jitterMs: 0, errorRate: 0, maxQueueSize: 10 } },
       { id: 'database', name: 'Database', type: 'database', componentVersion: 2, position: { x: 0, y: 0 }, config: { maxConnections: 10, queryTimeMs: 1, jitterMs: 0, errorRate: 0, maxQueueSize: 10, shardCount: 1, replicasPerShard: 1, readPreference: 'primary', replicationDelayMs: 10, writeRatio: 0.5, keySpaceSize: 1000, hotKeyProbability: 0 } },
     ]
     project.experiments[0]!.workloads = [{ id: 'capacity-load', name: 'Capacity load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 30, pattern: 'constant', requestBytes: 1 }]
-    for (const [kind, modelKind] of [['jsonSchemas'], ['apis'], ['dataModels', 'relational'], ['events'], ['cacheKeys'], ['interactions'], ['operationWorkloads']] as const) {
+    for (const [kind, modelKind] of [['jsonSchemas'], ['apis'], ['dataModels', 'relational'], ['events'], ['cacheKeys'], ['workflows'], ['interactions'], ['operationWorkloads']] as const) {
       project = addDefinitionResource(project, kind, createDefinitionResource(project, kind, modelKind))
     }
     expect(project.modelingMode).toBe('business-aware')

@@ -139,7 +139,7 @@ export class RuntimeEventSink {
       action.bytesProcessed += Number(input.attributes?.bytesProcessed ?? 0)
       if (typeof input.attributes?.explanation === 'string' && input.attributes.explanation) action.explanation = input.attributes.explanation
       for (const [name, value] of Object.entries(input.attributes ?? {})) {
-        if ((name.startsWith('search') || name.startsWith('realtime')) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) action.details[name] = value
+        if ((name.startsWith('search') || name.startsWith('realtime') || name.startsWith('workflow')) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) action.details[name] = value
       }
       this.actions.set(key, action)
     }

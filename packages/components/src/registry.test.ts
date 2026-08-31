@@ -8,7 +8,7 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'scheduler', 'network', 'load-balancer', 'realtime-gateway', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
+      'traffic', 'scheduler', 'workflow', 'network', 'load-balancer', 'realtime-gateway', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
     ])
   })
 
@@ -22,6 +22,15 @@ describe('component registry', () => {
     expect(manifest.supportedFaults).toEqual([])
     expect(manifest.supportedNodePolicies).toEqual([])
     expect(() => manifest.configSchema.parse({ ...scheduler.config, jitterMs: 1_001 })).toThrow('jitter')
+  })
+
+  it('declares Workflow as an executable Automation variant', () => {
+    const workflow = componentRegistry.createNode('workflow', 'workflow', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('workflow')
+    expect(workflow.config).toMatchObject({ maxConcurrentInstances: 1_000, persistenceTimeMs: 2, defaultStepTimeMs: 100 })
+    expect(manifest.category).toBe('automation')
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['durable-step-state', 'idempotency', 'step-timeout', 'bounded-retry', 'compensation']))
+    expect(componentCatalog.listPresets('workflow')).toEqual([])
   })
 
   it('rejects imported faults and node policies that a variant does not execute', () => {
@@ -181,7 +190,7 @@ describe('component creation hierarchy', () => {
     ])
     expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['search-index', 'database'])
     expect(componentCatalog.listVariants('gateway').map((variant) => variant.type)).toEqual(['load-balancer', 'realtime-gateway'])
-    expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler'])
+    expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler', 'workflow'])
     expect(componentCatalog.listVariants('cache').map((variant) => variant.type)).toEqual(['cache', 'cdn'])
     expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream', 'topic'])
     expect(componentCatalog.listPresets('service', 1).map((preset) => preset.id)).toEqual(['worker'])

@@ -1,21 +1,21 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Braces, ChevronDown, Database, FileJson, Gauge, GitBranch, Plus, Radio, Server, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, Database, FileJson, Gauge, GitBranch, Plus, Radio, Server, Trash2, Workflow } from 'lucide-react'
 import type {
-  ApiDefinition, CacheKeyDefinition, DataModel, EventDefinition, InteractionDefinition, JsonSchemaDocument, OperationWorkload, ProjectFile,
+  ApiDefinition, CacheKeyDefinition, DataModel, EventDefinition, InteractionDefinition, JsonSchemaDocument, OperationWorkload, ProjectFile, WorkflowDefinition,
 } from '@system-design/model'
 import { useWorkbenchStore, type ProjectEditIssue } from '@/lib/store'
 import {
   addDefinitionResource, createDefinitionResource, definitionGroups, findDefinitionResource, listDefinitionResources, removeDefinitionResource,
   replaceDefinitionResource, selectionKey, type DataModelKind, type DefinitionKind, type DefinitionResource, type DefinitionSelection,
 } from './definition-editor-model'
-import { ApiEditor, CacheKeyEditor, EventEditor, JsonSchemaEditor, OperationWorkloadEditor } from './definition-resource-editors'
+import { ApiEditor, CacheKeyEditor, EventEditor, JsonSchemaEditor, OperationWorkloadEditor, WorkflowEditor } from './definition-resource-editors'
 import { DataModelEditor } from './data-model-editor'
 import { InteractionEditor } from './interaction-editor'
 
 const groupIcons: Record<DefinitionKind, typeof Braces> = {
-  jsonSchemas: FileJson, apis: Server, dataModels: Database, events: Radio, cacheKeys: Braces, interactions: GitBranch, operationWorkloads: Gauge,
+  jsonSchemas: FileJson, apis: Server, dataModels: Database, events: Radio, cacheKeys: Braces, workflows: Workflow, interactions: GitBranch, operationWorkloads: Gauge,
 }
 
 const nextSelectionAfterDelete = (project: ProjectFile, removed: DefinitionSelection): DefinitionSelection | null => {
@@ -151,6 +151,7 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
       {selection.kind === 'dataModels' ? <DataModelEditor project={project} value={draft as DataModel} issues={issues} onChange={commit} /> : null}
       {selection.kind === 'events' ? <EventEditor project={project} value={draft as EventDefinition} issues={issues} onChange={commit} /> : null}
       {selection.kind === 'cacheKeys' ? <CacheKeyEditor project={project} value={draft as CacheKeyDefinition} issues={issues} onChange={commit} /> : null}
+      {selection.kind === 'workflows' ? <WorkflowEditor project={project} value={draft as WorkflowDefinition} issues={issues} onChange={commit} /> : null}
       {selection.kind === 'interactions' ? <InteractionEditor project={project} value={draft as InteractionDefinition} issues={issues} onChange={commit} /> : null}
       {selection.kind === 'operationWorkloads' ? <OperationWorkloadEditor project={project} value={draft as OperationWorkload} issues={issues} onChange={commit} /> : null}
     </div>
@@ -167,6 +168,7 @@ export const useSelectedDefinitionBindings = (selection: DefinitionSelection | n
     if ('ownerNodeId' in selected) nodeIds.add(selected.ownerNodeId)
     if ('producerNodeId' in selected) { nodeIds.add(selected.producerNodeId); selected.consumerNodeIds.forEach((id) => nodeIds.add(id)) }
     if ('sourceNodeId' in selected && !('actions' in selected)) nodeIds.add(selected.sourceNodeId)
+    if ('steps' in selected) selected.steps.forEach((step) => { nodeIds.add(step.targetNodeId); if (step.compensation) nodeIds.add(step.compensation.targetNodeId) })
     if ('actions' in selected) selected.actions.forEach((action) => {
       if ('sourceNodeId' in action) nodeIds.add(action.sourceNodeId)
       if ('targetNodeId' in action) nodeIds.add(action.targetNodeId)

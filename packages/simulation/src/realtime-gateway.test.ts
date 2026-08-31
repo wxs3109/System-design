@@ -42,7 +42,7 @@ const realtimeProject = (id: string, overrides: {
   project.topology.nodes = [traffic, service, gateway]
   project.topology.edges = [connection('clients-to-api', 'clients', 'api'), connection('api-to-gateway', 'api', 'gateway')]
   project.definitions = {
-    schemaVersion: 1, jsonSchemas: [], dataModels: [], events: [], cacheKeys: [],
+    schemaVersion: 1, jsonSchemas: [], dataModels: [], events: [], cacheKeys: [], workflows: [],
     apis: [{ id: 'realtime-api', version: 1, name: 'Realtime API', ownerNodeId: 'api', operations: [{ id: 'send', name: 'Send', method: 'POST', path: '/send', responses: [{ statusCode: '202' }], handlerTimeMs: 0.1 }] }],
     interactions: [{
       id: 'realtime-flow', version: 1, name: 'Connect and send', entryOperation: { apiId: 'realtime-api', apiVersion: 1, operationId: 'send' },
@@ -121,7 +121,7 @@ describe('P2.6e executable Realtime Gateway behavior', () => {
   it('executes capacity-only traffic as connect, join, and broadcast behavior', async () => {
     const project = realtimeProject('realtime-capacity-only')
     project.modelingMode = 'capacity-only'
-    project.definitions = { schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], interactions: [] }
+    project.definitions = { schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], workflows: [], interactions: [] }
     project.experiments[0]!.operationWorkloads = []
     project.experiments[0]!.workloads = [{ id: 'legacy-load', name: 'Capacity load', sourceNodeId: 'clients', requestsPerSecond: 5, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 128 }]
     const result = await runSimulation(projectFileV3Schema.parse(project), 'realtime-capacity-only-run')

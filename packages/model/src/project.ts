@@ -208,6 +208,7 @@ const validateBusinessReferences = (project: {
   const models = new Map(project.definitions.dataModels.map((model) => [referenceKey(model.id, model.version), model]))
   const events = new Map(project.definitions.events.map((event) => [referenceKey(event.id, event.version), event]))
   const cacheKeys = new Set(project.definitions.cacheKeys.map((key) => referenceKey(key.id, key.version)))
+  const workflows = new Map(project.definitions.workflows.map((workflow) => [referenceKey(workflow.id, workflow.version), workflow]))
   const interactions = new Map(project.definitions.interactions.map((interaction) => [referenceKey(interaction.id, interaction.version), interaction]))
 
   const requireNode = (id: string, path: (string | number)[], expectedType?: string | readonly string[]) => {
@@ -260,6 +261,21 @@ const validateBusinessReferences = (project: {
   })
   project.definitions.cacheKeys.forEach((cacheKey, cacheKeyIndex) => {
     if (cacheKey.valueSchema) requireSchema(cacheKey.valueSchema, ['definitions', 'cacheKeys', cacheKeyIndex, 'valueSchema'])
+  })
+  project.definitions.workflows.forEach((workflow, workflowIndex) => {
+    requireNode(workflow.ownerNodeId, ['definitions', 'workflows', workflowIndex, 'ownerNodeId'], 'workflow')
+    const validateActivity = (activity: typeof workflow.steps[number] | NonNullable<typeof workflow.steps[number]['compensation']>, path: (string | number)[]) => {
+      const target = requireNode(activity.targetNodeId, [...path, 'targetNodeId'], 'service')
+      if (activity.operation) {
+        const referenced = requireOperation(activity.operation, [...path, 'operation'])
+        if (target && referenced && referenced.api.ownerNodeId !== target.id) addReferenceIssue(context, [...path, 'targetNodeId'], `API operation is owned by node ${referenced.api.ownerNodeId}, not ${target.id}.`)
+      }
+    }
+    workflow.steps.forEach((step, stepIndex) => {
+      const path = ['definitions', 'workflows', workflowIndex, 'steps', stepIndex] as (string | number)[]
+      validateActivity(step, path)
+      if (step.compensation) validateActivity(step.compensation, [...path, 'compensation'])
+    })
   })
 
   project.definitions.interactions.forEach((interaction, interactionIndex) => {
@@ -316,6 +332,12 @@ const validateBusinessReferences = (project: {
         if (!cacheKeys.has(key)) addReferenceIssue(context, [...path, 'key'], `Unknown cache-key contract: ${key}`)
       } else if (action.kind === 'realtime') {
         requireNode(action.nodeId, [...path, 'nodeId'], 'realtime-gateway')
+      } else if (action.kind === 'workflow') {
+        const node = requireNode(action.nodeId, [...path, 'nodeId'], 'workflow')
+        const key = referenceKey(action.workflow.workflowId, action.workflow.workflowVersion)
+        const workflow = workflows.get(key)
+        if (!workflow) addReferenceIssue(context, [...path, 'workflow'], `Unknown workflow definition: ${key}`)
+        else if (node && workflow.ownerNodeId !== node.id) addReferenceIssue(context, [...path, 'nodeId'], `Workflow definition is owned by node ${workflow.ownerNodeId}, not ${node.id}.`)
       } else {
         const brokerNodeId = action.brokerNodeId
         const broker = requireNode(brokerNodeId, [...path, 'brokerNodeId'])
@@ -359,7 +381,7 @@ const validateBusinessReferences = (project: {
   })
 
   const hasDefinitions = project.definitions.jsonSchemas.length + project.definitions.apis.length + project.definitions.dataModels.length
-    + project.definitions.events.length + project.definitions.cacheKeys.length + project.definitions.interactions.length > 0
+    + project.definitions.events.length + project.definitions.cacheKeys.length + project.definitions.workflows.length + project.definitions.interactions.length > 0
   const hasOperationWorkloads = project.experiments.some((experiment) => experiment.operationWorkloads.length > 0)
   if (project.modelingMode === 'capacity-only' && (hasDefinitions || hasOperationWorkloads)) {
     addReferenceIssue(context, ['modelingMode'], 'A capacity-only project cannot contain business definitions or operation workloads.')

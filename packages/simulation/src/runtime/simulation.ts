@@ -4,7 +4,7 @@ import type { ComponentNode, Fault, FaultTarget, FaultType, ReasonCode, RuntimeE
 import type { CompiledConnection, CompiledScenario } from '../compiler/compiler'
 import type { CompiledOperationAction, CompiledOperationPhase, CompiledOperationPlan, CompiledSchedulerWorkload } from '../compiler/operation-plan'
 import { getNodeBehavior } from '../components/behavior'
-import { createComponentStateRuntime, type ComponentDomainEvent, type ComponentStateCompletion } from '../components/data-runtime'
+import { createComponentStateRuntime, WorkflowRuntime, type ComponentDomainEvent, type ComponentStateCompletion } from '../components/data-runtime'
 import { applyCapacityFaults, applyLatencyFaults, composeLossProbability, faultEndsAtMs, faultReason, faultStartsAtMs, resolveActiveFaults } from '../faults/resolver'
 import { round } from '../telemetry/math'
 import { RuntimeEventSink } from '../telemetry/event-sink'
@@ -513,6 +513,10 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     const attributes = actionAttributes(this.action)
     simulation.eventSink.emit({ timestampMs: round(startedAtMs), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: this.action.nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'action-started', status: 'pending', attributes })
     if (!runtime) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
+    if (this.action.workflow) {
+      await this.executeWorkflow(runtime, startedAtMs, attributes)
+      return
+    }
     for (const edgeId of this.action.edgeIds) {
       const edge = simulation.compiled.edges.find((candidate) => candidate.id === edgeId)
       if (!edge) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
@@ -631,6 +635,97 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       ...(dataCost ? { recordsExamined: dataCost.recordsExamined, bytesProcessed: dataCost.bytesProcessed, explanation: dataCost.explanation } : {}),
       ...(searchCost ? { recordsExamined: searchCost.recordsExamined, bytesProcessed: searchCost.bytesProcessed, explanation: searchCost.explanation, searchFanOut: searchCost.fanOut, searchCandidates: searchCost.candidates, searchResultCount: searchCost.resultCount, searchStale: searchCost.stale, searchVisibilityLagMs: searchCost.visibilityLagMs } : {}),
     })
+  }
+
+  private async executeWorkflow(runtime: RuntimeNode, startedAtMs: number, attributes: Record<string, string | number | boolean>) {
+    const simulation = this.simulation
+    const workflow = this.action.workflow!
+    const state = runtime.state
+    if (!(state instanceof WorkflowRuntime) || runtime.node.type !== 'workflow') { this.finish(false, 'missing_node', startedAtMs, attributes); return }
+    const key = this.root.key ?? `key:${this.root.id}`
+    const idempotencyKey = workflow.idempotencyKeyPattern.replaceAll('{request}', String(this.root.id)).replaceAll('{key}', key)
+    const completionSignal = (executionId: string) => `workflow:${runtime.node.id}:${executionId}:completed`
+    const terminalTransition = (type: string) => type === 'workflow-instance-completed' || type === 'workflow-instance-failed'
+    const emit = (events: readonly ComponentDomainEvent[]) => {
+      for (const event of events) simulation.eventSink.emit({
+        timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`,
+        parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status,
+        ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }),
+      })
+      for (const event of events) {
+        if (terminalTransition(event.type) && typeof event.attributes?.executionId === 'string') this.sendSignal(completionSignal(event.attributes.executionId))
+      }
+    }
+    const started = state.start(workflow, idempotencyKey, simulation.timeNow)
+    emit(state.transitionEvents(started.transitions))
+    if (!started.accepted) { this.finish(false, started.reason === 'execution-capacity' ? 'workflow_capacity' : 'idempotency_conflict', startedAtMs, attributes); return }
+    if (started.replayed) {
+      let execution = started.execution
+      if (execution.status === 'running' || execution.status === 'compensating') {
+        await this.waitSignal(completionSignal(execution.executionId))
+        execution = state.workflow.execution(execution.executionId)
+      }
+      const successful = execution.status === 'succeeded'
+      this.finish(successful, successful ? 'none' : execution.status === 'compensation-failed' ? 'compensation_failed' : 'intrinsic_error', startedAtMs, { ...attributes, workflowIdempotencyReplay: true, workflowStatus: execution.status })
+      return
+    }
+    const executionId = started.execution.executionId
+    while (true) {
+      const claimed = state.claim(executionId, simulation.timeNow, simulation.random)
+      emit(state.transitionEvents(claimed.transitions))
+      if (claimed.kind === 'terminal') {
+        const successful = claimed.status === 'succeeded'
+        this.finish(successful, successful ? 'none' : claimed.status === 'compensation-failed' ? 'compensation_failed' : 'intrinsic_error', startedAtMs, { ...attributes, workflowStatus: claimed.status })
+        return
+      }
+      if (claimed.kind === 'wait') { await this.delay(Math.max(0, claimed.untilMs - simulation.timeNow)); continue }
+      if (claimed.kind === 'in-flight') { this.finish(false, 'idempotency_conflict', startedAtMs, attributes); return }
+      const step = workflow.steps.find((candidate) => candidate.id === claimed.attempt.stepId)!
+      const activity = claimed.attempt.kind === 'compensation' ? step.compensation : step
+      if (!activity) { state.settle(claimed.attempt.id, false, simulation.timeNow); continue }
+      const outcome = await this.executeWorkflowActivity(runtime, activity, claimed.attempt.deadlineAtMs, attributes, claimed.attempt.attempt, claimed.attempt.kind)
+      const settled = state.settle(claimed.attempt.id, outcome.success, simulation.timeNow)
+      emit(state.transitionEvents(settled.transitions))
+    }
+  }
+
+  private async executeWorkflowActivity(workflowRuntime: RuntimeNode, activity: NonNullable<CompiledOperationAction['workflow']>['steps'][number] | NonNullable<NonNullable<CompiledOperationAction['workflow']>['steps'][number]['compensation']>, deadlineAtMs: number, attributes: Record<string, string | number | boolean>, attempt: number, kind: 'step' | 'compensation'): Promise<{ success: boolean; reason: ReasonCode }> {
+    const simulation = this.simulation
+    const payloadBytes = activity.requestBytes ?? this.root.bytes
+    for (const edgeId of activity.edgeIds) {
+      const edge = simulation.compiled.edges.find((candidate) => candidate.id === edgeId)
+      if (!edge) return { success: false, reason: 'missing_node' }
+      if (simulation.activeFaults('edge', edgeId, 'region-outage').length > 0) return { success: false, reason: 'region_outage' }
+      const packetLoss = composeLossProbability(simulation.activeFaults('edge', edgeId, 'packet-loss'))
+      if (packetLoss > 0 && simulation.random() < packetLoss) return { success: false, reason: 'packet_loss' }
+    }
+    const target = simulation.runtimes.get(activity.targetNodeId)
+    if (!target || target.node.type !== 'service') return { success: false, reason: 'missing_node' }
+    const incomingEdgeId = activity.edgeIds.at(-1)
+    const fault = simulation.failureReason(target.node, { ...this.root, ...(incomingEdgeId === undefined ? {} : { incomingEdgeId }) })
+    if (fault) { target.failed += 1; return { success: false, reason: fault } }
+    const effectiveCapacity = simulation.effectiveCapacity(target.node)
+    target.resource.capacity = effectiveCapacity
+    if (target.resource.unitsInUse >= effectiveCapacity && target.waiting.pop >= getNodeBehavior(target.node).maximumWaiting(target.node)) { target.failed += 1; target.rejected += 1; return { success: false, reason: 'queue_full' } }
+    const queuedAt = simulation.timeNow
+    if (target.resource.unitsInUse >= effectiveCapacity) { this.enterQueueImmediately(target.waiting); target.maxWaiting = Math.max(target.maxWaiting, target.waiting.pop) }
+    await this.enterQueue(target.resource)
+    if (target.waiting.items.has(this)) this.leaveQueue(target.waiting)
+    target.admitted += 1
+    const requestTransferMs = payloadBytes / 262_144
+    const responseTransferMs = (activity.responseBytes ?? 0) / 262_144
+    const rawDuration = Math.max(0.001, activity.serviceTimeMs + activity.handlerTimeMs + requestTransferMs + responseTransferMs + (simulation.random() * 2 - 1) * activity.jitterMs)
+    const remaining = Math.max(0, deadlineAtMs - simulation.timeNow)
+    await this.delay(Math.min(rawDuration, remaining))
+    this.leaveQueue(target.resource)
+    target.processed += 1
+    const timedOut = rawDuration > remaining
+    const failed = !timedOut && simulation.random() < activity.errorRate
+    const status = timedOut || failed ? 'error' : 'ok'
+    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}:${kind}:${activity.targetNodeId}:${attempt}`, parentSpanId: `${this.root.traceId}:action:${this.action.id}`, nodeId: activity.targetNodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, attempt, type: timedOut ? 'workflow-step-timed-out' : failed ? 'workflow-step-failed' : kind === 'compensation' ? 'workflow-compensation-completed' : 'workflow-step-checkpointed', status, reason: timedOut ? 'timeout' : failed ? 'intrinsic_error' : 'none', durationMs: round(simulation.timeNow - queuedAt), bytes: payloadBytes, attributes: { ...attributes, workflowActivity: kind, workflowTargetNodeId: activity.targetNodeId, ...(activity.operationId === undefined ? {} : { workflowOperationId: activity.operationId }) } })
+    if (timedOut || failed) target.failed += 1
+    if (workflowRuntime.node.type === 'workflow' && workflowRuntime.node.config.persistenceTimeMs > 0) await this.delay(workflowRuntime.node.config.persistenceTimeMs)
+    return { success: !timedOut && !failed, reason: timedOut ? 'timeout' : failed ? 'intrinsic_error' : 'none' }
   }
 
   private async processNode(nodeId: string, request: RequestState, attributes: Record<string, string | number | boolean>, finalNode: boolean): Promise<{ success: true; duration: number } | { success: false; reason: ReasonCode }> {

@@ -2,6 +2,37 @@ import { describe, expect, it } from 'vitest'
 import { createNode, createOrderSystemContractFixture } from '@system-design/model'
 import { compileSimulationInput } from './compiler'
 
+const addWorkflow = (project: ReturnType<typeof createOrderSystemContractFixture>) => {
+  project.topology.nodes.push({ ...createNode('workflow', 'order-workflow', { x: 600, y: 100 }), componentVersion: 1 })
+  project.topology.edges.push(
+    { id: 'orders-to-workflow', source: 'orders-service', target: 'order-workflow', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+    { id: 'workflow-to-orders', source: 'order-workflow', target: 'orders-service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+    { id: 'workflow-to-worker', source: 'order-workflow', target: 'fulfillment-worker', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+  )
+  project.definitions.workflows.push({
+    id: 'checkout', version: 1, name: 'Checkout', ownerNodeId: 'order-workflow',
+    steps: [
+      {
+        id: 'persist', targetNodeId: 'orders-service', operation: { apiId: 'orders-api', apiVersion: 1, operationId: 'get-order' }, timeoutMs: 90,
+        retry: { maxAttempts: 3, backoff: 'exponential', baseDelayMs: 10, maxDelayMs: 80, jitterRatio: 0.25 },
+      },
+      {
+        id: 'dispatch', targetNodeId: 'fulfillment-worker', timeoutMs: 200,
+        retry: { maxAttempts: 1, backoff: 'fixed', baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+        compensation: {
+          targetNodeId: 'orders-service', operation: { apiId: 'orders-api', apiVersion: 1, operationId: 'create-order' }, timeoutMs: 50,
+          retry: { maxAttempts: 2, backoff: 'fixed', baseDelayMs: 5, maxDelayMs: 5, jitterRatio: 0 },
+        },
+      },
+    ],
+  })
+  project.definitions.interactions[0]!.actions.splice(1, 0, {
+    id: 'run-checkout', kind: 'workflow', dependsOn: ['call-api'], nodeId: 'order-workflow',
+    workflow: { workflowId: 'checkout', workflowVersion: 1 }, idempotencyKeyPattern: 'checkout:{key}',
+  })
+  return project
+}
+
 describe('operation-aware compiler', () => {
   it('binds every interaction action to explicit topology paths and contract costs', () => {
     const compiled = compileSimulationInput(createOrderSystemContractFixture())
@@ -43,6 +74,41 @@ describe('operation-aware compiler', () => {
       nodeId: 'orders-search',
       data: { modelKind: 'document', cardinality: 10_000_000, recordBytes: 2_048, operation: 'scan' },
     })
+  })
+
+  it('compiles Workflow definitions into topology-bound executable activities', () => {
+    const compiled = compileSimulationInput(addWorkflow(createOrderSystemContractFixture()))
+    const plan = [...compiled.operations.plans.values()].find((candidate) => candidate.operation.operationId === 'create-order')!
+    expect(plan.actions.find((candidate) => candidate.id === 'run-checkout')).toMatchObject({
+      kind: 'workflow', nodeId: 'order-workflow', sourceNodeId: 'orders-service', edgeIds: ['orders-to-workflow'],
+      workflow: {
+        definitionId: 'checkout@1', idempotencyKeyPattern: 'checkout:{key}',
+        steps: [
+          {
+            id: 'persist', targetNodeId: 'orders-service', edgeIds: ['workflow-to-orders'], operationId: 'get-order',
+            requestBytes: 1_024, responseBytes: 2_048, handlerTimeMs: 2, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, timeoutMs: 90,
+            retry: { maxAttempts: 3, backoff: 'exponential', baseDelayMs: 10, maxDelayMs: 80, jitterRatio: 0.25 },
+          },
+          {
+            id: 'dispatch', targetNodeId: 'fulfillment-worker', edgeIds: ['workflow-to-worker'], handlerTimeMs: 0, serviceTimeMs: 30, timeoutMs: 200,
+            compensation: {
+              targetNodeId: 'orders-service', edgeIds: ['workflow-to-orders'], operationId: 'create-order', requestBytes: 1_024, responseBytes: 2_048,
+              handlerTimeMs: 5, serviceTimeMs: 30, timeoutMs: 50, retry: { maxAttempts: 2, backoff: 'fixed', baseDelayMs: 5, maxDelayMs: 5, jitterRatio: 0 },
+            },
+          },
+        ],
+      },
+    })
+  })
+
+  it('rejects Workflow activities without an enabled synchronous target path', () => {
+    const missingPath = addWorkflow(createOrderSystemContractFixture())
+    missingPath.topology.edges = missingPath.topology.edges.filter((edge) => edge.id !== 'workflow-to-worker')
+    expect(() => compileSimulationInput(missingPath)).toThrow(/Workflow checkout has no synchronous topology path from order-workflow to step target fulfillment-worker/)
+
+    const disabledTarget = addWorkflow(createOrderSystemContractFixture())
+    disabledTarget.topology.nodes.find((node) => node.id === 'fulfillment-worker')!.disabled = true
+    expect(() => compileSimulationInput(disabledTarget)).toThrow(/run-checkout has a disabled or missing target node fulfillment-worker/)
   })
 
   it('rejects an interaction whose claimed action has no matching topology path', () => {

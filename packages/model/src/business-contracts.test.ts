@@ -5,6 +5,7 @@ import {
   dataModelSchema,
   interactionDefinitionSchema,
   operationWorkloadSchema,
+  workflowDefinitionSchema,
 } from './business-contracts'
 
 const schemaRef = { schemaId: 'schema.Order', schemaVersion: 1 }
@@ -63,9 +64,23 @@ describe('business contract primitives', () => {
     expect(operationWorkloadSchema.safeParse({ id: 'load', name: 'Load', sourceNodeId: 'traffic', phases: [{ id: 'steady', startAtSeconds: 0, durationSeconds: 10, requestsPerSecond: 10 }], operationMix: [mix, mix] }).success).toBe(false)
   })
 
+  it('validates durable workflow steps, retry bounds, and compensation', () => {
+    const activity = { targetNodeId: 'payments-service', timeoutMs: 1_000, retry: { maxAttempts: 3, backoff: 'exponential', baseDelayMs: 50, maxDelayMs: 500, jitterRatio: 0.1 } } as const
+    const workflow = {
+      id: 'checkout', version: 1, name: 'Checkout', ownerNodeId: 'checkout-workflow',
+      steps: [
+        { id: 'reserve', ...activity, compensation: { ...activity, targetNodeId: 'inventory-service' } },
+        { id: 'charge', ...activity },
+      ],
+    }
+    expect(workflowDefinitionSchema.parse(workflow)).toEqual(workflow)
+    expect(workflowDefinitionSchema.safeParse({ ...workflow, steps: [workflow.steps[0], workflow.steps[0]] }).success).toBe(false)
+    expect(workflowDefinitionSchema.safeParse({ ...workflow, steps: [{ ...workflow.steps[0], retry: { ...activity.retry, maxDelayMs: 10 } }] }).success).toBe(false)
+  })
+
   it('rejects unknown fields and duplicate versioned resources', () => {
     const document = { id: 'schema.Order', version: 1, name: 'Order', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object' } }
-    expect(businessDefinitionsSchema.safeParse({ schemaVersion: 1, jsonSchemas: [document, document], apis: [], dataModels: [], events: [], cacheKeys: [], interactions: [] }).success).toBe(false)
-    expect(businessDefinitionsSchema.safeParse({ schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], interactions: [], arbitrary: true }).success).toBe(false)
+    expect(businessDefinitionsSchema.safeParse({ schemaVersion: 1, jsonSchemas: [document, document], apis: [], dataModels: [], events: [], cacheKeys: [], workflows: [], interactions: [] }).success).toBe(false)
+    expect(businessDefinitionsSchema.safeParse({ schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], workflows: [], interactions: [], arbitrary: true }).success).toBe(false)
   })
 })

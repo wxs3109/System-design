@@ -19,6 +19,7 @@ import {
   topicConfigSchema,
   timeoutPolicyConfigSchema,
   tokenBucketPolicyConfigSchema,
+  workflowConfigSchema,
   type ComponentNode,
   type ComponentType,
   type Position,
@@ -69,6 +70,19 @@ export const builtInComponentManifests = [
       { kind: 'number', key: 'requestBytes', label: 'Run payload (bytes)', min: 1, step: 1_024 },
     ], ports: [requestOutput], capabilities: ['workload-source', 'scheduling', 'batch-release', 'missed-run-policy'], emittedMetrics: ['scheduled-runs', 'released-runs', 'queued-runs', 'skipped-runs', 'active-runs'], supportedFaults: [], supportedNodePolicies: [], runtimeBehavior: 'scheduler-v1',
     describeConfig: (config) => `${config.scheduleMode === 'batch' ? config.batchSize : 1} run${config.scheduleMode === 'batch' && config.batchSize !== 1 ? 's' : ''} every ${config.intervalMs} ms · ${config.concurrencyLimit} concurrent · ${config.missedRunPolicy}`,
+  },
+  {
+    type: 'workflow', version: 1, label: 'Workflow', description: 'Persists multi-step executions with idempotency, per-step timeout, bounded retry, and reverse compensation.', category: 'automation', iconToken: 'workflow', color: '#c2410c',
+    configSchema: workflowConfigSchema, createDefaultConfig: () => ({ maxConcurrentInstances: 1_000, persistenceTimeMs: 2, defaultStepTimeMs: 100, jitterMs: 1, errorRate: 0, maxQueueSize: 10_000 }),
+    configFields: [
+      { kind: 'number', key: 'maxConcurrentInstances', label: 'Concurrent executions', min: 1, step: 1 },
+      { kind: 'number', key: 'persistenceTimeMs', label: 'State persistence (ms)', min: 0, step: 0.1 },
+      { kind: 'number', key: 'defaultStepTimeMs', label: 'Default step time (ms)', min: 0.001, step: 1 },
+      { kind: 'number', key: 'jitterMs', label: 'Jitter (ms)', min: 0, step: 0.1 },
+      { kind: 'number', key: 'maxQueueSize', label: 'Max execution queue', min: 0, step: 1 },
+      { kind: 'number', key: 'errorRate', label: 'Default step error rate (0–1)', min: 0, max: 1, step: 0.001 },
+    ], ports: [requestInput, requestOutput], capabilities: ['durable-step-state', 'idempotency', 'step-timeout', 'bounded-retry', 'compensation'], emittedMetrics: ['workflow-executions', 'workflow-steps', 'workflow-retries', 'workflow-timeouts', 'workflow-compensations', 'idempotency-replays'], supportedFaults: ['node-down', 'latency-spike', 'capacity-drop'], supportedNodePolicies: ['rate-limit'], runtimeBehavior: 'workflow-v1',
+    describeConfig: (config) => `${config.maxConcurrentInstances} executions · ${config.persistenceTimeMs} ms persistence`,
   },
   {
     type: 'network', version: 1, label: 'Network Link', description: 'Adds transfer time, latency, jitter and packet loss.', category: 'network', iconToken: 'activity', color: '#06b6d4',

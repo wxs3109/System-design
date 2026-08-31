@@ -16,6 +16,9 @@ export const runtimeEventTypeSchema = z.enum([
   'realtime-broadcast', 'realtime-backpressure', 'realtime-delivery-drained', 'realtime-connection-closed', 'realtime-operation-failed',
   'object-read', 'object-written', 'database-read', 'database-written',
   'scheduler-tick', 'scheduler-run-released', 'scheduler-run-queued', 'scheduler-run-skipped', 'scheduler-run-settled',
+  'workflow-instance-started', 'workflow-idempotency-replayed', 'workflow-step-attempted', 'workflow-step-checkpointed', 'workflow-step-failed',
+  'workflow-step-timed-out', 'workflow-retry-scheduled', 'workflow-compensation-started', 'workflow-compensation-completed',
+  'workflow-instance-completed', 'workflow-instance-failed',
   'operation-started', 'operation-completed', 'action-started', 'action-completed', 'action-skipped',
   'fault-activated', 'fault-recovered', 'metric-sampled', 'node-snapshot',
 ])
@@ -26,6 +29,7 @@ export const reasonCodeSchema = z.enum([
   'intrinsic_error', 'hop_limit', 'missing_node', 'simulation_ended',
   'backpressure', 'dead_lettered', 'no_healthy_target',
   'scheduler_missed', 'connection_capacity', 'channel_capacity',
+  'workflow_capacity', 'idempotency_conflict', 'compensation_failed',
   'latency_spike', 'region_outage', 'capacity_reduced', 'bandwidth_reduced', 'traffic_spike', 'hot_key',
 ])
 export const eventAttributeValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean()])

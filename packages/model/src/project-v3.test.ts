@@ -121,6 +121,51 @@ describe('ProjectFile v3', () => {
     expect(projectFileV3Schema.safeParse(missingMessageBytes).success).toBe(false)
   })
 
+  it('validates workflow definitions, activity owners, and action references', () => {
+    const fixture = createOrderSystemContractFixture()
+    fixture.topology.nodes.push({ ...createNode('workflow', 'order-workflow', { x: 600, y: 100 }), componentVersion: 1 })
+    fixture.topology.edges.push({ id: 'orders-to-workflow', source: 'orders-service', target: 'order-workflow', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
+    fixture.topology.edges.push({ id: 'workflow-to-orders', source: 'order-workflow', target: 'orders-service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
+    fixture.definitions.workflows.push({
+      id: 'checkout', version: 1, name: 'Checkout', ownerNodeId: 'order-workflow', steps: [{
+        id: 'persist-order', targetNodeId: 'orders-service', operation: { apiId: 'orders-api', apiVersion: 1, operationId: 'create-order' },
+        timeoutMs: 1_000, retry: { maxAttempts: 3, backoff: 'exponential', baseDelayMs: 50, maxDelayMs: 1_000, jitterRatio: 0 },
+        compensation: { targetNodeId: 'orders-service', timeoutMs: 500, retry: { maxAttempts: 1, backoff: 'fixed', baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 } },
+      }],
+    })
+    fixture.definitions.interactions[0]!.actions.splice(1, 0, { id: 'run-checkout', kind: 'workflow', dependsOn: ['call-api'], nodeId: 'order-workflow', workflow: { workflowId: 'checkout', workflowVersion: 1 }, idempotencyKeyPattern: 'checkout:{key}' })
+    expect(projectFileV3Schema.safeParse(fixture).success).toBe(true)
+
+    const wrongTarget = structuredClone(fixture)
+    wrongTarget.definitions.workflows[0]!.steps[0]!.targetNodeId = 'orders-db'
+    expect(projectFileV3Schema.safeParse(wrongTarget).success).toBe(false)
+
+    const wrongOwner = structuredClone(fixture)
+    wrongOwner.definitions.workflows[0]!.ownerNodeId = 'orders-service'
+    expect(projectFileV3Schema.safeParse(wrongOwner).success).toBe(false)
+
+    const wrongOperationOwner = structuredClone(fixture)
+    wrongOperationOwner.definitions.workflows[0]!.steps[0]!.targetNodeId = 'fulfillment-worker'
+    expect(projectFileV3Schema.safeParse(wrongOperationOwner).success).toBe(false)
+
+    const wrongCompensationOperationOwner = structuredClone(fixture)
+    wrongCompensationOperationOwner.definitions.workflows[0]!.steps[0]!.compensation!.targetNodeId = 'fulfillment-worker'
+    wrongCompensationOperationOwner.definitions.workflows[0]!.steps[0]!.compensation!.operation = { apiId: 'orders-api', apiVersion: 1, operationId: 'create-order' }
+    expect(projectFileV3Schema.safeParse(wrongCompensationOperationOwner).success).toBe(false)
+
+    const missingDefinition = structuredClone(fixture)
+    const action = missingDefinition.definitions.interactions[0]!.actions.find((candidate) => candidate.kind === 'workflow')!
+    if (action.kind !== 'workflow') throw new Error('Expected workflow action')
+    action.workflow.workflowId = 'missing-workflow'
+    expect(projectFileV3Schema.safeParse(missingDefinition).success).toBe(false)
+
+    const wrongActionOwner = structuredClone(fixture)
+    const ownerAction = wrongActionOwner.definitions.interactions[0]!.actions.find((candidate) => candidate.kind === 'workflow')!
+    if (ownerAction.kind !== 'workflow') throw new Error('Expected workflow action')
+    ownerAction.nodeId = 'orders-service'
+    expect(projectFileV3Schema.safeParse(wrongActionOwner).success).toBe(false)
+  })
+
   it('keeps empty current projects explicitly capacity-only', () => {
     expect(createEmptyProject()).toMatchObject({ schemaVersion: 3, modelingMode: 'capacity-only', definitions: { schemaVersion: 1 }, experiments: [{ operationWorkloads: [] }] })
   })

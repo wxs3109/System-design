@@ -22,6 +22,7 @@ export const dataModelReferenceSchema = z.object({ modelId: contractIdSchema, mo
 export const eventReferenceSchema = z.object({ eventId: contractIdSchema, eventVersion: contractVersionSchema }).strict()
 export const cacheKeyReferenceSchema = z.object({ cacheKeyId: contractIdSchema, cacheKeyVersion: contractVersionSchema }).strict()
 export const interactionReferenceSchema = z.object({ interactionId: contractIdSchema, interactionVersion: contractVersionSchema }).strict()
+export const workflowReferenceSchema = z.object({ workflowId: contractIdSchema, workflowVersion: contractVersionSchema }).strict()
 
 export const jsonSchemaDocumentSchema = z.object({
   ...versionedReferenceFields,
@@ -240,6 +241,40 @@ export const cacheKeyDefinitionSchema = z.object({
   ttlSeconds: z.number().finite().positive().max(31_536_000).optional(),
 }).strict()
 
+export const workflowRetryPolicySchema = z.object({
+  maxAttempts: z.number().int().min(1).max(100).default(1),
+  backoff: z.enum(['fixed', 'exponential']).default('exponential'),
+  baseDelayMs: z.number().finite().nonnegative().max(86_400_000).default(0),
+  maxDelayMs: z.number().finite().nonnegative().max(86_400_000).default(0),
+  jitterRatio: z.number().finite().min(0).max(1).default(0),
+}).strict().superRefine((policy, context) => {
+  if (policy.maxDelayMs < policy.baseDelayMs) context.addIssue({ code: 'custom', path: ['maxDelayMs'], message: 'Maximum retry delay must be at least the base delay.' })
+})
+
+const workflowActivityFields = {
+  targetNodeId: contractIdSchema,
+  operation: apiOperationReferenceSchema.optional(),
+  timeoutMs: z.number().finite().positive().max(86_400_000),
+  retry: workflowRetryPolicySchema,
+}
+
+export const workflowActivitySchema = z.object(workflowActivityFields).strict()
+export const workflowStepSchema = z.object({
+  id: contractIdSchema,
+  name: contractNameSchema.optional(),
+  ...workflowActivityFields,
+  compensation: workflowActivitySchema.optional(),
+}).strict()
+
+export const workflowDefinitionSchema = z.object({
+  ...versionedReferenceFields,
+  name: contractNameSchema,
+  ownerNodeId: contractIdSchema,
+  steps: z.array(workflowStepSchema).min(1).max(1_000),
+}).strict().superRefine((workflow, context) => {
+  addDuplicateIssues(workflow.steps.map((step) => step.id), ['steps'], 'workflow step id', context)
+})
+
 const actionBaseFields = {
   id: contractIdSchema,
   name: contractNameSchema.optional(),
@@ -279,9 +314,13 @@ const realtimeActionSchema = z.object({
   if (action.operation === 'broadcast' && action.messageBytes === undefined) context.addIssue({ code: 'custom', path: ['messageBytes'], message: 'Broadcast requires a message size.' })
   if (action.operation !== 'broadcast' && action.messageBytes !== undefined) context.addIssue({ code: 'custom', path: ['messageBytes'], message: `${action.operation} cannot define a message size.` })
 })
+const workflowActionSchema = z.object({
+  ...actionBaseFields, kind: z.literal('workflow'), nodeId: contractIdSchema, workflow: workflowReferenceSchema,
+  idempotencyKeyPattern: z.string().trim().min(1).max(500).default('workflow:{key}'),
+}).strict()
 
 export const interactionActionSchema = z.discriminatedUnion('kind', [
-  apiCallActionSchema, serviceCallActionSchema, dataAccessActionSchema, cacheAccessActionSchema, eventPublishActionSchema, eventConsumeActionSchema, realtimeActionSchema,
+  apiCallActionSchema, serviceCallActionSchema, dataAccessActionSchema, cacheAccessActionSchema, eventPublishActionSchema, eventConsumeActionSchema, realtimeActionSchema, workflowActionSchema,
 ])
 
 export const interactionDefinitionSchema = z.object({
@@ -309,6 +348,7 @@ export const businessDefinitionsSchema = z.object({
   dataModels: z.array(dataModelSchema).max(10_000).default([]),
   events: z.array(eventDefinitionSchema).max(10_000).default([]),
   cacheKeys: z.array(cacheKeyDefinitionSchema).max(10_000).default([]),
+  workflows: z.array(workflowDefinitionSchema).max(10_000).default([]),
   interactions: z.array(interactionDefinitionSchema).max(10_000).default([]),
 }).strict().superRefine((definitions, context) => {
   addDuplicateIssues(definitions.jsonSchemas.map((entry) => `${entry.id}@${entry.version}`), ['jsonSchemas'], 'JSON Schema version', context)
@@ -316,6 +356,7 @@ export const businessDefinitionsSchema = z.object({
   addDuplicateIssues(definitions.dataModels.map((entry) => `${entry.id}@${entry.version}`), ['dataModels'], 'data-model version', context)
   addDuplicateIssues(definitions.events.map((entry) => `${entry.id}@${entry.version}`), ['events'], 'event version', context)
   addDuplicateIssues(definitions.cacheKeys.map((entry) => `${entry.id}@${entry.version}`), ['cacheKeys'], 'cache-key version', context)
+  addDuplicateIssues(definitions.workflows.map((entry) => `${entry.id}@${entry.version}`), ['workflows'], 'workflow version', context)
   addDuplicateIssues(definitions.interactions.map((entry) => `${entry.id}@${entry.version}`), ['interactions'], 'interaction version', context)
   const operationIds = definitions.apis.flatMap((api) => api.operations.map((operation) => operation.id))
   addDuplicateIssues(operationIds, ['apis'], 'global operation id', context)
@@ -351,7 +392,7 @@ export const operationWorkloadSchema = z.object({
 })
 
 export const emptyBusinessDefinitions = (): BusinessDefinitions => ({
-  schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], interactions: [],
+  schemaVersion: 1, jsonSchemas: [], apis: [], dataModels: [], events: [], cacheKeys: [], workflows: [], interactions: [],
 })
 
 export type JsonSchemaReference = z.infer<typeof jsonSchemaReferenceSchema>
@@ -360,6 +401,7 @@ export type DataModelReference = z.infer<typeof dataModelReferenceSchema>
 export type EventReference = z.infer<typeof eventReferenceSchema>
 export type CacheKeyReference = z.infer<typeof cacheKeyReferenceSchema>
 export type InteractionReference = z.infer<typeof interactionReferenceSchema>
+export type WorkflowReference = z.infer<typeof workflowReferenceSchema>
 export type JsonSchemaDocument = z.infer<typeof jsonSchemaDocumentSchema>
 export type ApiDefinition = z.infer<typeof apiDefinitionSchema>
 export type ApiOperation = z.infer<typeof apiOperationSchema>
@@ -369,6 +411,10 @@ export type KeyValueDataModel = z.infer<typeof keyValueDataModelSchema>
 export type DataModel = z.infer<typeof dataModelSchema>
 export type EventDefinition = z.infer<typeof eventDefinitionSchema>
 export type CacheKeyDefinition = z.infer<typeof cacheKeyDefinitionSchema>
+export type WorkflowRetryPolicy = z.infer<typeof workflowRetryPolicySchema>
+export type WorkflowActivity = z.infer<typeof workflowActivitySchema>
+export type WorkflowStep = z.infer<typeof workflowStepSchema>
+export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>
 export type InteractionAction = z.infer<typeof interactionActionSchema>
 export type InteractionDefinition = z.infer<typeof interactionDefinitionSchema>
 export type BusinessDefinitions = z.infer<typeof businessDefinitionsSchema>

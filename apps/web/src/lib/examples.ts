@@ -194,7 +194,7 @@ export const createProductSearchExample = (): ProjectFile => {
       { id: 'catalog-index-api', version: 1, name: 'Catalog Index API', ownerNodeId: 'catalog-indexer', operations: [{ id: 'upsert-product', name: 'Upsert product document', method: 'PUT', path: '/internal/search/products/{id}', request: { schema: { schemaId: 'schema.Product', schemaVersion: 1 }, estimatedBytes: 2_048 }, responses: [{ statusCode: '202' }], handlerTimeMs: 3 }] },
     ],
     dataModels: [{ id: 'product-search-model', version: 1, name: 'Product search documents', ownerNodeId: 'product-search-index', kind: 'document', collections: [{ id: 'products', name: 'products', documentSchema: { schemaId: 'schema.Product', schemaVersion: 1 }, partitionKey: '/id', secondaryIndexes: [{ id: 'ix-product-text', name: 'product_text_and_facets', fields: [{ path: '/title', direction: 'asc' }, { path: '/category', direction: 'asc' }], unique: false }], estimatedDocuments: 100_000, estimatedDocumentBytes: 2_048 }] }],
-    events: [], cacheKeys: [],
+    events: [], cacheKeys: [], workflows: [],
     interactions: [
       { id: 'search-products-flow', version: 1, name: 'Search product catalog', entryOperation: { apiId: 'product-search-api-contract', apiVersion: 1, operationId: 'search-products' }, actions: [
         { id: 'call-product-search', kind: 'api-call', dependsOn: [], sourceNodeId: 'search-shoppers', targetNodeId: 'product-search-api', operation: { apiId: 'product-search-api-contract', apiVersion: 1, operationId: 'search-products' } },
@@ -265,7 +265,7 @@ export const createLogSearchExample = (): ProjectFile => {
     ],
     dataModels: [{ id: 'log-search-model', version: 1, name: 'Time-partitioned log documents', ownerNodeId: 'log-search-index', kind: 'document', collections: [{ id: 'logs', name: 'logs', documentSchema: { schemaId: 'schema.LogEntry', schemaVersion: 1 }, partitionKey: '/service', secondaryIndexes: [{ id: 'ix-log-time-message', name: 'log_time_message', fields: [{ path: '/timestamp', direction: 'desc' }, { path: '/message', direction: 'asc' }], unique: false }], estimatedDocuments: 1_000_000, estimatedDocumentBytes: 1_024 }] }],
     events: [{ id: 'log-received', version: 1, name: 'LogReceived', payloadSchema: { schemaId: 'schema.LogEntry', schemaVersion: 1 }, estimatedPayloadBytes: 1_024, partitionKey: '/service', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'log-collector', consumerNodeIds: ['log-indexers'] }],
-    cacheKeys: [],
+    cacheKeys: [], workflows: [],
     interactions: [
       { id: 'search-logs-flow', version: 1, name: 'Search recent logs', entryOperation: { apiId: 'log-query-api-contract', apiVersion: 1, operationId: 'search-logs' }, actions: [
         { id: 'call-log-query', kind: 'api-call', dependsOn: [], sourceNodeId: 'log-investigators', targetNodeId: 'log-query-api', operation: { apiId: 'log-query-api-contract', apiVersion: 1, operationId: 'search-logs' } },
@@ -322,7 +322,7 @@ export const createOrderEventFanOutExample = (): ProjectFile => {
     schemaVersion: 1,
     jsonSchemas: [{ id: 'schema.OrderEvent', version: 1, name: 'Order event', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['orderId'], properties: { orderId: { type: 'string' }, status: { type: 'string' } } } }],
     apis: [{ id: 'order-events-api', version: 1, name: 'Order events API', ownerNodeId: 'order-api', operations: [{ id: 'accept-order', name: 'Accept order', method: 'POST', path: '/orders', request: { schema: { schemaId: 'schema.OrderEvent', schemaVersion: 1 }, estimatedBytes: 768 }, responses: [{ statusCode: '202' }], handlerTimeMs: 4 }] }],
-    dataModels: [], cacheKeys: [],
+    dataModels: [], cacheKeys: [], workflows: [],
     events: [{ id: 'order-accepted', version: 1, name: 'OrderAccepted', payloadSchema: { schemaId: 'schema.OrderEvent', schemaVersion: 1 }, estimatedPayloadBytes: 768, partitionKey: '/orderId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'order-api', consumerNodeIds: ['fulfillment-subscription', 'email-subscription'] }],
     interactions: [{
       id: 'order-event-flow', version: 1, name: 'Order event fan-out', entryOperation: { apiId: 'order-events-api', apiVersion: 1, operationId: 'accept-order' },
@@ -375,7 +375,7 @@ export const createIncidentFanOutExample = (): ProjectFile => {
     schemaVersion: 1,
     jsonSchemas: [{ id: 'schema.Incident', version: 1, name: 'Incident', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['incidentId'], properties: { incidentId: { type: 'string' }, severity: { type: 'string' } } } }],
     apis: [{ id: 'incident-api', version: 1, name: 'Incident API', ownerNodeId: 'alert-manager', operations: [{ id: 'trigger-incident', name: 'Trigger incident', method: 'POST', path: '/incidents', request: { schema: { schemaId: 'schema.Incident', schemaVersion: 1 }, estimatedBytes: 512 }, responses: [{ statusCode: '202' }], handlerTimeMs: 2 }] }],
-    dataModels: [], cacheKeys: [],
+    dataModels: [], cacheKeys: [], workflows: [],
     events: [{ id: 'incident-triggered', version: 1, name: 'IncidentTriggered', payloadSchema: { schemaId: 'schema.Incident', schemaVersion: 1 }, estimatedPayloadBytes: 512, partitionKey: '/incidentId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'alert-manager', consumerNodeIds: ['pager-subscription', 'chat-subscription', 'audit-subscription'] }],
     interactions: [{
       id: 'incident-fan-out-flow', version: 1, name: 'Incident fan-out', entryOperation: { apiId: 'incident-api', apiVersion: 1, operationId: 'trigger-incident' },
@@ -432,7 +432,7 @@ export const createRealtimeChatExample = (): ProjectFile => {
         handlerTimeMs: 2, slo: { latencyP95Ms: 100, availability: 0.999 },
       }],
     }],
-    dataModels: [], events: [], cacheKeys: [],
+    dataModels: [], events: [], cacheKeys: [], workflows: [],
     interactions: [{
       id: 'chat-message-flow', version: 1, name: 'Connect and broadcast a chat message',
       entryOperation: { apiId: 'chat-api-contract', apiVersion: 1, operationId: 'send-chat-message' },
@@ -494,7 +494,7 @@ export const createCollaborativeEditingExample = (): ProjectFile => {
         handlerTimeMs: 1, slo: { latencyP95Ms: 50, availability: 0.9999 },
       }],
     }],
-    dataModels: [], events: [], cacheKeys: [],
+    dataModels: [], events: [], cacheKeys: [], workflows: [],
     interactions: [{
       id: 'document-operation-flow', version: 1, name: 'Connect and broadcast a document operation',
       entryOperation: { apiId: 'collaboration-api-contract', apiVersion: 1, operationId: 'apply-document-operation' },
@@ -518,6 +518,111 @@ export const createCollaborativeEditingExample = (): ProjectFile => {
       valueSizeDistribution: { kind: 'fixed', bytes: 256 },
     }],
   }]
+  return projectFileV3Schema.parse(project)
+}
+
+const workflowRetry = (maxAttempts: number, baseDelayMs: number, backoff: 'fixed' | 'exponential' = 'exponential') => ({
+  maxAttempts, backoff, baseDelayMs, maxDelayMs: backoff === 'exponential' ? baseDelayMs * 4 : baseDelayMs, jitterRatio: 0,
+})
+
+export const createPaymentCheckoutWorkflowExample = (): ProjectFile => {
+  const project = createEmptyProject('payment-checkout-workflow')
+  project.name = 'Payment checkout workflow'
+  project.modelingMode = 'business-aware'
+  const clients = createRegisteredNode('traffic', 'checkout-clients', { x: 20, y: 180 }, 'checkout-compatibility-load')
+  const api = createRegisteredNode('service', 'checkout-api', { x: 270, y: 180 })
+  const workflow = createRegisteredNode('workflow', 'checkout-coordinator', { x: 520, y: 180 })
+  const inventory = createRegisteredNode('service', 'inventory-service', { x: 800, y: 40 })
+  const payment = createRegisteredNode('service', 'payment-service', { x: 800, y: 180 })
+  const confirmation = createRegisteredNode('service', 'confirmation-service', { x: 800, y: 320 })
+  clients.name = 'Checkout clients'
+  api.name = 'Checkout API'
+  workflow.name = 'Checkout coordinator'
+  inventory.name = 'Inventory service'
+  payment.name = 'Payment service'
+  confirmation.name = 'Confirmation service'
+  for (const node of [api, inventory, payment, confirmation]) if (node.type === 'service') node.config = {
+    ...node.config, replicas: 2, concurrencyPerReplica: 20, serviceTimeMs: 3, jitterMs: 0, errorRate: 0, maxQueueSize: 1_000,
+  }
+  if (workflow.type !== 'workflow') throw new Error('Expected a Workflow node.')
+  workflow.config = { ...workflow.config, maxConcurrentInstances: 500, persistenceTimeMs: 1, defaultStepTimeMs: 5, jitterMs: 0, errorRate: 0, maxQueueSize: 2_000 }
+  project.topology.nodes = [clients, api, workflow, inventory, payment, confirmation]
+  project.topology.edges = [
+    connection('checkout-clients-api', 'checkout-clients', 'checkout-api'),
+    connection('checkout-api-workflow', 'checkout-api', 'checkout-coordinator'),
+    connection('checkout-workflow-inventory', 'checkout-coordinator', 'inventory-service'),
+    connection('checkout-workflow-payment', 'checkout-coordinator', 'payment-service'),
+    connection('checkout-workflow-confirmation', 'checkout-coordinator', 'confirmation-service'),
+  ]
+  project.definitions = {
+    schemaVersion: 1, jsonSchemas: [], dataModels: [], events: [], cacheKeys: [],
+    apis: [{ id: 'checkout-contract', version: 1, name: 'Checkout API', ownerNodeId: 'checkout-api', operations: [{ id: 'submit-checkout', name: 'Submit checkout', method: 'POST', path: '/checkouts', responses: [{ statusCode: '202' }], handlerTimeMs: 2 }] }],
+    workflows: [{ id: 'checkout', version: 1, name: 'Checkout', ownerNodeId: 'checkout-coordinator', steps: [
+      { id: 'reserve-inventory', name: 'Reserve inventory', targetNodeId: 'inventory-service', timeoutMs: 100, retry: workflowRetry(2, 5), compensation: { targetNodeId: 'inventory-service', timeoutMs: 100, retry: workflowRetry(2, 5, 'fixed') } },
+      { id: 'capture-payment', name: 'Capture payment', targetNodeId: 'payment-service', timeoutMs: 100, retry: workflowRetry(3, 5), compensation: { targetNodeId: 'payment-service', timeoutMs: 100, retry: workflowRetry(2, 5, 'fixed') } },
+      { id: 'send-confirmation', name: 'Send confirmation', targetNodeId: 'confirmation-service', timeoutMs: 100, retry: workflowRetry(2, 5) },
+    ] }],
+    interactions: [{ id: 'checkout-flow', version: 1, name: 'Durable checkout', entryOperation: { apiId: 'checkout-contract', apiVersion: 1, operationId: 'submit-checkout' }, actions: [
+      { id: 'accept-checkout', kind: 'api-call', dependsOn: [], sourceNodeId: 'checkout-clients', targetNodeId: 'checkout-api', operation: { apiId: 'checkout-contract', apiVersion: 1, operationId: 'submit-checkout' } },
+      { id: 'coordinate-checkout', kind: 'workflow', dependsOn: ['accept-checkout'], nodeId: 'checkout-coordinator', workflow: { workflowId: 'checkout', workflowVersion: 1 }, idempotencyKeyPattern: 'checkout:{key}' },
+    ] }],
+  }
+  const experiment = project.experiments[0]!
+  experiment.seed = 'payment-checkout-workflow'
+  experiment.simulation = { durationSeconds: 4, sampleIntervalMs: 100, maxRequests: 500, traceLimit: 100, maxHops: 20 }
+  experiment.workloads = [{ id: 'checkout-compatibility-load', name: 'Compatibility load', sourceNodeId: 'checkout-clients', requestsPerSecond: 1, startAtSeconds: 3, durationSeconds: 1, pattern: 'constant', requestBytes: 256 }]
+  experiment.operationWorkloads = [{ id: 'checkout-operations', name: 'Checkout submissions', sourceNodeId: 'checkout-clients', phases: [{ id: 'steady', startAtSeconds: 0, durationSeconds: 2, requestsPerSecond: 8, pattern: 'constant' }], operationMix: [{ operation: { apiId: 'checkout-contract', apiVersion: 1, operationId: 'submit-checkout' }, interaction: { interactionId: 'checkout-flow', interactionVersion: 1 }, weight: 1, requestBytes: 1_024, responseBytes: 128, keyDistribution: { kind: 'uniform', keySpaceSize: 100_000 } }] }]
+  return projectFileV3Schema.parse(project)
+}
+
+export const createOrderFulfillmentWorkflowExample = (): ProjectFile => {
+  const project = createEmptyProject('order-fulfillment-workflow')
+  project.name = 'Compensating order fulfillment'
+  project.modelingMode = 'business-aware'
+  const clients = createRegisteredNode('traffic', 'order-clients', { x: 20, y: 210 }, 'fulfillment-compatibility-load')
+  const api = createRegisteredNode('service', 'orders-api', { x: 250, y: 210 })
+  const workflow = createRegisteredNode('workflow', 'fulfillment-coordinator', { x: 480, y: 210 })
+  const inventory = createRegisteredNode('service', 'inventory-allocation', { x: 760, y: 20 })
+  const warehouse = createRegisteredNode('service', 'warehouse-service', { x: 760, y: 145 })
+  const carrier = createRegisteredNode('service', 'carrier-service', { x: 760, y: 275 })
+  const notification = createRegisteredNode('service', 'notification-service', { x: 760, y: 400 })
+  clients.name = 'Order clients'
+  api.name = 'Orders API'
+  workflow.name = 'Fulfillment coordinator'
+  inventory.name = 'Inventory allocation'
+  warehouse.name = 'Warehouse service'
+  carrier.name = 'Carrier service'
+  notification.name = 'Notification service (unavailable)'
+  for (const node of [api, inventory, warehouse, carrier, notification]) if (node.type === 'service') node.config = {
+    ...node.config, replicas: 2, concurrencyPerReplica: 15, serviceTimeMs: 4, jitterMs: 0, errorRate: node.id === 'notification-service' ? 1 : 0, maxQueueSize: 1_000,
+  }
+  if (workflow.type !== 'workflow') throw new Error('Expected a Workflow node.')
+  workflow.config = { ...workflow.config, maxConcurrentInstances: 200, persistenceTimeMs: 2, defaultStepTimeMs: 5, jitterMs: 0, errorRate: 0, maxQueueSize: 1_000 }
+  project.topology.nodes = [clients, api, workflow, inventory, warehouse, carrier, notification]
+  project.topology.edges = [
+    connection('orders-to-api', 'order-clients', 'orders-api'), connection('api-to-fulfillment', 'orders-api', 'fulfillment-coordinator'),
+    connection('fulfillment-to-inventory', 'fulfillment-coordinator', 'inventory-allocation'), connection('fulfillment-to-warehouse', 'fulfillment-coordinator', 'warehouse-service'),
+    connection('fulfillment-to-carrier', 'fulfillment-coordinator', 'carrier-service'), connection('fulfillment-to-notification', 'fulfillment-coordinator', 'notification-service'),
+  ]
+  project.definitions = {
+    schemaVersion: 1, jsonSchemas: [], dataModels: [], events: [], cacheKeys: [],
+    apis: [{ id: 'fulfillment-contract', version: 1, name: 'Fulfillment API', ownerNodeId: 'orders-api', operations: [{ id: 'fulfill-order', name: 'Fulfill order', method: 'POST', path: '/orders/{id}/fulfillment', responses: [{ statusCode: '202' }], handlerTimeMs: 3 }] }],
+    workflows: [{ id: 'order-fulfillment', version: 1, name: 'Order fulfillment', ownerNodeId: 'fulfillment-coordinator', steps: [
+      { id: 'allocate-inventory', name: 'Allocate inventory', targetNodeId: 'inventory-allocation', timeoutMs: 120, retry: workflowRetry(3, 5), compensation: { targetNodeId: 'inventory-allocation', timeoutMs: 100, retry: workflowRetry(2, 5, 'fixed') } },
+      { id: 'pick-and-pack', name: 'Pick and pack', targetNodeId: 'warehouse-service', timeoutMs: 150, retry: workflowRetry(2, 10), compensation: { targetNodeId: 'warehouse-service', timeoutMs: 100, retry: workflowRetry(2, 5, 'fixed') } },
+      { id: 'book-carrier', name: 'Book carrier', targetNodeId: 'carrier-service', timeoutMs: 150, retry: workflowRetry(2, 10), compensation: { targetNodeId: 'carrier-service', timeoutMs: 100, retry: workflowRetry(2, 5, 'fixed') } },
+      { id: 'notify-customer', name: 'Notify customer', targetNodeId: 'notification-service', timeoutMs: 100, retry: workflowRetry(3, 10, 'fixed') },
+    ] }],
+    interactions: [{ id: 'fulfillment-flow', version: 1, name: 'Compensating order fulfillment', entryOperation: { apiId: 'fulfillment-contract', apiVersion: 1, operationId: 'fulfill-order' }, actions: [
+      { id: 'accept-fulfillment', kind: 'api-call', dependsOn: [], sourceNodeId: 'order-clients', targetNodeId: 'orders-api', operation: { apiId: 'fulfillment-contract', apiVersion: 1, operationId: 'fulfill-order' } },
+      { id: 'coordinate-fulfillment', kind: 'workflow', dependsOn: ['accept-fulfillment'], nodeId: 'fulfillment-coordinator', workflow: { workflowId: 'order-fulfillment', workflowVersion: 1 }, idempotencyKeyPattern: 'fulfillment:{key}' },
+    ] }],
+  }
+  const experiment = project.experiments[0]!
+  experiment.seed = 'order-fulfillment-workflow'
+  experiment.simulation = { durationSeconds: 5, sampleIntervalMs: 100, maxRequests: 500, traceLimit: 100, maxHops: 20 }
+  experiment.workloads = [{ id: 'fulfillment-compatibility-load', name: 'Compatibility load', sourceNodeId: 'order-clients', requestsPerSecond: 1, startAtSeconds: 4, durationSeconds: 1, pattern: 'constant', requestBytes: 512 }]
+  experiment.operationWorkloads = [{ id: 'fulfillment-operations', name: 'Order fulfillment', sourceNodeId: 'order-clients', phases: [{ id: 'steady', startAtSeconds: 0, durationSeconds: 2, requestsPerSecond: 6, pattern: 'constant' }], operationMix: [{ operation: { apiId: 'fulfillment-contract', apiVersion: 1, operationId: 'fulfill-order' }, interaction: { interactionId: 'fulfillment-flow', interactionVersion: 1 }, weight: 1, requestBytes: 768, responseBytes: 128, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 } }] }]
   return projectFileV3Schema.parse(project)
 }
 

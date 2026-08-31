@@ -19,6 +19,10 @@ export const componentCatalog = {
     type: 'scheduler', label: 'Scheduler', description: 'Releases periodic and batch work with deterministic jitter and missed-run handling.',
     category: 'automation', color: '#d97706', acceptsInput: false, emitsOutput: true,
   },
+  workflow: {
+    type: 'workflow', label: 'Workflow', description: 'Persists multi-step executions with idempotency, bounded retry, timeout, and compensation.',
+    category: 'automation', color: '#c2410c', acceptsInput: true, emitsOutput: true,
+  },
   network: {
     type: 'network', label: 'Network Link', description: 'Adds transfer time, latency, jitter and packet loss.',
     category: 'network', color: '#06b6d4', acceptsInput: true, emitsOutput: true,
@@ -74,6 +78,7 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
   switch (type) {
     case 'traffic': return { id, name, position, type, config: { workloadId } }
     case 'scheduler': return { id, name, position, type, config: { scheduleMode: 'periodic', intervalMs: 1_000, startAtMs: 0, batchSize: 1, jitterMs: 0, missedRunPolicy: 'skip', concurrencyLimit: 1, maxPendingRuns: 1_000, requestBytes: 1_024 } }
+    case 'workflow': return { id, name, position, type, config: { maxConcurrentInstances: 1_000, persistenceTimeMs: 2, defaultStepTimeMs: 100, jitterMs: 1, errorRate: 0, maxQueueSize: 10_000 } }
     case 'network': return { id, name, position, type, config: { latencyMs: 20, jitterMs: 2, bandwidthMbps: 100, parallelism: 1_000, packetLossRate: 0, maxQueueSize: 10_000 } }
     case 'load-balancer': return { id, name, position, type, config: { algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 } }
     case 'realtime-gateway': return { id, name, position, type, config: { maxConnections: 100_000, connectionDurationMs: 60_000, maxChannelsPerConnection: 10, defaultChannelCount: 100, maxConcurrentMessages: 1_000, handshakeTimeMs: 2, broadcastBaseTimeMs: 1, fanOutTimePerConnectionMs: 0.01, defaultMessageBytes: 1_024, outboundBandwidthMbps: 10, slowConnectionFraction: 0, slowConnectionBandwidthMbps: 0.1, maxPendingBytesPerConnection: 1_048_576, overflowPolicy: 'drop-message', jitterMs: 0.5, errorRate: 0, maxQueueSize: 100_000 } }

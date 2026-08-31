@@ -111,6 +111,17 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.safeParse({ ...gateway, config: { ...gateway.config, slowConnectionBandwidthMbps: gateway.config.outboundBandwidthMbps + 1 } }).success).toBe(false)
   })
 
+  it('validates Workflow execution capacity and persistence configuration', () => {
+    const workflow = createNode('workflow', 'workflow', { x: 100, y: 50 })
+    if (workflow.type !== 'workflow') throw new Error('Expected a Workflow node.')
+    workflow.config.maxConcurrentInstances = 50
+    workflow.config.persistenceTimeMs = 3
+    expect(scenarioSchema.shape.nodes.element.parse(workflow)).toEqual(workflow)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...workflow, config: { ...workflow.config, maxConcurrentInstances: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...workflow, config: { ...workflow.config, persistenceTimeMs: -1 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...workflow, config: { ...workflow.config, errorRate: 2 } }).success).toBe(false)
+  })
+
   it('validates fault-specific factor bounds', () => {
     const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
     expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)
