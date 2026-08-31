@@ -307,17 +307,17 @@ pnpm check
 
 它们不应成为页面结构、组件类型或仿真引擎的耦合依赖。任何文章都可以被删除或替换，而不影响用户从空白画布搭建系统。
 
-资料目录：
+资料统一存放在 [System Design Knowledge Base](docs/knowledge-base/)：
 
-1. [Interview Method](00-interview-method/)
-2. [Back-of-the-Envelope](01-Back-of-the-Envelope/)
-3. [Core Concepts](02-core-concepts/)
-4. [Data and Storage](03-data-and-storage/)
-5. [Infrastructure Components](04-Infrastructure-Components/)
-6. [General Design Patterns](05-general-design-patterns/)
-7. [Case Design](06-case-design/)
-8. [Security and Observability](07-security-and-observability/)
-9. [Templates and Review](08-templates-and-review/)
+1. [Interview Method](docs/knowledge-base/00-interview-method/)
+2. [Back-of-the-Envelope](docs/knowledge-base/01-Back-of-the-Envelope/)
+3. [Core Concepts](docs/knowledge-base/02-core-concepts/)
+4. [Data and Storage](docs/knowledge-base/03-data-and-storage/)
+5. [Infrastructure Components](docs/knowledge-base/04-Infrastructure-Components/)
+6. [General Design Patterns](docs/knowledge-base/05-general-design-patterns/)
+7. [Case Design](docs/knowledge-base/06-case-design/)
+8. [Security and Observability](docs/knowledge-base/07-security-and-observability/)
+9. [Templates and Review](docs/knowledge-base/08-templates-and-review/)
 
 ## 工程原则
 
