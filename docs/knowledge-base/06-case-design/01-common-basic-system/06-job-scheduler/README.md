@@ -23,6 +23,18 @@ Stop when you have completed the exercise. Cron and implementation fragments are
 
 Scale numbers are used to drive architectural reasoning and do not represent a claim to meet targets without stress testing.
 
+### Runnable simulator example
+
+The web app includes a **Job scheduler** example built entirely from existing components. Open **Load example → Job scheduler**, then run the simulation to inspect three independent workloads:
+
+- one-time job submissions through Job Service into the authoritative Job Store;
+- periodic due scans through Coordinator, Outbox Publisher, Queue and Workers;
+- periodic expired-Lease scans through Lease Reaper.
+
+This is a scaled, executable architecture model rather than a correctness proof. The simulator executes API calls, indexed data access, Outbox publication, at-least-once queue delivery, Worker persistence and Scheduler timing. The relational contracts record the Idempotency Key, due index, Attempt/Lease/Fencing fields and pending-Outbox index.
+
+The current runtime does **not** implement database transaction atomicity, compare-and-set state transitions, persistent row contents, Lease heartbeats, fencing validation or downstream business idempotency. Therefore the example must not be read as proving no-loss, bounded retry or stale-Worker exclusion; those guarantees still come from the invariants and transaction boundaries derived in this case.
+
 ## 2. Scope
 
 Core functions:

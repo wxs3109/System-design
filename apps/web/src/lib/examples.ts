@@ -83,26 +83,198 @@ export const createDataPlatformExample = (): ProjectFile => {
   return project
 }
 
-export const createScheduledBatchExample = (): ProjectFile => {
-  const project = createEmptyProject('scheduled-batch-pipeline')
-  project.name = 'Scheduled batch pipeline'
-  project.topology.nodes = [
-    createRegisteredNode('scheduler', 'batch-scheduler', { x: 60, y: 180 }),
-    createRegisteredNode('queue', 'batch-queue', { x: 330, y: 180 }),
-    createRegisteredNode('service', 'batch-workers', { x: 600, y: 180 }),
-    createRegisteredNode('database', 'batch-database', { x: 870, y: 180 }),
+export const createJobSchedulerExample = (): ProjectFile => {
+  const project = createEmptyProject('job-scheduler')
+  project.name = 'One-time job scheduler'
+  project.modelingMode = 'business-aware'
+
+  const clients = createRegisteredNode('traffic', 'job-clients', { x: 20, y: 20 }, 'job-submission-compatibility-load')
+  const jobService = createRegisteredNode('service', 'job-service', { x: 280, y: 20 })
+  const dueScheduler = createRegisteredNode('scheduler', 'due-scan-scheduler', { x: 20, y: 220 })
+  const coordinator = createRegisteredNode('service', 'job-coordinator', { x: 280, y: 220 })
+  const publisher = createRegisteredNode('service', 'outbox-publisher', { x: 540, y: 220 })
+  const queue = createRegisteredNode('queue', 'execution-queue', { x: 800, y: 220 })
+  const workers = createRegisteredNode('service', 'job-workers', { x: 1_060, y: 220 })
+  const reaperScheduler = createRegisteredNode('scheduler', 'lease-reaper-scheduler', { x: 20, y: 420 })
+  const reaper = createRegisteredNode('service', 'lease-reaper', { x: 280, y: 420 })
+  const store = createRegisteredNode('database', 'job-store', { x: 1_060, y: 20 })
+
+  clients.name = 'Job clients'
+  jobService.name = 'Job Service'
+  dueScheduler.name = 'Due scan clock'
+  coordinator.name = 'Coordinator'
+  publisher.name = 'Outbox Publisher'
+  queue.name = 'Execution queue'
+  workers.name = 'Workers'
+  reaperScheduler.name = 'Lease reaper clock'
+  reaper.name = 'Lease Reaper'
+  store.name = 'Authoritative Job Store'
+
+  for (const node of [jobService, coordinator, publisher, reaper]) if (node.type === 'service') node.config = {
+    ...node.config, replicas: 2, concurrencyPerReplica: 12, serviceTimeMs: 3, jitterMs: 0, errorRate: 0, maxQueueSize: 2_000,
+  }
+  if (workers.type !== 'service' || dueScheduler.type !== 'scheduler' || reaperScheduler.type !== 'scheduler' || queue.type !== 'queue' || store.type !== 'database') {
+    throw new Error('Expected Scheduler, Service, Queue and Database nodes.')
+  }
+  workers.config = { ...workers.config, replicas: 4, concurrencyPerReplica: 8, serviceTimeMs: 25, jitterMs: 2, errorRate: 0, maxQueueSize: 5_000 }
+  dueScheduler.config = { ...dueScheduler.config, scheduleMode: 'periodic', intervalMs: 500, jitterMs: 25, missedRunPolicy: 'catch-up', concurrencyLimit: 2, maxPendingRuns: 20, requestBytes: 256 }
+  reaperScheduler.config = { ...reaperScheduler.config, scheduleMode: 'periodic', intervalMs: 2_000, startAtMs: 1_000, jitterMs: 0, missedRunPolicy: 'skip', concurrencyLimit: 1, maxPendingRuns: 1, requestBytes: 128 }
+  queue.config = { ...queue.config, consumers: 8, deliveryTimeMs: 8, jitterMs: 1, maxDepth: 10_000, errorRate: 0 }
+  store.config = { ...store.config, maxConnections: 80, queryTimeMs: 4, jitterMs: 1, errorRate: 0, maxQueueSize: 10_000, shardCount: 4, replicasPerShard: 1, readPreference: 'primary', replicationDelayMs: 20, writeRatio: 0.75, keySpaceSize: 1_000_000, hotKeyProbability: 0 }
+
+  project.topology.nodes = [clients, jobService, dueScheduler, coordinator, publisher, queue, workers, reaperScheduler, reaper, store]
+  project.topology.edges = [
+    connection('clients-to-job-service', clients.id, jobService.id),
+    connection('job-service-to-store', jobService.id, store.id),
+    connection('due-clock-to-coordinator', dueScheduler.id, coordinator.id),
+    connection('coordinator-to-store', coordinator.id, store.id),
+    connection('coordinator-to-publisher', coordinator.id, publisher.id),
+    connection('publisher-to-store', publisher.id, store.id),
+    asyncConnection('publisher-to-queue', publisher.id, queue.id),
+    asyncConnection('queue-to-workers', queue.id, workers.id),
+    connection('workers-to-store', workers.id, store.id),
+    connection('reaper-clock-to-reaper', reaperScheduler.id, reaper.id),
+    connection('reaper-to-store', reaper.id, store.id),
   ]
-  const scheduler = project.topology.nodes[0]!
-  scheduler.name = 'Nightly release'
-  scheduler.config = { ...scheduler.config, scheduleMode: 'batch', intervalMs: 1_000, batchSize: 8, jitterMs: 100, missedRunPolicy: 'catch-up', concurrencyLimit: 4, maxPendingRuns: 100, requestBytes: 4_096 }
-  project.topology.nodes[1]!.name = 'Batch backlog'
-  project.topology.nodes[2]!.name = 'Batch workers'
-  project.topology.nodes[3]!.name = 'Reporting database'
-  project.topology.edges = [connection('batch-release', 'batch-scheduler', 'batch-queue'), connection('batch-dispatch', 'batch-queue', 'batch-workers'), connection('batch-write', 'batch-workers', 'batch-database')]
+
+  project.definitions = {
+    schemaVersion: 1,
+    jsonSchemas: [
+      {
+        id: 'schema.CreateJob', version: 1, name: 'Create one-time job', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        schema: { type: 'object', required: ['idempotencyKey', 'runAt', 'payload'], properties: { idempotencyKey: { type: 'string' }, runAt: { type: 'string', format: 'date-time' }, payload: { type: 'object' } } },
+      },
+      {
+        id: 'schema.JobAccepted', version: 1, name: 'Accepted job', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        schema: { type: 'object', required: ['jobId', 'executionId'], properties: { jobId: { type: 'string' }, executionId: { type: 'string' } } },
+      },
+      {
+        id: 'schema.ExecutionReady', version: 1, name: 'Execution ready message', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        schema: { type: 'object', required: ['executionId', 'shardId'], properties: { executionId: { type: 'string' }, shardId: { type: 'integer' } } },
+      },
+    ],
+    apis: [
+      {
+        id: 'job-api', version: 1, name: 'Job API', ownerNodeId: jobService.id,
+        operations: [{ id: 'create-job', name: 'Create a one-time job', method: 'POST', path: '/jobs', request: { schema: { schemaId: 'schema.CreateJob', schemaVersion: 1 }, estimatedBytes: 1_024 }, responses: [{ statusCode: '202', body: { schema: { schemaId: 'schema.JobAccepted', schemaVersion: 1 }, estimatedBytes: 256 } }], handlerTimeMs: 3, slo: { latencyP95Ms: 150, availability: 0.999 } }],
+      },
+      {
+        id: 'coordinator-api', version: 1, name: 'Coordinator API', ownerNodeId: coordinator.id,
+        operations: [{ id: 'dispatch-due-executions', name: 'Scan and dispatch due executions', method: 'POST', path: '/internal/executions/dispatch-due', responses: [{ statusCode: '202' }], handlerTimeMs: 2 }],
+      },
+      {
+        id: 'outbox-api', version: 1, name: 'Outbox Publisher API', ownerNodeId: publisher.id,
+        operations: [{ id: 'publish-pending-outbox', name: 'Publish pending outbox records', method: 'POST', path: '/internal/outbox/publish', responses: [{ statusCode: '202' }], handlerTimeMs: 2 }],
+      },
+      {
+        id: 'lease-reaper-api', version: 1, name: 'Lease Reaper API', ownerNodeId: reaper.id,
+        operations: [{ id: 'reap-expired-leases', name: 'Reap expired leases', method: 'POST', path: '/internal/leases/reap', responses: [{ statusCode: '202' }], handlerTimeMs: 2 }],
+      },
+    ],
+    dataModels: [{
+      id: 'job-store-model', version: 1, name: 'Co-located scheduler state', ownerNodeId: store.id, kind: 'relational',
+      tables: [
+        {
+          id: 'jobs', name: 'jobs', columns: [
+            { id: 'job-id', name: 'job_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'idempotency-key', name: 'idempotency_key', type: { kind: 'string', maxLength: 160 }, nullable: false },
+            { id: 'payload', name: 'payload', type: { kind: 'json' }, nullable: false },
+            { id: 'created-at', name: 'created_at', type: { kind: 'datetime' }, nullable: false },
+          ], primaryKey: { id: 'pk-jobs', name: 'jobs_pk', columnIds: ['job-id'] }, uniqueKeys: [{ id: 'uk-job-idempotency', name: 'jobs_idempotency_uk', columnIds: ['idempotency-key'] }], foreignKeys: [], indexes: [], estimatedRows: 100_000_000, estimatedRowBytes: 1_024,
+        },
+        {
+          id: 'executions', name: 'executions', columns: [
+            { id: 'execution-id', name: 'execution_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'execution-job-id', name: 'job_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'execution-status', name: 'status', type: { kind: 'string', maxLength: 32 }, nullable: false },
+            { id: 'run-at', name: 'run_at', type: { kind: 'datetime' }, nullable: false },
+            { id: 'current-attempt', name: 'current_attempt', type: { kind: 'integer', bits: 32 }, nullable: false },
+            { id: 'execution-version', name: 'version', type: { kind: 'integer', bits: 64 }, nullable: false },
+          ], primaryKey: { id: 'pk-executions', name: 'executions_pk', columnIds: ['execution-id'] }, uniqueKeys: [], foreignKeys: [{ id: 'fk-execution-job', name: 'executions_job_fk', columnIds: ['execution-job-id'], referencedTableId: 'jobs', referencedColumnIds: ['job-id'] }], indexes: [{ id: 'ix-due-executions', name: 'executions_due', columnIds: ['execution-status', 'run-at'], includedColumnIds: ['execution-id', 'execution-version'], kind: 'btree', unique: false }], estimatedRows: 100_000_000, estimatedRowBytes: 384,
+        },
+        {
+          id: 'attempts', name: 'attempts', columns: [
+            { id: 'attempt-id', name: 'attempt_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'attempt-execution-id', name: 'execution_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'attempt-number', name: 'attempt_number', type: { kind: 'integer', bits: 32 }, nullable: false },
+            { id: 'attempt-status', name: 'status', type: { kind: 'string', maxLength: 32 }, nullable: false },
+            { id: 'lease-until', name: 'lease_until', type: { kind: 'datetime' }, nullable: false },
+            { id: 'fencing-token', name: 'fencing_token', type: { kind: 'integer', bits: 64 }, nullable: false },
+          ], primaryKey: { id: 'pk-attempts', name: 'attempts_pk', columnIds: ['attempt-id'] }, uniqueKeys: [{ id: 'uk-execution-attempt', name: 'attempts_execution_number_uk', columnIds: ['attempt-execution-id', 'attempt-number'] }], foreignKeys: [{ id: 'fk-attempt-execution', name: 'attempts_execution_fk', columnIds: ['attempt-execution-id'], referencedTableId: 'executions', referencedColumnIds: ['execution-id'] }], indexes: [{ id: 'ix-expired-leases', name: 'attempts_expired_lease', columnIds: ['attempt-status', 'lease-until'], includedColumnIds: ['attempt-execution-id', 'fencing-token'], kind: 'btree', unique: false }], estimatedRows: 140_000_000, estimatedRowBytes: 320,
+        },
+        {
+          id: 'outbox', name: 'outbox', columns: [
+            { id: 'outbox-id', name: 'outbox_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'outbox-execution-id', name: 'execution_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'outbox-status', name: 'status', type: { kind: 'string', maxLength: 16 }, nullable: false },
+            { id: 'outbox-created-at', name: 'created_at', type: { kind: 'datetime' }, nullable: false },
+            { id: 'published-at', name: 'published_at', type: { kind: 'datetime' }, nullable: true },
+          ], primaryKey: { id: 'pk-outbox', name: 'outbox_pk', columnIds: ['outbox-id'] }, uniqueKeys: [{ id: 'uk-outbox-execution', name: 'outbox_execution_uk', columnIds: ['outbox-execution-id'] }], foreignKeys: [{ id: 'fk-outbox-execution', name: 'outbox_execution_fk', columnIds: ['outbox-execution-id'], referencedTableId: 'executions', referencedColumnIds: ['execution-id'] }], indexes: [{ id: 'ix-pending-outbox', name: 'outbox_pending', columnIds: ['outbox-status', 'outbox-created-at'], includedColumnIds: ['outbox-id', 'outbox-execution-id'], kind: 'btree', unique: false }], estimatedRows: 100_000_000, estimatedRowBytes: 256,
+        },
+      ],
+    }],
+    events: [{ id: 'execution-ready', version: 1, name: 'ExecutionReady', payloadSchema: { schemaId: 'schema.ExecutionReady', schemaVersion: 1 }, estimatedPayloadBytes: 256, partitionKey: '/executionId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: publisher.id, consumerNodeIds: [workers.id] }],
+    cacheKeys: [], workflows: [],
+    interactions: [
+      {
+        id: 'create-job-flow', version: 1, name: 'Idempotent job creation', entryOperation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-job' },
+        actions: [
+          { id: 'accept-job', kind: 'api-call', dependsOn: [], sourceNodeId: clients.id, targetNodeId: jobService.id, operation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-job' } },
+          { id: 'insert-job', kind: 'data-access', dependsOn: ['accept-job'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'jobs', operation: 'insert', estimatedRows: 1 },
+          { id: 'insert-execution', kind: 'data-access', dependsOn: ['insert-job'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'insert', estimatedRows: 1 },
+        ],
+      },
+      {
+        id: 'dispatch-due-flow', version: 1, name: 'Due scan, outbox dispatch and worker claim', entryOperation: { apiId: 'coordinator-api', apiVersion: 1, operationId: 'dispatch-due-executions' },
+        actions: [
+          { id: 'trigger-due-scan', kind: 'api-call', dependsOn: [], sourceNodeId: dueScheduler.id, targetNodeId: coordinator.id, operation: { apiId: 'coordinator-api', apiVersion: 1, operationId: 'dispatch-due-executions' } },
+          { id: 'scan-due-candidates', kind: 'data-access', dependsOn: ['trigger-due-scan'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'index-read', indexId: 'ix-due-executions', estimatedRows: 32 },
+          { id: 'claim-scheduled-execution', kind: 'data-access', dependsOn: ['scan-due-candidates'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'update', estimatedRows: 1 },
+          { id: 'insert-outbox-record', kind: 'data-access', dependsOn: ['claim-scheduled-execution'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'outbox', operation: 'insert', estimatedRows: 1 },
+          { id: 'wake-outbox-publisher', kind: 'service-call', dependsOn: ['insert-outbox-record'], sourceNodeId: coordinator.id, targetNodeId: publisher.id, operation: { apiId: 'outbox-api', apiVersion: 1, operationId: 'publish-pending-outbox' } },
+          { id: 'read-pending-outbox', kind: 'data-access', dependsOn: ['wake-outbox-publisher'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'outbox', operation: 'index-read', indexId: 'ix-pending-outbox', estimatedRows: 32 },
+          { id: 'publish-execution-ready', kind: 'event-publish', dependsOn: ['read-pending-outbox'], producerNodeId: publisher.id, brokerNodeId: queue.id, event: { eventId: 'execution-ready', eventVersion: 1 } },
+          { id: 'mark-outbox-sent', kind: 'data-access', dependsOn: ['publish-execution-ready'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'outbox', operation: 'update', estimatedRows: 1 },
+          { id: 'consume-execution-ready', kind: 'event-consume', dependsOn: ['publish-execution-ready'], consumerNodeId: workers.id, brokerNodeId: queue.id, event: { eventId: 'execution-ready', eventVersion: 1 } },
+          { id: 'claim-execution-attempt', kind: 'data-access', dependsOn: ['consume-execution-ready'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'update', estimatedRows: 1 },
+          { id: 'insert-attempt-with-lease', kind: 'data-access', dependsOn: ['claim-execution-attempt'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'attempts', operation: 'insert', estimatedRows: 1 },
+          { id: 'complete-execution', kind: 'data-access', dependsOn: ['insert-attempt-with-lease'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'update', estimatedRows: 1 },
+        ],
+      },
+      {
+        id: 'reap-expired-leases-flow', version: 1, name: 'Expired lease recovery', entryOperation: { apiId: 'lease-reaper-api', apiVersion: 1, operationId: 'reap-expired-leases' },
+        actions: [
+          { id: 'trigger-lease-reaper', kind: 'api-call', dependsOn: [], sourceNodeId: reaperScheduler.id, targetNodeId: reaper.id, operation: { apiId: 'lease-reaper-api', apiVersion: 1, operationId: 'reap-expired-leases' } },
+          { id: 'scan-expired-leases', kind: 'data-access', dependsOn: ['trigger-lease-reaper'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'attempts', operation: 'index-read', indexId: 'ix-expired-leases', estimatedRows: 16 },
+          { id: 'close-expired-attempt', kind: 'data-access', dependsOn: ['scan-expired-leases'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'attempts', operation: 'update', estimatedRows: 1 },
+          { id: 'return-execution-to-retry', kind: 'data-access', dependsOn: ['close-expired-attempt'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'update', estimatedRows: 1 },
+        ],
+      },
+    ],
+  }
+
   const experiment = project.experiments[0]!
-  experiment.seed = 'scheduled-batch-pipeline'
-  experiment.simulation = { durationSeconds: 10, sampleIntervalMs: 500, maxRequests: 1_000, traceLimit: 100, maxHops: 20 }
-  return project
+  experiment.seed = 'one-time-job-scheduler'
+  experiment.simulation = { durationSeconds: 6, sampleIntervalMs: 250, maxRequests: 2_000, traceLimit: 200, maxHops: 32 }
+  experiment.workloads = [{ id: 'job-submission-compatibility-load', name: 'Superseded capacity load', sourceNodeId: clients.id, requestsPerSecond: 1, startAtSeconds: 5, durationSeconds: 1, pattern: 'constant', requestBytes: 1_024 }]
+  experiment.operationWorkloads = [
+    {
+      id: 'job-submissions', name: 'One-time job submissions', sourceNodeId: clients.id,
+      phases: [{ id: 'submission-steady', startAtSeconds: 0, durationSeconds: 5, requestsPerSecond: 12, pattern: 'poisson' }],
+      operationMix: [{ operation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-job' }, interaction: { interactionId: 'create-job-flow', interactionVersion: 1 }, weight: 1, requestBytes: 1_024, responseBytes: 256, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 }, valueSizeDistribution: { kind: 'fixed', bytes: 1_024 } }],
+    },
+    {
+      id: 'due-dispatch-cycle', name: 'Due execution dispatch', sourceNodeId: dueScheduler.id,
+      phases: [{ id: 'scheduler-owned', startAtSeconds: 0, durationSeconds: 6, requestsPerSecond: 1, pattern: 'constant' }],
+      operationMix: [{ operation: { apiId: 'coordinator-api', apiVersion: 1, operationId: 'dispatch-due-executions' }, interaction: { interactionId: 'dispatch-due-flow', interactionVersion: 1 }, weight: 1, requestBytes: 256, responseBytes: 64, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 } }],
+    },
+    {
+      id: 'lease-recovery-cycle', name: 'Expired lease recovery', sourceNodeId: reaperScheduler.id,
+      phases: [{ id: 'scheduler-owned', startAtSeconds: 0, durationSeconds: 6, requestsPerSecond: 1, pattern: 'constant' }],
+      operationMix: [{ operation: { apiId: 'lease-reaper-api', apiVersion: 1, operationId: 'reap-expired-leases' }, interaction: { interactionId: 'reap-expired-leases-flow', interactionVersion: 1 }, weight: 1, requestBytes: 128, responseBytes: 64, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 } }],
+    },
+  ]
+  return projectFileV3Schema.parse(project)
 }
 
 export const createVideoDeliveryExample = (): ProjectFile => {

@@ -1,11 +1,20 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createOrderSystemContractFixture, createScheduledReportContractFixture } from '@system-design/model'
+import { createJobSchedulerExample } from '../src/lib/examples'
 
 async function openComponentCategory(page: Page, name: string) {
   const category = page.locator('.category-toggle').filter({ hasText: name })
   await expect(category).toBeVisible()
   if (await category.getAttribute('aria-expanded') !== 'true') await category.click()
   await expect(category).toHaveAttribute('aria-expanded', 'true')
+}
+
+async function openExamplePicker(page: Page) {
+  const picker = page.getByRole('button', { name: 'Load example' })
+  await expect.poll(async () => {
+    if (await picker.getAttribute('aria-expanded') !== 'true') await picker.click()
+    return picker.getAttribute('aria-expanded')
+  }).toBe('true')
 }
 
 const legacyScenario = {
@@ -165,18 +174,21 @@ test('runs the reusable data-platform topology and exposes domain metrics', asyn
   await expect(page.locator('.domain-metrics').filter({ hasText: 'bytes/s' })).toBeVisible()
 })
 
-test('loads a scheduled batch pipeline and exposes executable Scheduler metrics', async ({ page }) => {
+test('loads the one-time job scheduler and exposes executable scheduling paths', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Load example' }).click()
-  await page.getByRole('button', { name: /Scheduled batch/ }).click()
-  await expect(page.getByTestId('rf__node-batch-scheduler')).toContainText('Scheduler')
-  await expect(page.getByTestId('rf__node-batch-scheduler')).toContainText('8 runs every 1000 ms')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Job scheduler/ }).click()
+  await expect(page.getByText('10 components')).toBeVisible()
+  await expect(page.getByTestId('rf__node-due-scan-scheduler')).toContainText('Scheduler')
+  await expect(page.getByTestId('rf__node-due-scan-scheduler')).toContainText('1 run every 500 ms')
+  await expect(page.getByTestId('rf__node-execution-queue')).toContainText('Queue')
 
   await page.getByRole('button', { name: 'Run simulation' }).click()
-  await expect(page.getByText('released 80 · skipped 0 · pending 0')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/released [1-9][0-9]* · skipped 0 · pending 0/).first()).toBeVisible({ timeout: 15_000 })
   const results = page.getByRole('table')
-  await expect(results.getByText('Nightly release', { exact: true })).toBeVisible()
-  await expect(results.getByText('Reporting database', { exact: true })).toBeVisible()
+  await expect(results.getByText('Due scan clock', { exact: true })).toBeVisible()
+  await expect(results.getByText('Workers', { exact: true })).toBeVisible()
+  await expect(results.getByText('Authoritative Job Store', { exact: true })).toBeVisible()
 })
 
 test('loads video delivery and exposes executable CDN controls and metrics', async ({ page }) => {
@@ -454,18 +466,19 @@ test('shows Scheduler timing instead of editable arrival phases for a scheduled 
 
 test('does not offer faults or node policies that Scheduler cannot execute', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Load example' }).click()
-  await page.getByRole('button', { name: /Scheduled batch/ }).click()
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'job-scheduler.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(createJobSchedulerExample())),
+  })
 
-  await page.getByTestId('rf__node-batch-scheduler').dispatchEvent('click')
+  await page.getByTestId('rf__node-due-scan-scheduler').dispatchEvent('click')
   await expect(page.getByLabel('Policy for selected node')).toBeDisabled()
   await expect(page.getByLabel('Policy for selected node')).toHaveValue('')
   await expect(page.getByLabel('Policy for selected node').locator('option')).toHaveText(['No supported policies'])
 
   await page.getByRole('button', { name: 'Add fault' }).click()
   const editor = page.getByLabel('Selected fault editor')
-  await expect(editor.getByLabel('Fault target')).not.toHaveValue('batch-scheduler')
-  await expect(editor.getByLabel('Fault target').locator('option', { hasText: 'Nightly release' })).toHaveCount(0)
+  await expect(editor.getByLabel('Fault target')).not.toHaveValue('due-scan-scheduler')
+  await expect(editor.getByLabel('Fault target').locator('option', { hasText: 'Due scan clock' })).toHaveCount(0)
 })
 
 test('migrates a v1 import and exports a capacity-only ProjectFile v3', async ({ page }) => {
