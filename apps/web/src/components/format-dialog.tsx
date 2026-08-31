@@ -5,6 +5,7 @@ import type { ApiDefinition, DataModel, JsonSchemaDocument, ProjectFile } from '
 import { Download, Upload, X } from 'lucide-react'
 import { useWorkbenchStore } from '@/lib/store'
 import type { DefinitionSelection } from './definition-editor-model'
+import { useI18n } from '@/lib/i18n'
 
 type FormatKind = 'openapi' | 'dbml'
 const downloadText = (text: string, name: string, type: string) => {
@@ -21,6 +22,7 @@ const responseBody = async (response: Response) => {
 }
 
 export function FormatDialog({ kind, selection, onClose, onSelectionChange }: { kind: FormatKind; selection: DefinitionSelection | null; onClose: () => void; onSelectionChange: (selection: DefinitionSelection) => void }) {
+  const { t } = useI18n()
   const project = useWorkbenchStore((state) => state.project)
   const commitProjectEdit = useWorkbenchStore((state) => state.commitProjectEdit)
   const [mode, setMode] = useState<'import' | 'export'>('import')
@@ -35,7 +37,7 @@ export function FormatDialog({ kind, selection, onClose, onSelectionChange }: { 
   const databaseId = project.topology.nodes.find((node) => node.type === 'database')?.id ?? ''
   const selectedApi = selection?.kind === 'apis' ? project.definitions.apis.find((api) => api.id === selection.id && api.version === selection.version) : project.definitions.apis[0]
   const selectedModel = selection?.kind === 'dataModels' ? project.definitions.dataModels.find((model) => model.id === selection.id && model.version === selection.version) : project.definitions.dataModels.find((model) => model.kind === 'relational')
-  const dialogTitle = kind === 'openapi' ? 'OpenAPI 3.1 adapter' : 'DBML adapter'
+  const dialogTitle = t(kind === 'openapi' ? 'OpenAPI 3.1 adapter' : 'DBML adapter')
 
   useEffect(() => {
     previouslyFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -57,24 +59,24 @@ export function FormatDialog({ kind, selection, onClose, onSelectionChange }: { 
     setBusy(true); setError(null)
     try {
       if (kind === 'openapi' && mode === 'export') {
-        if (!selectedApi) throw new Error('Select or create an API before exporting OpenAPI.')
+        if (!selectedApi) throw new Error(t('Select or create an API before exporting OpenAPI.'))
         const response = await responseBody(await fetch('/api/formats/openapi', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'export', contracts: { api: selectedApi, schemas: project.definitions.jsonSchemas } }) }))
         downloadText(await response.text(), selectedApi.id + '.openapi.json', 'application/vnd.oai.openapi+json')
         return
       }
       if (kind === 'dbml' && mode === 'export') {
-        if (!selectedModel || selectedModel.kind !== 'relational') throw new Error('Select a relational data model before exporting DBML.')
+        if (!selectedModel || selectedModel.kind !== 'relational') throw new Error(t('Select a relational data model before exporting DBML.'))
         const response = await responseBody(await fetch('/api/formats/dbml', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'export', model: selectedModel }) }))
         downloadText(await response.text(), selectedModel.id + '.dbml', 'text/plain')
         return
       }
-      if (!source.trim()) throw new Error('Paste a document to import.')
+      if (!source.trim()) throw new Error(t('Paste a document to import.'))
       const endpoint = kind === 'openapi' ? '/api/formats/openapi' : '/api/formats/dbml'
       const request = kind === 'openapi'
         ? { action: 'import', source, apiId: 'imported-api', ownerNodeId: serviceId }
         : { action: 'import', source, options: { modelId: 'imported-relational-model', modelName: 'Imported relational model', ownerNodeId: databaseId } }
-      if (kind === 'openapi' && !serviceId) throw new Error('Add a Service component before importing OpenAPI.')
-      if (kind === 'dbml' && !databaseId) throw new Error('Add a Database component before importing DBML.')
+      if (kind === 'openapi' && !serviceId) throw new Error(t('Add a Service component before importing OpenAPI.'))
+      if (kind === 'dbml' && !databaseId) throw new Error(t('Add a Database component before importing DBML.'))
       const response = await responseBody(await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) }))
       const imported = await response.json() as { api?: ApiDefinition; schemas?: JsonSchemaDocument[] } | DataModel
       let candidate: ProjectFile
@@ -89,11 +91,11 @@ export function FormatDialog({ kind, selection, onClose, onSelectionChange }: { 
         nextSelection = { kind: 'dataModels', id: model.id, version: model.version }
       }
       const result = commitProjectEdit(candidate)
-      if (!result.success) throw new Error(result.issues[0]?.message ?? 'Imported contracts conflict with the project.')
+      if (!result.success) throw new Error(result.issues[0]?.message ?? t('Imported contracts conflict with the project.'))
       onSelectionChange(nextSelection)
       onClose()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Format conversion failed.') } finally { setBusy(false) }
+    } catch (cause) { setError(cause instanceof Error ? t(cause.message) : t('Format conversion failed.')) } finally { setBusy(false) }
   }
 
-  return <div className="format-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section ref={dialogRef} className="format-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}><header><div><strong id={titleId}>{dialogTitle}</strong><span id={descriptionId}>Mature parser · validated project mapping</span></div><button type="button" aria-label="Close format dialog" onClick={onClose}><X size={15} /></button></header><div className="format-dialog-tabs" role="tablist" aria-label="Adapter action"><button type="button" role="tab" aria-selected={mode === 'import'} tabIndex={mode === 'import' ? 0 : -1} onClick={() => setMode('import')}><Upload size={13} /> Import</button><button type="button" role="tab" aria-selected={mode === 'export'} tabIndex={mode === 'export' ? 0 : -1} onClick={() => setMode('export')}><Download size={13} /> Export</button></div>{mode === 'import' ? <label className="definition-field definition-field--code"><span>Paste {kind === 'openapi' ? 'OpenAPI JSON' : 'DBML'}</span><textarea autoFocus rows={17} spellCheck={false} value={source} onChange={(event) => setSource(event.target.value)} /></label> : <p className="format-dialog-summary">{kind === 'openapi' ? selectedApi ? `Export ${selectedApi.name} and referenced JSON Schemas.` : 'No API is available.' : selectedModel?.kind === 'relational' ? `Export ${selectedModel.name}.` : 'No relational model is selected.'}</p>}{error ? <p className="format-dialog-error" role="alert">{error}</p> : null}<footer><button type="button" className="button subtle" onClick={onClose}>Cancel</button><button type="button" className="button run" disabled={busy} onClick={() => void convert()}>{busy ? 'Converting…' : mode === 'import' ? 'Validate and import' : 'Export file'}</button></footer></section></div>
+  return <div className="format-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section ref={dialogRef} className="format-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}><header><div><strong id={titleId}>{dialogTitle}</strong><span id={descriptionId}>{t('Mature parser · validated project mapping')}</span></div><button type="button" aria-label={t('Close format dialog')} onClick={onClose}><X size={15} /></button></header><div className="format-dialog-tabs" role="tablist" aria-label={t('Adapter action')}><button type="button" role="tab" aria-selected={mode === 'import'} tabIndex={mode === 'import' ? 0 : -1} onClick={() => setMode('import')}><Upload size={13} /> {t('Import')}</button><button type="button" role="tab" aria-selected={mode === 'export'} tabIndex={mode === 'export' ? 0 : -1} onClick={() => setMode('export')}><Download size={13} /> {t('Export')}</button></div>{mode === 'import' ? <label className="definition-field definition-field--code"><span>{t('Paste {format}', { format: kind === 'openapi' ? 'OpenAPI JSON' : 'DBML' })}</span><textarea autoFocus rows={17} spellCheck={false} value={source} onChange={(event) => setSource(event.target.value)} /></label> : <p className="format-dialog-summary">{kind === 'openapi' ? selectedApi ? t('Export {name} and referenced JSON Schemas.', { name: selectedApi.name }) : t('No API is available.') : selectedModel?.kind === 'relational' ? t('Export {name}.', { name: selectedModel.name }) : t('No relational model is selected.')}</p>}{error ? <p className="format-dialog-error" role="alert">{error}</p> : null}<footer><button type="button" className="button subtle" onClick={onClose}>{t('Cancel')}</button><button type="button" className="button run" disabled={busy} onClick={() => void convert()}>{t(busy ? 'Converting…' : mode === 'import' ? 'Validate and import' : 'Export file')}</button></footer></section></div>
 }

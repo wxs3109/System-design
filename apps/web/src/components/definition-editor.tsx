@@ -13,6 +13,7 @@ import {
 import { ApiEditor, CacheKeyEditor, EventEditor, JsonSchemaEditor, OperationWorkloadEditor, WorkflowEditor } from './definition-resource-editors'
 import { DataModelEditor } from './data-model-editor'
 import { InteractionEditor } from './interaction-editor'
+import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 
 const groupIcons: Record<DefinitionKind, typeof Braces> = {
   jsonSchemas: FileJson, apis: Server, dataModels: Database, events: Radio, cacheKeys: Braces, workflows: Workflow, interactions: GitBranch, operationWorkloads: Gauge,
@@ -39,12 +40,27 @@ const focusSibling = (event: React.KeyboardEvent<HTMLButtonElement>, direction: 
   buttons[(index + direction + buttons.length) % buttons.length]?.focus()
 }
 
+const localizedResourceDetail = (item: ReturnType<typeof listDefinitionResources>[number], t: Translate) => {
+  const count = Number.parseInt(item.detail.match(/\d+/)?.[0] ?? '0', 10)
+  if (item.kind === 'apis') return t('{count} operations', { count })
+  if (item.kind === 'dataModels') {
+    const modelKind = item.detail.split(' · ')[0] ?? ''
+    return t('{kind} · {count} objects', { kind: localizedValue(t, modelKind), count })
+  }
+  if (item.kind === 'events') return localizedValue(t, item.detail)
+  if (item.kind === 'workflows') return t('{count} steps', { count })
+  if (item.kind === 'interactions') return t('{count} actions', { count })
+  if (item.kind === 'operationWorkloads') return t('{count} operation mix entries', { count })
+  return item.detail
+}
+
 export function DefinitionsExplorer({ project, selection, onSelect, onError }: {
   project: ProjectFile
   selection: DefinitionSelection | null
   onSelect: (selection: DefinitionSelection) => void
   onError: (message: string) => void
 }) {
+  const { t } = useI18n()
   const commitProjectEdit = useWorkbenchStore((state) => state.commitProjectEdit)
   const add = (kind: DefinitionKind, modelKind?: DataModelKind) => {
     try {
@@ -59,25 +75,25 @@ export function DefinitionsExplorer({ project, selection, onSelect, onError }: {
   }
 
   return (
-    <nav className="definitions-explorer" aria-label="Project definitions">
-      <div className="definitions-explorer__heading"><div><strong>Definitions</strong><span>Business contracts</span></div></div>
+    <nav className="definitions-explorer" aria-label={t('Project definitions')}>
+      <div className="definitions-explorer__heading"><div><strong>{t('Definitions')}</strong><span>{t('Business contracts')}</span></div></div>
       <div className="definition-groups">
         {definitionGroups.map((group) => {
           const Icon = groupIcons[group.kind]
           const items = listDefinitionResources(project, group.kind)
           return <section className="definition-group" key={group.kind} aria-labelledby={`definition-group-${group.kind}`}>
-            <div className="definition-group__heading"><span id={`definition-group-${group.kind}`}><Icon size={13} aria-hidden="true" />{group.label}<small>{items.length}</small></span>
+            <div className="definition-group__heading"><span id={`definition-group-${group.kind}`}><Icon size={13} aria-hidden="true" />{t(group.label)}<small>{items.length}</small></span>
               {group.kind === 'dataModels' ? <div className="definition-add-menu">
-                <button type="button" aria-label="Add data model"><Plus size={12} /><ChevronDown size={10} /></button>
-                <div><button type="button" onClick={() => add('dataModels', 'relational')}>Relational</button><button type="button" onClick={() => add('dataModels', 'document')}>Document</button><button type="button" onClick={() => add('dataModels', 'key-value')}>Key-value</button></div>
-              </div> : <button type="button" className="definition-add" aria-label={`Add ${group.label}`} onClick={() => add(group.kind)}><Plus size={12} /></button>}
+                <button type="button" aria-label={t('Add data model')}><Plus size={12} /><ChevronDown size={10} /></button>
+                <div><button type="button" onClick={() => add('dataModels', 'relational')}>{t('Relational')}</button><button type="button" onClick={() => add('dataModels', 'document')}>{t('Document')}</button><button type="button" onClick={() => add('dataModels', 'key-value')}>{t('Key-value')}</button></div>
+              </div> : <button type="button" className="definition-add" aria-label={t('Add {name}', { name: t(group.label) })} onClick={() => add(group.kind)}><Plus size={12} /></button>}
             </div>
             <div className="definition-group__items">
               {items.map((item) => <button type="button" className="definition-item" key={selectionKey(item)} aria-current={selection && selectionKey(selection) === selectionKey(item) ? 'true' : undefined}
                 onKeyDown={(event) => focusSibling(event, event.key === 'ArrowUp' ? -1 : 1)} onClick={() => onSelect(item)}>
-                <span>{item.name}</span><small>{item.id}{item.version === undefined ? '' : ` · v${item.version}`}</small><em>{item.detail}</em>
+                <span>{item.name}</span><small>{item.id}{item.version === undefined ? '' : ` · v${item.version}`}</small><em>{localizedResourceDetail(item, t)}</em>
               </button>)}
-              {items.length === 0 ? <p>{group.emptyLabel}</p> : null}
+              {items.length === 0 ? <p>{t(group.emptyLabel)}</p> : null}
             </div>
           </section>
         })}
@@ -105,6 +121,7 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
   selection: DefinitionSelection | null
   onSelectionChange: (selection: DefinitionSelection | null) => void
 }) {
+  const { t } = useI18n()
   const project = useWorkbenchStore((state) => state.project)
   const commitProjectEdit = useWorkbenchStore((state) => state.commitProjectEdit)
   const resource = selection ? findDefinitionResource(project, selection) : undefined
@@ -138,13 +155,13 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
     onSelectionChange(nextSelectionAfterDelete(latest, selection))
   }
 
-  if (!selection || !draft) return <div className="definition-editor-empty"><GitBranch size={26} /><strong>Select or create a definition</strong><p>Contracts, data shape, access paths, and operation traffic live in the exported ProjectFile.</p></div>
+  if (!selection || !draft) return <div className="definition-editor-empty"><GitBranch size={26} /><strong>{t('Select or create a definition')}</strong><p>{t('Contracts, data shape, access paths, and operation traffic live in the exported ProjectFile.')}</p></div>
 
-  return <div className="definition-editor" aria-label="Definition editor">
-    <header className="definition-editor__header"><div><span>{definitionGroups.find((group) => group.kind === selection.kind)?.label}</span><strong>{draft.name}</strong><code>{draft.id}{'version' in draft ? `@${draft.version}` : ''}</code></div>
-      <button type="button" className="icon-button danger" aria-label={`Delete ${draft.name}`} onClick={remove}><Trash2 size={15} /></button>
+  return <div className="definition-editor" aria-label={t('Definition editor')}>
+    <header className="definition-editor__header"><div><span>{t(definitionGroups.find((group) => group.kind === selection.kind)?.label ?? '')}</span><strong>{draft.name}</strong><code>{draft.id}{'version' in draft ? `@${draft.version}` : ''}</code></div>
+      <button type="button" className="icon-button danger" aria-label={t('Delete {name}', { name: draft.name })} onClick={remove}><Trash2 size={15} /></button>
     </header>
-    {issues.length > 0 ? <div className="definition-errors" role="alert"><strong>{issues.length} issue{issues.length === 1 ? '' : 's'} must be resolved</strong><ul>{issues.slice(0, 8).map((issue, index) => <li key={`${issue.path.join('.')}-${index}`}><code>{issue.path[0] === 'dependency' ? 'Referenced by ' + issue.path.slice(1).join('.') : issue.path.join('.') || 'definition'}</code> {issue.message}</li>)}</ul></div> : <div className="definition-valid" role="status">Saved to project · undo available</div>}
+    {issues.length > 0 ? <div className="definition-errors" role="alert"><strong>{t('{count} issues must be resolved', { count: issues.length })}</strong><ul>{issues.slice(0, 8).map((issue, index) => <li key={`${issue.path.join('.')}-${index}`}><code>{issue.path[0] === 'dependency' ? t('Referenced by {path}', { path: issue.path.slice(1).join('.') }) : issue.path.join('.') || t('definition')}</code> {t(issue.message)}</li>)}</ul></div> : <div className="definition-valid" role="status">{t('Saved to project · undo available')}</div>}
     <div className="definition-editor__body">
       {selection.kind === 'jsonSchemas' ? <JsonSchemaEditor value={draft as JsonSchemaDocument} issues={issues} onChange={commit} /> : null}
       {selection.kind === 'apis' ? <ApiEditor project={project} value={draft as ApiDefinition} issues={issues} onChange={commit} /> : null}

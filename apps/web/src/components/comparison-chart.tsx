@@ -7,6 +7,7 @@ import { LineChart } from 'echarts/charts'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { RuntimeEvent } from '@system-design/model'
 import { runtimeFaultWindows } from './fault-windows'
+import { useI18n } from '@/lib/i18n'
 
 echarts.use([GridComponent, LegendComponent, MarkAreaComponent, TooltipComponent, LineChart, CanvasRenderer])
 
@@ -27,6 +28,7 @@ interface ComparisonChartProps {
 }
 
 export function ComparisonChart({ points, metricLabel = 'Throughput', unit = 'req/s', events = [], simulatedDurationMs = 0, theme }: ComparisonChartProps) {
+  const { t } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!hostRef.current) return
@@ -44,25 +46,25 @@ export function ComparisonChart({ points, metricLabel = 'Throughput', unit = 're
     chart.setOption({
       animation: false, backgroundColor: 'transparent',
       grid: { top: 30, right: 10, bottom: 28, left: 42 },
-      legend: { top: 0, textStyle: { color: textColor, fontSize: 9 }, data: ['Baseline', 'Candidate', 'Delta'] },
+      legend: { top: 0, textStyle: { color: textColor, fontSize: 9 }, data: [t('Baseline'), t('Candidate'), t('Delta')] },
       tooltip: { trigger: 'axis', backgroundColor: tooltipBackground, borderColor: axisColor, textStyle: { color: tooltipText } },
       xAxis: { type: 'value', name: 's', axisLabel: { color: textColor, fontSize: 9 }, axisLine: { lineStyle: { color: axisColor } }, splitLine: { show: false } },
       yAxis: { type: 'value', name: unit, axisLabel: { color: textColor, fontSize: 9 }, splitLine: { lineStyle: { color: splitColor } } },
       series: [
         {
-          name: 'Baseline', type: 'line', showSymbol: false, data: points.map((point) => [point.timeSeconds, point.baseline]), lineStyle: { color: baselineColor, width: 2 },
+          name: t('Baseline'), type: 'line', showSymbol: false, data: points.map((point) => [point.timeSeconds, point.baseline]), lineStyle: { color: baselineColor, width: 2 },
           markArea: {
             silent: true, label: { show: false }, itemStyle: { color: dangerColor, opacity: 0.1 },
             data: faultWindows.map((window) => [{ name: `${window.reason} · ${window.target}`, xAxis: window.startSeconds }, { xAxis: window.endSeconds }]),
           },
         },
-        { name: 'Candidate', type: 'line', showSymbol: false, data: points.map((point) => [point.timeSeconds, point.candidate]), lineStyle: { color: '#a78bfa', width: 2 } },
-        { name: 'Delta', type: 'line', showSymbol: false, data: points.map((point) => [point.timeSeconds, point.delta]), lineStyle: { color: '#fbbf24', width: 1, type: 'dashed' } },
+        { name: t('Candidate'), type: 'line', showSymbol: false, data: points.map((point) => [point.timeSeconds, point.candidate]), lineStyle: { color: '#a78bfa', width: 2 } },
+        { name: t('Delta'), type: 'line', showSymbol: false, data: points.map((point) => [point.timeSeconds, point.delta]), lineStyle: { color: '#fbbf24', width: 1, type: 'dashed' } },
       ],
     })
     const observer = new ResizeObserver(() => chart.resize())
     observer.observe(hostRef.current)
     return () => { observer.disconnect(); chart.dispose() }
-  }, [events, points, simulatedDurationMs, theme, unit])
-  return <div ref={hostRef} className="comparison-chart" style={{ width: '100%', height: 230 }} role="img" aria-label={`Aligned baseline, candidate and ${metricLabel} delta over virtual time with ${runtimeFaultWindows(events, simulatedDurationMs).length} fault windows`} />
+  }, [events, points, simulatedDurationMs, t, theme, unit])
+  return <div ref={hostRef} className="comparison-chart" style={{ width: '100%', height: 230 }} role="img" aria-label={t('Aligned baseline, candidate and {metric} delta over virtual time with {count} fault windows', { metric: metricLabel, count: runtimeFaultWindows(events, simulatedDurationMs).length })} />
 }

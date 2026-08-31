@@ -5,6 +5,7 @@ import type { Experiment, ProjectFile } from '@system-design/model'
 import { DataSet } from 'vis-data'
 import { Timeline, type DataItem, type TimelineItem, type TimelineOptions } from 'vis-timeline'
 import { faultTargetName, faultTypeLabels } from './fault-topology'
+import { useI18n } from '@/lib/i18n'
 
 const virtualEpoch = Date.UTC(2000, 0, 1)
 const secondsToDate = (seconds: number) => new Date(virtualEpoch + seconds * 1_000)
@@ -20,6 +21,7 @@ interface FaultTimelineProps {
 }
 
 export function FaultTimeline({ experiment, project, selectedFaultId, onSelect, onMove }: FaultTimelineProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const timelineRef = useRef<Timeline | null>(null)
   const itemsRef = useRef(new DataSet<DataItem, 'id'>())
@@ -29,14 +31,14 @@ export function FaultTimeline({ experiment, project, selectedFaultId, onSelect, 
 
   const items = useMemo<DataItem[]>(() => experiment.faults.map((fault) => ({
     id: fault.id,
-    content: fault.name ?? faultTypeLabels[fault.type],
-    title: `${faultTypeLabels[fault.type]} · ${faultTargetName(fault, project)} · ${fault.startAtSeconds}s–${fault.startAtSeconds + fault.durationSeconds}s`,
+    content: fault.name ?? t(`fault.${fault.type}`, {}, faultTypeLabels[fault.type]),
+    title: `${t(`fault.${fault.type}`, {}, faultTypeLabels[fault.type])} · ${faultTargetName(fault, project)} · ${fault.startAtSeconds}s–${fault.startAtSeconds + fault.durationSeconds}s`,
     start: secondsToDate(fault.startAtSeconds),
     end: secondsToDate(fault.startAtSeconds + fault.durationSeconds),
     type: 'range',
     editable: fault.enabled,
     className: `fault-range fault-${fault.type}${fault.enabled ? '' : ' is-disabled'}`,
-  })), [experiment.faults, project])
+  })), [experiment.faults, project, t])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -79,7 +81,7 @@ export function FaultTimeline({ experiment, project, selectedFaultId, onSelect, 
   return (
     <div className="fault-timeline">
       <div ref={containerRef} aria-hidden="true" />
-      {experiment.faults.length === 0 ? <p className="fault-timeline__empty">No faults scheduled. Add one to break this design during virtual time.</p> : null}
+      {experiment.faults.length === 0 ? <p className="fault-timeline__empty">{t('No faults scheduled. Add one to break this design during virtual time.')}</p> : null}
     </div>
   )
 }

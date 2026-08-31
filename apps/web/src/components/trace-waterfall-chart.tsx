@@ -7,6 +7,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { TraceMarker, WaterfallLane } from './trace-explorer-model'
 import { renderTraceWaterfallItem, type WaterfallDatum } from './trace-waterfall-renderer'
+import { useI18n } from '@/lib/i18n'
 
 echarts.use([GridComponent, TooltipComponent, CustomChart, CanvasRenderer])
 
@@ -28,6 +29,7 @@ interface WaterfallRenderApi {
 const asNumber = (value: unknown) => typeof value === 'number' ? value : Number(value ?? 0)
 
 export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId, onSelectSpan, theme }: TraceWaterfallChartProps) {
+  const { t } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId
         spanId: lane.span.spanId, label: lane.label, queueDurationMs: lane.queueDurationMs, serviceDurationMs: lane.serviceDurationMs, failed: lane.span.status === 'error',
       })),
       ...markers.map((marker): WaterfallDatum => ({
-        kind: 'marker', value: [marker.laneIndex, marker.offsetMs, 0, 0, 0], label: `${marker.event.type.replaceAll('-', ' ')} · ${marker.event.reason.replaceAll('_', ' ')}`, markerKind: marker.kind,
+        kind: 'marker', value: [marker.laneIndex, marker.offsetMs, 0, 0, 0], label: `${t(`event.${marker.event.type}`, {}, marker.event.type.replaceAll('-', ' '))} · ${t(`reason.${marker.event.reason}`, {}, marker.event.reason.replaceAll('_', ' '))}`, markerKind: marker.kind,
       })),
     ]
     const chart = echarts.init(hostRef.current, undefined, { renderer: 'canvas' })
@@ -59,8 +61,8 @@ export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId
         formatter: (params: { data?: WaterfallDatum }) => {
           const datum = params.data
           if (!datum) return ''
-          if (datum.kind === 'marker') return `${datum.label}<br/>at ${asNumber(datum.value[1]).toFixed(2)} ms`
-          return `${datum.label}<br/>total ${asNumber(datum.value[2]).toFixed(2)} ms<br/>queue ${asNumber(datum.queueDurationMs).toFixed(2)} ms · service ${asNumber(datum.serviceDurationMs).toFixed(2)} ms`
+          if (datum.kind === 'marker') return `${datum.label}<br/>${t('at')} ${asNumber(datum.value[1]).toFixed(2)} ms`
+          return `${datum.label}<br/>${t('total')} ${asNumber(datum.value[2]).toFixed(2)} ms<br/>${t('queue')} ${asNumber(datum.queueDurationMs).toFixed(2)} ms · ${t('service')} ${asNumber(datum.serviceDurationMs).toFixed(2)} ms`
         },
       },
       xAxis: {
@@ -87,7 +89,7 @@ export function TraceWaterfallChart({ lanes, markers, durationMs, selectedSpanId
     const observer = new ResizeObserver(() => chart.resize())
     observer.observe(hostRef.current)
     return () => { observer.disconnect(); chart.dispose() }
-  }, [durationMs, lanes, markers, onSelectSpan, selectedSpanId, theme])
+  }, [durationMs, lanes, markers, onSelectSpan, selectedSpanId, t, theme])
 
-  return <div ref={hostRef} className="trace-waterfall-chart" role="img" aria-label={`Dependency waterfall with ${lanes.length} spans and ${markers.length} policy or fault markers`} />
+  return <div ref={hostRef} className="trace-waterfall-chart" role="img" aria-label={t('Dependency waterfall with {spans} spans and {markers} policy or fault markers', { spans: lanes.length, markers: markers.length })} />
 }

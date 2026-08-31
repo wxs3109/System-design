@@ -5,6 +5,7 @@ import type { ReasonCode, SimulationResult } from '@system-design/model'
 import { ArrowUpRight, CheckCircle2, CircleX, Timer, Waypoints } from 'lucide-react'
 import { buildTraceMarkers, buildTraceRecords, buildWaterfallLanes, filterTraceRecords, type TraceFilters } from './trace-explorer-model'
 import { TraceWaterfallChart } from './trace-waterfall-chart'
+import { useI18n } from '@/lib/i18n'
 
 interface TraceExplorerProps {
   result: SimulationResult
@@ -18,6 +19,8 @@ const humanize = (value: string) => value.replaceAll('_', ' ')
 const formatMs = (value: number) => value < 1 ? `${value.toFixed(2)} ms` : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`
 
 export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId, theme }: TraceExplorerProps) {
+  const { locale, t } = useI18n()
+  const localReason = (value: string) => t(`reason.${value}`, {}, humanize(value))
   const records = useMemo(() => buildTraceRecords(result), [result])
   const [filters, setFilters] = useState<TraceFilters>({ status: 'all', minimumLatencyMs: 0, componentId: '', reason: 'all' })
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(requestedTraceId ?? null)
@@ -33,45 +36,45 @@ export function TraceExplorer({ result, nodes, onShowOnCanvas, requestedTraceId,
   const selectSpan = (spanId: string) => setSelectedSpanId(spanId)
 
   if (records.length === 0) return (
-    <section className="trace-explorer trace-explorer--empty" aria-label="Trace explorer">
-      <Waypoints size={18} /><strong>No retained request traces</strong><span>Run an experiment that completes at least one request to inspect its dependency path.</span>
+    <section className="trace-explorer trace-explorer--empty" aria-label={t('Trace explorer')}>
+      <Waypoints size={18} /><strong>{t('No retained request traces')}</strong><span>{t('Run an experiment that completes at least one request to inspect its dependency path.')}</span>
     </section>
   )
 
   return (
-    <section className="trace-explorer" aria-label="Trace explorer">
+    <section className="trace-explorer" aria-label={t('Trace explorer')}>
       <div className="trace-explorer__heading">
-        <div><Waypoints size={15} /><strong>Trace explorer</strong><span>{filtered.length.toLocaleString()} of {records.length.toLocaleString()} requests</span></div>
-        {selectedTrace ? <span className={selectedTrace.status === 'error' ? 'trace-outcome is-error' : 'trace-outcome is-ok'}>{selectedTrace.status === 'error' ? <CircleX size={12} /> : <CheckCircle2 size={12} />}{selectedTrace.status} · {formatMs(selectedTrace.durationMs)}</span> : null}
+        <div><Waypoints size={15} /><strong>{t('Trace explorer')}</strong><span>{t('{filtered} of {total} requests', { filtered: filtered.length.toLocaleString(locale), total: records.length.toLocaleString(locale) })}</span></div>
+        {selectedTrace ? <span className={selectedTrace.status === 'error' ? 'trace-outcome is-error' : 'trace-outcome is-ok'}>{selectedTrace.status === 'error' ? <CircleX size={12} /> : <CheckCircle2 size={12} />}{t(`value.${selectedTrace.status}`, {}, selectedTrace.status)} · {formatMs(selectedTrace.durationMs)}</span> : null}
       </div>
 
       <div className="trace-filters">
-        <label><span>Status</span><select aria-label="Trace status" value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as TraceFilters['status'] }))}><option value="all">All outcomes</option><option value="ok">Successful</option><option value="error">Failed</option></select></label>
-        <label><span>Minimum latency</span><input aria-label="Minimum trace latency in milliseconds" type="number" min={0} step={1} value={filters.minimumLatencyMs} onChange={(event) => setFilters((current) => ({ ...current, minimumLatencyMs: Math.max(0, event.currentTarget.valueAsNumber || 0) }))} /></label>
-        <label><span>Component</span><select aria-label="Trace component" value={filters.componentId} onChange={(event) => setFilters((current) => ({ ...current, componentId: event.target.value }))}><option value="">All components</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select></label>
-        <label><span>Reason</span><select aria-label="Trace reason code" value={filters.reason} onChange={(event) => setFilters((current) => ({ ...current, reason: event.target.value as 'all' | ReasonCode }))}><option value="all">All reasons</option>{reasons.map((reason) => <option key={reason} value={reason}>{humanize(reason)}</option>)}</select></label>
+        <label><span>{t('Status')}</span><select aria-label={t('Trace status')} value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as TraceFilters['status'] }))}><option value="all">{t('All outcomes')}</option><option value="ok">{t('Successful')}</option><option value="error">{t('Failed')}</option></select></label>
+        <label><span>{t('Minimum latency')}</span><input aria-label={t('Minimum trace latency in milliseconds')} type="number" min={0} step={1} value={filters.minimumLatencyMs} onChange={(event) => setFilters((current) => ({ ...current, minimumLatencyMs: Math.max(0, event.currentTarget.valueAsNumber || 0) }))} /></label>
+        <label><span>{t('Component')}</span><select aria-label={t('Trace component')} value={filters.componentId} onChange={(event) => setFilters((current) => ({ ...current, componentId: event.target.value }))}><option value="">{t('All components')}</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select></label>
+        <label><span>{t('Reason')}</span><select aria-label={t('Trace reason code')} value={filters.reason} onChange={(event) => setFilters((current) => ({ ...current, reason: event.target.value as 'all' | ReasonCode }))}><option value="all">{t('All reasons')}</option>{reasons.map((reason) => <option key={reason} value={reason}>{localReason(reason)}</option>)}</select></label>
       </div>
 
       <div className="trace-explorer__body">
-        <div className="trace-list" role="listbox" aria-label="Requests">
+        <div className="trace-list" role="listbox" aria-label={t('Requests')}>
           {filtered.slice(0, 100).map((trace) => <button key={trace.traceId} type="button" role="option" aria-selected={trace.traceId === selectedTrace?.traceId} onClick={() => { setSelectedTraceId(trace.traceId); setSelectedSpanId(null) }}>
             <span className={trace.status === 'error' ? 'is-error' : 'is-ok'}>{trace.status === 'error' ? <CircleX size={11} /> : <CheckCircle2 size={11} />}</span>
-            <span><strong>{trace.operationId ? `${trace.operationId} · ` : ''}Request {trace.requestId}</strong><small>{trace.reason === 'none' ? `${trace.spans.length} spans` : humanize(trace.reason)}</small></span>
+            <span><strong>{trace.operationId ? `${trace.operationId} · ` : ''}{t('Request')} {trace.requestId}</strong><small>{trace.reason === 'none' ? t('{count} spans', { count: trace.spans.length }) : localReason(trace.reason)}</small></span>
             <b>{formatMs(trace.durationMs)}</b>
           </button>)}
-          {filtered.length > 100 ? <p>Showing the first 100 matching requests.</p> : null}
-          {filtered.length === 0 ? <p>No requests match all four filters.</p> : null}
+          {filtered.length > 100 ? <p>{t('Showing the first 100 matching requests.')}</p> : null}
+          {filtered.length === 0 ? <p>{t('No requests match all four filters.')}</p> : null}
         </div>
 
         {selectedTrace ? <div className="trace-waterfall">
           <div className="trace-waterfall__summary">
-            <div><code>{selectedTrace.traceId}</code><span>{selectedTrace.operationId ? `${selectedTrace.operationId} · ` : ''}request {selectedTrace.requestId} · {selectedTrace.spans.length} spans · terminal {humanize(selectedTrace.reason)}</span></div>
-            {selectedLane ? <button type="button" onClick={() => onShowOnCanvas(selectedLane.span.nodeId)}><ArrowUpRight size={12} /> Show {nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId} on canvas</button> : null}
+            <div><code>{selectedTrace.traceId}</code><span>{selectedTrace.operationId ? `${selectedTrace.operationId} · ` : ''}{t('request')} {selectedTrace.requestId} · {t('{count} spans', { count: selectedTrace.spans.length })} · {t('terminal')} {localReason(selectedTrace.reason)}</span></div>
+            {selectedLane ? <button type="button" onClick={() => onShowOnCanvas(selectedLane.span.nodeId)}><ArrowUpRight size={12} /> {t('Show {name} on canvas', { name: nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId })}</button> : null}
           </div>
-          <div className="trace-waterfall__legend" aria-label="Waterfall legend"><span><i className="is-queue" /> Queue wait</span><span><i className="is-service" /> Service / dependency</span><span><i className="is-error" /> Failed span</span><span><i className="is-marker" /> Policy / fault event</span></div>
+          <div className="trace-waterfall__legend" aria-label={t('Waterfall legend')}><span><i className="is-queue" /> {t('Queue wait')}</span><span><i className="is-service" /> {t('Service / dependency')}</span><span><i className="is-error" /> {t('Failed span')}</span><span><i className="is-marker" /> {t('Policy / fault event')}</span></div>
           <TraceWaterfallChart lanes={lanes} markers={markers} durationMs={traceDuration} selectedSpanId={selectedLane?.span.spanId} onSelectSpan={selectSpan} theme={theme} />
-          {selectedLane ? <div className="trace-span-detail" aria-live="polite"><Timer size={12} /><strong>{nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId}</strong>{selectedLane.span.actionId ? <code>{selectedLane.span.actionId}</code> : selectedLane.span.operationId ? <code>{selectedLane.span.operationId}</code> : null}<span>{formatMs(selectedLane.queueDurationMs)} queue · {formatMs(selectedLane.serviceDurationMs)} service</span><span>{selectedLane.span.status}{selectedLane.span.reason === 'none' ? '' : ` · ${humanize(selectedLane.span.reason)}`}</span>{selectedLane.span.edgeId ? <code>{selectedLane.span.edgeId}</code> : null}</div> : null}
-        </div> : <div className="trace-waterfall trace-waterfall--empty">No matching trace selected.</div>}
+          {selectedLane ? <div className="trace-span-detail" aria-live="polite"><Timer size={12} /><strong>{nodeNames.get(selectedLane.span.nodeId) ?? selectedLane.span.nodeId}</strong>{selectedLane.span.actionId ? <code>{selectedLane.span.actionId}</code> : selectedLane.span.operationId ? <code>{selectedLane.span.operationId}</code> : null}<span>{formatMs(selectedLane.queueDurationMs)} {t('queue')} · {formatMs(selectedLane.serviceDurationMs)} {t('service')}</span><span>{t(`value.${selectedLane.span.status}`, {}, selectedLane.span.status)}{selectedLane.span.reason === 'none' ? '' : ` · ${localReason(selectedLane.span.reason)}`}</span>{selectedLane.span.edgeId ? <code>{selectedLane.span.edgeId}</code> : null}</div> : null}
+        </div> : <div className="trace-waterfall trace-waterfall--empty">{t('No matching trace selected.')}</div>}
       </div>
     </section>
   )

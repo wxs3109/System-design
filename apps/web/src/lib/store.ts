@@ -26,6 +26,7 @@ interface WorkbenchState {
   addCatalogComponent: (categoryId: string, type: ComponentType, position: { x: number; y: number }, preset?: { id: string; version: number }) => void
   /** Compatibility command for existing callers and ProjectFile v2 preset provenance. */
   addRolePreset: (presetId: string, version: number, position: { x: number; y: number }) => void
+  pasteComponent: (source: ProjectNode, position: { x: number; y: number }, name?: string) => void
   onNodesChange: (changes: NodeChange<WorkbenchNode>[]) => void
   onEdgesChange: (changes: EdgeChange<Edge>[]) => void
   connect: (connection: FlowConnection) => void
@@ -166,6 +167,37 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
       project: {
         ...state.project, topology: { ...state.project.topology, nodes: [...state.project.topology.nodes, node] },
         experiments: state.project.experiments.map((experiment) => node.type === 'traffic' ? { ...experiment, workloads: [...experiment.workloads, { id: workloadId, name: `${preset.label} workload`, sourceNodeId: id, requestsPerSecond: 100, startAtSeconds: 0, durationSeconds: experiment.simulation.durationSeconds, pattern: 'poisson', requestBytes: 1_024 }] } : experiment),
+      },
+      selectedNodeId: id, selectedEdgeId: null, selectedFaultId: null, result: null, error: null,
+    }
+  }),
+  pasteComponent: (source, position, name) => set((state) => {
+    const id = `${source.type}-${Date.now()}-${nextNodeNumber++}`
+    const workloadId = `${id}-workload`
+    const node = {
+      ...structuredClone(source),
+      id,
+      name: name ?? `${source.name} copy`,
+      position,
+      config: source.type === 'traffic' ? { workloadId } : structuredClone(source.config),
+    } as ProjectNode
+    return {
+      project: {
+        ...state.project,
+        topology: { ...state.project.topology, nodes: [...state.project.topology.nodes, node] },
+        experiments: state.project.experiments.map((experiment) => source.type === 'traffic' ? {
+          ...experiment,
+          workloads: [...experiment.workloads, {
+            id: workloadId,
+            name: `${node.name} workload`,
+            sourceNodeId: id,
+            requestsPerSecond: 100,
+            startAtSeconds: 0,
+            durationSeconds: experiment.simulation.durationSeconds,
+            pattern: 'poisson',
+            requestBytes: 1_024,
+          }],
+        } : experiment),
       },
       selectedNodeId: id, selectedEdgeId: null, selectedFaultId: null, result: null, error: null,
     }

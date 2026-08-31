@@ -7,6 +7,7 @@ import { LineChart } from 'echarts/charts'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { RuntimeEvent, TimeSeriesPoint } from '@system-design/model'
 import { runtimeFaultWindows } from './fault-windows'
+import { useI18n } from '@/lib/i18n'
 
 echarts.use([GridComponent, MarkAreaComponent, TooltipComponent, LineChart, CanvasRenderer])
 
@@ -22,6 +23,7 @@ const transparent = (value: string, opacity: number) => {
 }
 
 export function MetricChart({ points, events, simulatedDurationMs, theme }: { points: TimeSeriesPoint[]; events: RuntimeEvent[]; simulatedDurationMs: number; theme?: string | undefined }) {
+  const { t } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function MetricChart({ points, events, simulatedDurationMs, theme }: { po
         type: 'value', axisLabel: { color: textColor, fontSize: 10 }, splitLine: { lineStyle: { color: splitColor } },
       },
       series: [{
-        name: 'Throughput', type: 'line', smooth: true, showSymbol: false, data: points.map((point) => [point.timeSeconds, point.throughputPerSecond]),
+        name: t('Throughput'), type: 'line', smooth: true, showSymbol: false, data: points.map((point) => [point.timeSeconds, point.throughputPerSecond]),
         lineStyle: { width: 2, color: seriesColor }, areaStyle: { color: transparent(seriesColor, 0.08) },
         markArea: {
           silent: true, label: { show: false }, itemStyle: { color: transparent(dangerColor, 0.12) },
@@ -61,8 +63,8 @@ export function MetricChart({ points, events, simulatedDurationMs, theme }: { po
     const observer = new ResizeObserver(() => chart.resize())
     observer.observe(hostRef.current)
     return () => { observer.disconnect(); chart.dispose() }
-  }, [events, points, simulatedDurationMs, theme])
+  }, [events, points, simulatedDurationMs, t, theme])
 
   const faultCount = runtimeFaultWindows(events, simulatedDurationMs).length
-  return <div ref={hostRef} className="metric-chart" role="img" aria-label={`Throughput over simulated time with ${faultCount} fault window${faultCount === 1 ? '' : 's'}`} />
+  return <div ref={hostRef} className="metric-chart" role="img" aria-label={t('Throughput over simulated time with {count} fault windows', { count: faultCount })} />
 }

@@ -133,6 +133,36 @@ describe('validated project undo and redo', () => {
     expect(project.experiments[0]!.workloads[0]).toMatchObject({ sourceNodeId: project.topology.nodes[0]!.id, name: 'Client workload' })
   })
 
+  it('pastes a component with a new identity, copied configuration, and no copied connections', () => {
+    const project = createEmptyProject('paste-component')
+    project.topology.nodes = [createRegisteredNode('scheduler', 'due-scan', { x: 10, y: 20 })]
+    useWorkbenchStore.getState().restoreProject(project)
+
+    useWorkbenchStore.getState().pasteComponent(project.topology.nodes[0]!, { x: 50, y: 70 }, 'Due scan copy')
+
+    const pasted = useWorkbenchStore.getState().project.topology.nodes[1]!
+    expect(pasted).toMatchObject({ name: 'Due scan copy', type: 'scheduler', position: { x: 50, y: 70 }, config: project.topology.nodes[0]!.config })
+    expect(pasted.id).not.toBe('due-scan')
+    expect(useWorkbenchStore.getState().project.topology.edges).toEqual([])
+    expect(useWorkbenchStore.getState().selectedNodeId).toBe(pasted.id)
+    expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+  })
+
+  it('creates an independent workload when pasting a traffic component', () => {
+    useWorkbenchStore.getState().addRolePreset('client', 1, { x: 0, y: 0 })
+    const source = useWorkbenchStore.getState().project.topology.nodes[0]!
+
+    useWorkbenchStore.getState().pasteComponent(source, { x: 40, y: 40 })
+
+    const project = useWorkbenchStore.getState().project
+    const pasted = project.topology.nodes[1]!
+    expect(pasted.type).toBe('traffic')
+    if (pasted.type !== 'traffic') throw new Error('Expected pasted traffic component.')
+    expect(pasted.config.workloadId).not.toBe((source.config as { workloadId: string }).workloadId)
+    expect(project.experiments[0]!.workloads).toContainEqual(expect.objectContaining({ id: pasted.config.workloadId, sourceNodeId: pasted.id }))
+    expect(() => projectFileV3Schema.parse(project)).not.toThrow()
+  })
+
   it('skips Scheduler for default faults and rejects unsupported Scheduler node policies', () => {
     const project = createEmptyProject('scheduler-controls')
     project.topology.nodes = [

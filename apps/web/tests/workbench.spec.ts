@@ -191,6 +191,76 @@ test('loads the one-time job scheduler and exposes executable scheduling paths',
   await expect(results.getByText('Authoritative Job Store', { exact: true })).toBeVisible()
 })
 
+test('keeps component summaries inside their node and provides complete right-click actions', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Job scheduler/ }).click()
+
+  const scheduler = page.getByTestId('rf__node-due-scan-scheduler')
+  const summary = scheduler.locator('.component-node__copy > small')
+  await expect(summary).toContainText('catch-up')
+  expect(await summary.evaluate((element) => {
+    const style = window.getComputedStyle(element)
+    const summaryBounds = element.getBoundingClientRect()
+    const nodeBounds = element.closest('.component-node')!.getBoundingClientRect()
+    return style.overflow === 'hidden' && style.textOverflow === 'ellipsis' && summaryBounds.right <= nodeBounds.right
+  })).toBe(true)
+
+  await scheduler.click({ button: 'right' })
+  const nodeMenu = page.getByRole('menu', { name: 'Component actions' })
+  await expect(nodeMenu).toBeVisible()
+  await expect(nodeMenu.getByRole('menuitem')).toHaveText(['Open properties', 'Copy component', 'Paste component', 'Duplicate component', 'Delete component'])
+  await nodeMenu.getByRole('menuitem', { name: 'Open properties' }).click()
+  await expect(page.getByLabel('Name')).toHaveValue('Due scan clock')
+
+  await scheduler.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Copy component' }).click()
+  await page.locator('.react-flow__pane').click({ button: 'right', position: { x: 420, y: 300 } })
+  await page.getByRole('menuitem', { name: 'Paste component' }).click()
+  await expect(page.getByText('11 components')).toBeVisible()
+
+  const pasted = page.locator('.react-flow__node.selected')
+  await pasted.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Delete component' }).click()
+  await expect(page.getByText('10 components')).toBeVisible()
+})
+
+test('switches the workbench to Chinese and preserves the locale', async ({ page }) => {
+  await page.goto('/')
+  const EnglishToggle = page.getByRole('button', { name: 'Switch to Chinese' })
+  const before = await EnglishToggle.boundingBox()
+  await EnglishToggle.click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await expect(page.getByText('系统设计模拟器', { exact: true })).toBeVisible()
+  await expect(page.getByText('组件', { exact: true }).first()).toBeVisible()
+  const ChineseToggle = page.getByRole('button', { name: '切换到英文' })
+  const after = await ChineseToggle.boundingBox()
+  expect(before).not.toBeNull()
+  expect(after).not.toBeNull()
+  expect(after!.width).toBe(before!.width)
+  expect(Math.abs(after!.x - before!.x)).toBeLessThan(1)
+
+  await page.getByRole('button', { name: '加载示例' }).click()
+  await page.getByRole('button', { name: /任务调度器/ }).click()
+  const scheduler = page.getByTestId('rf__node-due-scan-scheduler')
+  await expect(scheduler).toContainText('调度器')
+  await expect(scheduler).toContainText('补跑')
+
+  await page.getByRole('button', { name: '定义' }).click()
+  const definitions = page.getByRole('navigation', { name: '项目定义' })
+  await expect(definitions).toContainText('业务契约')
+  await expect(definitions).toContainText('数据模型')
+  await definitions.locator('.definition-item').first().click()
+  const editor = page.getByLabel('定义编辑器')
+  await expect(editor.getByLabel('稳定 ID')).toBeVisible()
+  await expect(editor.getByLabel('显示名称')).toBeVisible()
+  await expect(editor.getByLabel('版本')).toBeVisible()
+
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await expect(page.getByRole('button', { name: '切换到英文' })).toBeVisible()
+})
+
 test('loads video delivery and exposes executable CDN controls and metrics', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Load example' }).click()

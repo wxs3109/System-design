@@ -2,29 +2,34 @@
 
 import type { ApiOperationReference, JsonSchemaReference, ProjectFile } from '@system-design/model'
 import type { ProjectEditIssue } from '@/lib/store'
+import { localizedValue, useI18n } from '@/lib/i18n'
 
 export const issueAt = (issues: ProjectEditIssue[], path: Array<string | number>) => issues.find((issue) => path.every((part, index) => issue.path[index] === part))?.message
 
 export function TextInput({ label, value, onChange, issues = [], path = [], placeholder }: { label: string; value: string; onChange: (value: string) => void; issues?: ProjectEditIssue[]; path?: Array<string | number>; placeholder?: string }) {
+  const { t } = useI18n()
   const issue = issueAt(issues, path)
-  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{label}</span><input value={value} placeholder={placeholder} aria-invalid={Boolean(issue)} onChange={(event) => onChange(event.target.value)} />{issue ? <small>{issue}</small> : null}</label>
+  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{t(label)}</span><input value={value} placeholder={placeholder ? t(placeholder) : undefined} aria-invalid={Boolean(issue)} onChange={(event) => onChange(event.target.value)} />{issue ? <small>{t(issue)}</small> : null}</label>
 }
 
 export function NumberInput({ label, value, onChange, issues = [], path = [], min, max, step = 1, optional = false }: { label: string; value: number | undefined; onChange: (value: number | undefined) => void; issues?: ProjectEditIssue[]; path?: Array<string | number>; min?: number; max?: number; step?: number; optional?: boolean }) {
+  const { t } = useI18n()
   const issue = issueAt(issues, path)
-  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{label}</span><input type="number" value={value ?? ''} step={step} {...(min === undefined ? {} : { min })} {...(max === undefined ? {} : { max })} aria-invalid={Boolean(issue)} onChange={(event) => {
+  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{t(label)}</span><input type="number" value={value ?? ''} step={step} {...(min === undefined ? {} : { min })} {...(max === undefined ? {} : { max })} aria-invalid={Boolean(issue)} onChange={(event) => {
     if (event.target.value === '' && optional) onChange(undefined)
     else if (Number.isFinite(event.target.valueAsNumber)) onChange(event.target.valueAsNumber)
-  }} />{issue ? <small>{issue}</small> : null}</label>
+  }} />{issue ? <small>{t(issue)}</small> : null}</label>
 }
 
 export function SelectInput<T extends string>({ label, value, options, onChange, issues = [], path = [], disabled = false }: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string }>; onChange: (value: T) => void; issues?: ProjectEditIssue[]; path?: Array<string | number>; disabled?: boolean }) {
+  const { t } = useI18n()
   const issue = issueAt(issues, path)
-  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{label}</span><select value={value} disabled={disabled} aria-invalid={Boolean(issue)} onChange={(event) => onChange(event.target.value as T)}>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select>{issue ? <small>{issue}</small> : null}</label>
+  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{t(label)}</span><select value={value} disabled={disabled} aria-invalid={Boolean(issue)} onChange={(event) => onChange(event.target.value as T)}>{options.map((option) => <option value={option.value} key={option.value}>{localizedValue(t, option.value, t(option.label))}</option>)}</select>{issue ? <small>{t(issue)}</small> : null}</label>
 }
 
 export function CheckInput({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return <label className="definition-check"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><span>{label}</span></label>
+  const { t } = useI18n()
+  return <label className="definition-check"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><span>{t(label)}</span></label>
 }
 
 export function IdentityFields<T extends { id: string; name: string; version?: number }>({ value, issues, onChange }: { value: T; issues: ProjectEditIssue[]; onChange: (value: T) => void }) {
@@ -65,11 +70,13 @@ export function OperationReferenceSelect({ project, label, value, onChange, issu
 }
 
 export function StringListInput({ label, value, onChange, issues = [], path = [], placeholder }: { label: string; value: string[]; onChange: (value: string[]) => void; issues?: ProjectEditIssue[]; path?: Array<string | number>; placeholder?: string }) {
+  const { t } = useI18n()
   const issue = issueAt(issues, path)
-  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{label}</span><input value={value.join(', ')} placeholder={placeholder} aria-invalid={Boolean(issue)} onChange={(event) => onChange(event.target.value.split(',').map((entry) => entry.trim()).filter(Boolean))} />{issue ? <small>{issue}</small> : null}</label>
+  return <label className={`definition-field${issue ? ' has-error' : ''}`}><span>{t(label)}</span><input value={value.join(', ')} placeholder={placeholder ? t(placeholder) : undefined} aria-invalid={Boolean(issue)} onChange={(event) => onChange(event.target.value.split(',').map((entry) => entry.trim()).filter(Boolean))} />{issue ? <small>{t(issue)}</small> : null}</label>
 }
 
 export function IdListSelect({ label, value, options, onChange, issues = [], path = [] }: { label: string; value: string[]; options: ReadonlyArray<{ value: string; label: string }>; onChange: (value: string[]) => void; issues?: ProjectEditIssue[]; path?: Array<string | number> }) {
+  const { t } = useI18n()
   const issue = issueAt(issues, path)
-  return <fieldset className={`definition-check-list${issue ? ' has-error' : ''}`}><legend>{label}</legend>{options.map((option) => <CheckInput key={option.value} label={option.label} checked={value.includes(option.value)} onChange={(checked) => onChange(checked ? [...value, option.value] : value.filter((entry) => entry !== option.value))} />)}{issue ? <small>{issue}</small> : null}</fieldset>
+  return <fieldset className={`definition-check-list${issue ? ' has-error' : ''}`}><legend>{t(label)}</legend>{options.map((option) => <CheckInput key={option.value} label={option.label} checked={value.includes(option.value)} onChange={(checked) => onChange(checked ? [...value, option.value] : value.filter((entry) => entry !== option.value))} />)}{issue ? <small>{t(issue)}</small> : null}</fieldset>
 }
