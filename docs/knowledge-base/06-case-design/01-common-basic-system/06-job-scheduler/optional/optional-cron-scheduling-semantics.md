@@ -1,6 +1,6 @@
 # Optional: Cron scheduling semantics
 
-Read only if the core requirements explicitly include periodic tasks. Cron is responsible for continuously generating Executions, but does not change the reliable execution core of Execution → Attempt → Lease.
+Read after the one-time reliability mainline when the requirements include recurring jobs. Cron is responsible for continuously generating Executions, but does not change the reliable execution core of Execution → Attempt → Lease.
 
 ## 1. Occurrence Identity
 

@@ -8,13 +8,13 @@ The default learning path only has three documents:
 2. [Progressive Design Main Line](01-job-scheduler-progressive-design-mainline.md): Continuous derivation from the minimum system to the expansion plan.
 3. [Review and Practice](02-job-scheduler-review-and-practice.md): Close-book reconstruction of the design and verification of true mastery.
 
-Stop when you have completed the exercise. Cron and implementation fragments are read on demand in [`optional/`](optional/); production management, workflow and multi-region remain in [Parking Lot](PARKING-LOT.md).
+Stop when you have completed the exercise. Detailed Cron calendar semantics and implementation fragments are read on demand in [`optional/`](optional/); production management, workflow and multi-region remain in [Parking Lot](PARKING-LOT.md).
 
 ## 1. Learning Contract
 
 | Project | Agreement in this case |
 |---|---|
-| Core Scenario | The user submits a one-time Job, the system hands the Execution to the Worker near the planned time, and saves the result |
+| Core Scenario | The user creates a one-time or recurring Job, or triggers a Job on demand; every occurrence becomes an Execution that follows the same reliable Worker path |
 | Core Guarantee | Accepted tasks will not be silently missed due to ordinary process failures; the authoritative state is restored according to At-least-once semantics |
 | Scale assumptions | 100 million active tasks, peak 100,000 triggers/second; 99% of ordinary tasks are claimed within 5 seconds after the planned time |
 | Real-time boundary | Soft real-time, no commitment to millisecond-level precise triggering |
@@ -25,21 +25,25 @@ Scale numbers are used to drive architectural reasoning and do not represent a c
 
 ### Runnable simulator example
 
-The web app includes a **Job scheduler** example built entirely from existing components. Open **Load example → Job scheduler**, then run the simulation to inspect three independent workloads:
+The web app includes a **Job scheduler** example built entirely from existing components. It extends the one-time reliability mainline with bounded recurring and on-demand paths. Open **Load example → Job scheduler**, then run the simulation to inspect four independent workloads:
 
-- one-time job submissions through Job Service into the authoritative Job Store;
+- one-time scheduled jobs, recurring definitions and on-demand executions through Job Service into the authoritative Job Store;
+- periodic recurring-occurrence materialization through Recurring Schedule Clock and Occurrence Materializer;
 - periodic due scans through Coordinator, Outbox Publisher, Queue and Workers;
 - periodic expired-Lease scans through Lease Reaper.
 
-This is a scaled, executable architecture model rather than a correctness proof. The simulator executes API calls, indexed data access, Outbox publication, at-least-once queue delivery, Worker persistence and Scheduler timing. The relational contracts record the Idempotency Key, due index, Attempt/Lease/Fencing fields and pending-Outbox index.
+This is a scaled, executable architecture model rather than a correctness proof. The simulator executes API calls, indexed data access, recurring occurrence materialization, Outbox publication, at-least-once queue delivery, Worker persistence and Scheduler timing. The relational contracts record the Idempotency Key, schedule expression/time zone/version, Misfire and Overlap policies, recurring due index, occurrence uniqueness, Execution trigger kind, Attempt/Lease/Fencing fields and pending-Outbox index.
 
-The current runtime does **not** implement database transaction atomicity, compare-and-set state transitions, persistent row contents, Lease heartbeats, fencing validation or downstream business idempotency. Therefore the example must not be read as proving no-loss, bounded retry or stale-Worker exclusion; those guarantees still come from the invariants and transaction boundaries derived in this case.
+The recurring clock uses deterministic intervals to exercise the materialization path; it is not a Cron parser or calendar engine. The current runtime also does **not** implement database transaction atomicity, compare-and-set state transitions, persistent row contents, Lease heartbeats, fencing validation or downstream business idempotency. Therefore the example must not be read as proving occurrence uniqueness, no-loss, bounded retry or stale-Worker exclusion; those guarantees still come from the invariants and transaction boundaries derived in this case.
 
 ## 2. Scope
 
 Core functions:
 
 - Create a one-time Job using Idempotency Key and specify `runAt`.
+- Create a recurring Job with an explicit schedule expression, time zone, schedule version, Misfire policy and Overlap policy.
+- Materialize each recurring occurrence as a normal Execution and identify it by `(jobId, scheduleVersion, scheduledAt)`.
+- Trigger an existing Job on demand; it enters the same Execution → Attempt → Lease reliability path.
 - Query Job and Execution status.
 - Give the task to the Worker after it expires.
 - Limited retry when Worker fails or loses connection.
@@ -49,7 +53,7 @@ Core functions:
 Out of scope：
 
 - Exactly-once user business side effects.
-- Complete semantics for Cron, Misfire and Overlap.
+- A complete Cron parser, every time-zone/DST edge case, and production-grade Misfire/Overlap enforcement.
 - DAG, Fan-out/Fan-in, Backfill and Compensation.
 - CPU, GPU, region and other resource orchestration.
 - Complete RBAC, accounting, auditing, console and disaster recovery runbooks.
@@ -80,6 +84,9 @@ Retry generates a new Attempt and does not generate a new logical Execution. The
 flowchart LR
     Client --> API[Job Service]
     API --> DB[(Job Store)]
+
+    RecurrenceClock[Recurring Schedule Clock] --> Materializer[Occurrence Materializer]
+    Materializer -->|Scan due schedules / create Execution| DB
 
 Coordinator -->|Scan Expiration/Retry Task| DB
 Coordinator -->|Status + Outbox| DB
@@ -133,7 +140,7 @@ After completing the following tasks without reading the document, this case end
 - Explain why it is not end-to-end Exactly-once.
 - Roughly calculate and write amplification, and explain why a single database cannot directly achieve the goal.
 - Explain how to cover all Shards after sharding without writing out a full scan loop.
-- Give at least three trade-offs and leave Cron, Workflow and full production governance outside the correct boundaries.
+- Give at least three trade-offs and leave a complete Cron calendar engine, Workflow and full production governance outside the correct boundaries.
 
 ## 7. Table of Contents
 

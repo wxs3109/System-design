@@ -33,7 +33,7 @@ const panelVisibilityStorageKey = 'system-design-panel-visibility'
 const defaultPanelVisibility: PanelVisibility = { faults: true, inspector: true, results: true }
 const examples = [
   ['Order system', 'APIs → Cache → Relational data → Events', createOrderSystemExample],
-  ['Job scheduler', 'Submit → due scan → Outbox → Queue → Workers / Reaper', createJobSchedulerExample],
+  ['Job scheduler', 'Schedule / recur / run now → due scan → Queue → Workers', createJobSchedulerExample],
   ['Video delivery', 'Viewers → CDN POPs → Edge cache / Origin', createVideoDeliveryExample],
   ['Product search', 'Queries + catalog updates → sharded Search Index', createProductSearchExample],
   ['Log search', 'Streaming ingest + investigations → Search Index', createLogSearchExample],
@@ -365,6 +365,7 @@ function WorkbenchInner() {
   const [workspaceView, setWorkspaceView] = useState<'topology' | 'definitions'>('topology')
   const [selectedDefinition, setSelectedDefinition] = useState<DefinitionSelection | null>(null)
   const [formatDialog, setFormatDialog] = useState<'openapi' | 'dbml' | null>(null)
+  const [themeReady, setThemeReady] = useState(false)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
@@ -388,6 +389,12 @@ function WorkbenchInner() {
     const [savedRevisions, savedRuns] = await Promise.all([repository.listProjectRevisions(projectId), repository.listSimulationRuns(projectId)])
     setRevisions(savedRevisions)
     setRuns(savedRuns)
+  }, [])
+
+  useEffect(() => {
+    // next-themes resolves the persisted/system theme only in the browser. Keep the hydration render identical to SSR.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setThemeReady(true)
   }, [])
 
   useEffect(() => {
@@ -652,7 +659,7 @@ function WorkbenchInner() {
         <div className="top-actions">
           <div className="workspace-switch" role="group" aria-label={t('Workbench view')}><button type="button" aria-pressed={workspaceView === 'topology'} onClick={() => setWorkspaceView('topology')}><Layers3 size={14} /> {t('Topology')}</button><button type="button" aria-pressed={workspaceView === 'definitions'} onClick={() => { setWorkspaceView('definitions'); if (!panelVisibility.inspector) setPanelVisible('inspector', inspectorPanelRef, true) }}><Blocks size={14} /> {t('Definitions')}</button></div>
           {workspaceView === 'definitions' ? <><button type="button" className="button subtle" onClick={() => setFormatDialog('openapi')}><Braces size={14} /> OpenAPI</button><button type="button" className="button subtle" onClick={() => setFormatDialog('dbml')}><DatabaseZap size={14} /> DBML</button></> : null}
-          <button type="button" className="button subtle icon-only theme-toggle" aria-label={t(resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} title={t(resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}><span className="theme-icon theme-icon--light"><Moon size={15} /></span><span className="theme-icon theme-icon--dark"><Sun size={15} /></span></button>
+          <button type="button" className="button subtle icon-only theme-toggle" aria-label={t(themeReady && resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} title={t(themeReady && resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}><span className="theme-icon theme-icon--light"><Moon size={15} /></span><span className="theme-icon theme-icon--dark"><Sun size={15} /></span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={t(panelVisibility.faults ? 'Hide fault laboratory' : 'Show fault laboratory')} title={t(panelVisibility.faults ? 'Hide fault laboratory' : 'Show fault laboratory')} aria-pressed={panelVisibility.faults} onClick={() => setPanelVisible('faults', faultsPanelRef, !panelVisibility.faults)}><FlaskConical size={15} /><span>{t('Fault lab')}</span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={t(panelVisibility.results ? 'Hide simulation output' : 'Show simulation output')} title={t(panelVisibility.results ? 'Hide simulation output' : 'Show simulation output')} aria-pressed={panelVisibility.results} onClick={() => setPanelVisible('results', resultsPanelRef, !panelVisibility.results)}><PanelBottom size={15} /><span>{t('Output')}</span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={t(panelVisibility.inspector ? 'Hide properties panel' : 'Show properties panel')} title={t(panelVisibility.inspector ? 'Hide properties panel' : 'Show properties panel')} aria-pressed={panelVisibility.inspector} onClick={() => setPanelVisible('inspector', inspectorPanelRef, !panelVisibility.inspector)}><PanelRight size={15} /><span>{t('Properties')}</span></button>

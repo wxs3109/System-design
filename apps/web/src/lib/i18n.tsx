@@ -357,7 +357,7 @@ const zhCN: Record<string, string> = {
   'example.Direct service': '直连服务',
   'example.Async pipeline': '异步流水线',
   'example.Data platform': '数据平台',
-  'example-description.Job scheduler': '提交 → 到期扫描 → Outbox → 队列 → 工作节点 / 回收器',
+  'example-description.Job scheduler': '定时 / 周期 / 立即运行 → 到期扫描 → 队列 → 工作节点',
   'example-description.Order system': 'API → 缓存 → 关系数据 → 事件',
   'example-description.Video delivery': '观看者 → CDN POP → 边缘缓存 / 源站',
   'example-description.Product search': '查询 + 商品更新 → 分片搜索索引',

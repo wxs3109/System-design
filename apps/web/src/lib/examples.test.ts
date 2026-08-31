@@ -4,12 +4,14 @@ import { runSimulation } from '@system-design/simulation'
 import { createCloudDriveDeliveryExample, createCollaborativeEditingExample, createGlobalStorefrontExample, createIncidentFanOutExample, createJobSchedulerExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from './examples'
 
 describe('Job Scheduler example', () => {
-  it('provides an executable one-time scheduling architecture with explicit reliability contracts', async () => {
+  it('provides executable scheduled, recurring and on-demand paths with explicit reliability contracts', async () => {
     const project = createJobSchedulerExample()
     expect(projectFileV3Schema.safeParse(project).success).toBe(true)
     expect(project.modelingMode).toBe('business-aware')
-    expect(project.topology.nodes.filter((node) => node.type === 'scheduler')).toHaveLength(2)
+    expect(project.topology.nodes.filter((node) => node.type === 'scheduler')).toHaveLength(3)
     expect(project.topology.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'recurrence-scheduler', type: 'scheduler' }),
+      expect.objectContaining({ id: 'recurrence-materializer', type: 'service' }),
       expect.objectContaining({ id: 'job-store', type: 'database' }),
       expect.objectContaining({ id: 'execution-queue', type: 'queue' }),
       expect.objectContaining({ id: 'job-workers', type: 'service' }),
@@ -17,24 +19,32 @@ describe('Job Scheduler example', () => {
     expect(project.definitions.dataModels[0]).toMatchObject({
       kind: 'relational',
       tables: expect.arrayContaining([
-        expect.objectContaining({ id: 'jobs' }),
-        expect.objectContaining({ id: 'executions', indexes: expect.arrayContaining([expect.objectContaining({ id: 'ix-due-executions' })]) }),
+        expect.objectContaining({ id: 'jobs', indexes: expect.arrayContaining([expect.objectContaining({ id: 'ix-recurring-jobs-due' })]) }),
+        expect.objectContaining({ id: 'executions', uniqueKeys: expect.arrayContaining([expect.objectContaining({ id: 'uk-execution-occurrence' })]), indexes: expect.arrayContaining([expect.objectContaining({ id: 'ix-due-executions' })]) }),
         expect.objectContaining({ id: 'attempts', indexes: expect.arrayContaining([expect.objectContaining({ id: 'ix-expired-leases' })]) }),
         expect.objectContaining({ id: 'outbox', indexes: expect.arrayContaining([expect.objectContaining({ id: 'ix-pending-outbox' })]) }),
       ]),
     })
+    expect(project.definitions.apis.find((api) => api.id === 'job-api')?.operations.map((operation) => operation.id)).toEqual([
+      'create-job', 'create-recurring-job', 'run-job-now',
+    ])
     expect(project.definitions.events).toEqual([expect.objectContaining({ id: 'execution-ready', delivery: 'at-least-once' })])
     expect(project.experiments[0]?.operationWorkloads.map((workload) => workload.sourceNodeId)).toEqual([
-      'job-clients', 'due-scan-scheduler', 'lease-reaper-scheduler',
+      'job-clients', 'recurrence-scheduler', 'due-scan-scheduler', 'lease-reaper-scheduler',
     ])
 
     const result = await runSimulation(project, 'job-scheduler-example')
     expect(result.nodes.find((node) => node.nodeId === 'job-service')?.processedRequests).toBeGreaterThan(0)
+    expect(Number(result.nodes.find((node) => node.nodeId === 'recurrence-scheduler')?.details?.releasedRuns)).toBeGreaterThan(0)
+    expect(result.nodes.find((node) => node.nodeId === 'recurrence-materializer')?.processedRequests).toBeGreaterThan(0)
     expect(Number(result.nodes.find((node) => node.nodeId === 'due-scan-scheduler')?.details?.releasedRuns)).toBeGreaterThan(0)
     expect(Number(result.nodes.find((node) => node.nodeId === 'lease-reaper-scheduler')?.details?.releasedRuns)).toBeGreaterThan(0)
     expect(result.nodes.find((node) => node.nodeId === 'execution-queue')?.processedRequests).toBeGreaterThan(0)
     expect(result.nodes.find((node) => node.nodeId === 'job-workers')?.processedRequests).toBeGreaterThan(0)
     expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'create-job')).toBe(true)
+    expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'create-recurring-job')).toBe(true)
+    expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'run-job-now')).toBe(true)
+    expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'materialize-recurring-executions')).toBe(true)
     expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'dispatch-due-executions')).toBe(true)
     expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'reap-expired-leases')).toBe(true)
   })

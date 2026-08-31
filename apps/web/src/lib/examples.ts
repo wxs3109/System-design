@@ -85,22 +85,26 @@ export const createDataPlatformExample = (): ProjectFile => {
 
 export const createJobSchedulerExample = (): ProjectFile => {
   const project = createEmptyProject('job-scheduler')
-  project.name = 'One-time job scheduler'
+  project.name = 'Scheduled, recurring and on-demand jobs'
   project.modelingMode = 'business-aware'
 
   const clients = createRegisteredNode('traffic', 'job-clients', { x: 20, y: 20 }, 'job-submission-compatibility-load')
   const jobService = createRegisteredNode('service', 'job-service', { x: 280, y: 20 })
-  const dueScheduler = createRegisteredNode('scheduler', 'due-scan-scheduler', { x: 20, y: 220 })
-  const coordinator = createRegisteredNode('service', 'job-coordinator', { x: 280, y: 220 })
-  const publisher = createRegisteredNode('service', 'outbox-publisher', { x: 540, y: 220 })
-  const queue = createRegisteredNode('queue', 'execution-queue', { x: 800, y: 220 })
-  const workers = createRegisteredNode('service', 'job-workers', { x: 1_060, y: 220 })
-  const reaperScheduler = createRegisteredNode('scheduler', 'lease-reaper-scheduler', { x: 20, y: 420 })
-  const reaper = createRegisteredNode('service', 'lease-reaper', { x: 280, y: 420 })
+  const recurrenceScheduler = createRegisteredNode('scheduler', 'recurrence-scheduler', { x: 20, y: 220 })
+  const recurrenceMaterializer = createRegisteredNode('service', 'recurrence-materializer', { x: 280, y: 220 })
+  const dueScheduler = createRegisteredNode('scheduler', 'due-scan-scheduler', { x: 20, y: 420 })
+  const coordinator = createRegisteredNode('service', 'job-coordinator', { x: 280, y: 420 })
+  const publisher = createRegisteredNode('service', 'outbox-publisher', { x: 540, y: 420 })
+  const queue = createRegisteredNode('queue', 'execution-queue', { x: 800, y: 420 })
+  const workers = createRegisteredNode('service', 'job-workers', { x: 1_060, y: 420 })
+  const reaperScheduler = createRegisteredNode('scheduler', 'lease-reaper-scheduler', { x: 20, y: 620 })
+  const reaper = createRegisteredNode('service', 'lease-reaper', { x: 280, y: 620 })
   const store = createRegisteredNode('database', 'job-store', { x: 1_060, y: 20 })
 
   clients.name = 'Job clients'
   jobService.name = 'Job Service'
+  recurrenceScheduler.name = 'Recurring schedule clock'
+  recurrenceMaterializer.name = 'Occurrence Materializer'
   dueScheduler.name = 'Due scan clock'
   coordinator.name = 'Coordinator'
   publisher.name = 'Outbox Publisher'
@@ -110,22 +114,25 @@ export const createJobSchedulerExample = (): ProjectFile => {
   reaper.name = 'Lease Reaper'
   store.name = 'Authoritative Job Store'
 
-  for (const node of [jobService, coordinator, publisher, reaper]) if (node.type === 'service') node.config = {
+  for (const node of [jobService, recurrenceMaterializer, coordinator, publisher, reaper]) if (node.type === 'service') node.config = {
     ...node.config, replicas: 2, concurrencyPerReplica: 12, serviceTimeMs: 3, jitterMs: 0, errorRate: 0, maxQueueSize: 2_000,
   }
-  if (workers.type !== 'service' || dueScheduler.type !== 'scheduler' || reaperScheduler.type !== 'scheduler' || queue.type !== 'queue' || store.type !== 'database') {
+  if (workers.type !== 'service' || recurrenceScheduler.type !== 'scheduler' || dueScheduler.type !== 'scheduler' || reaperScheduler.type !== 'scheduler' || queue.type !== 'queue' || store.type !== 'database') {
     throw new Error('Expected Scheduler, Service, Queue and Database nodes.')
   }
   workers.config = { ...workers.config, replicas: 4, concurrencyPerReplica: 8, serviceTimeMs: 25, jitterMs: 2, errorRate: 0, maxQueueSize: 5_000 }
+  recurrenceScheduler.config = { ...recurrenceScheduler.config, scheduleMode: 'periodic', intervalMs: 1_000, jitterMs: 10, missedRunPolicy: 'catch-up', concurrencyLimit: 1, maxPendingRuns: 10, requestBytes: 256 }
   dueScheduler.config = { ...dueScheduler.config, scheduleMode: 'periodic', intervalMs: 500, jitterMs: 25, missedRunPolicy: 'catch-up', concurrencyLimit: 2, maxPendingRuns: 20, requestBytes: 256 }
   reaperScheduler.config = { ...reaperScheduler.config, scheduleMode: 'periodic', intervalMs: 2_000, startAtMs: 1_000, jitterMs: 0, missedRunPolicy: 'skip', concurrencyLimit: 1, maxPendingRuns: 1, requestBytes: 128 }
   queue.config = { ...queue.config, consumers: 8, deliveryTimeMs: 8, jitterMs: 1, maxDepth: 10_000, errorRate: 0 }
   store.config = { ...store.config, maxConnections: 80, queryTimeMs: 4, jitterMs: 1, errorRate: 0, maxQueueSize: 10_000, shardCount: 4, replicasPerShard: 1, readPreference: 'primary', replicationDelayMs: 20, writeRatio: 0.75, keySpaceSize: 1_000_000, hotKeyProbability: 0 }
 
-  project.topology.nodes = [clients, jobService, dueScheduler, coordinator, publisher, queue, workers, reaperScheduler, reaper, store]
+  project.topology.nodes = [clients, jobService, recurrenceScheduler, recurrenceMaterializer, dueScheduler, coordinator, publisher, queue, workers, reaperScheduler, reaper, store]
   project.topology.edges = [
     connection('clients-to-job-service', clients.id, jobService.id),
     connection('job-service-to-store', jobService.id, store.id),
+    connection('recurrence-clock-to-materializer', recurrenceScheduler.id, recurrenceMaterializer.id),
+    connection('materializer-to-store', recurrenceMaterializer.id, store.id),
     connection('due-clock-to-coordinator', dueScheduler.id, coordinator.id),
     connection('coordinator-to-store', coordinator.id, store.id),
     connection('coordinator-to-publisher', coordinator.id, publisher.id),
@@ -141,12 +148,24 @@ export const createJobSchedulerExample = (): ProjectFile => {
     schemaVersion: 1,
     jsonSchemas: [
       {
-        id: 'schema.CreateJob', version: 1, name: 'Create one-time job', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        id: 'schema.CreateJob', version: 1, name: 'Create one-time scheduled job', dialect: 'https://json-schema.org/draft/2020-12/schema',
         schema: { type: 'object', required: ['idempotencyKey', 'runAt', 'payload'], properties: { idempotencyKey: { type: 'string' }, runAt: { type: 'string', format: 'date-time' }, payload: { type: 'object' } } },
+      },
+      {
+        id: 'schema.CreateRecurringJob', version: 1, name: 'Create recurring job', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        schema: { type: 'object', required: ['idempotencyKey', 'scheduleExpression', 'timeZone', 'misfirePolicy', 'overlapPolicy', 'payload'], properties: { idempotencyKey: { type: 'string' }, scheduleExpression: { type: 'string' }, timeZone: { type: 'string' }, misfirePolicy: { type: 'string', enum: ['skip', 'fire-once', 'catch-up'] }, overlapPolicy: { type: 'string', enum: ['allow', 'queue', 'skip'] }, payload: { type: 'object' } } },
+      },
+      {
+        id: 'schema.RunJobNow', version: 1, name: 'Run job on demand', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        schema: { type: 'object', required: ['idempotencyKey'], properties: { idempotencyKey: { type: 'string' }, payloadOverride: { type: 'object' } } },
       },
       {
         id: 'schema.JobAccepted', version: 1, name: 'Accepted job', dialect: 'https://json-schema.org/draft/2020-12/schema',
         schema: { type: 'object', required: ['jobId', 'executionId'], properties: { jobId: { type: 'string' }, executionId: { type: 'string' } } },
+      },
+      {
+        id: 'schema.RecurringJobAccepted', version: 1, name: 'Accepted recurring job', dialect: 'https://json-schema.org/draft/2020-12/schema',
+        schema: { type: 'object', required: ['jobId', 'scheduleVersion'], properties: { jobId: { type: 'string' }, scheduleVersion: { type: 'integer' } } },
       },
       {
         id: 'schema.ExecutionReady', version: 1, name: 'Execution ready message', dialect: 'https://json-schema.org/draft/2020-12/schema',
@@ -156,7 +175,15 @@ export const createJobSchedulerExample = (): ProjectFile => {
     apis: [
       {
         id: 'job-api', version: 1, name: 'Job API', ownerNodeId: jobService.id,
-        operations: [{ id: 'create-job', name: 'Create a one-time job', method: 'POST', path: '/jobs', request: { schema: { schemaId: 'schema.CreateJob', schemaVersion: 1 }, estimatedBytes: 1_024 }, responses: [{ statusCode: '202', body: { schema: { schemaId: 'schema.JobAccepted', schemaVersion: 1 }, estimatedBytes: 256 } }], handlerTimeMs: 3, slo: { latencyP95Ms: 150, availability: 0.999 } }],
+        operations: [
+          { id: 'create-job', name: 'Create a one-time scheduled job', method: 'POST', path: '/jobs', request: { schema: { schemaId: 'schema.CreateJob', schemaVersion: 1 }, estimatedBytes: 1_024 }, responses: [{ statusCode: '202', body: { schema: { schemaId: 'schema.JobAccepted', schemaVersion: 1 }, estimatedBytes: 256 } }], handlerTimeMs: 3, slo: { latencyP95Ms: 150, availability: 0.999 } },
+          { id: 'create-recurring-job', name: 'Create a recurring job', method: 'POST', path: '/recurring-jobs', request: { schema: { schemaId: 'schema.CreateRecurringJob', schemaVersion: 1 }, estimatedBytes: 1_152 }, responses: [{ statusCode: '202', body: { schema: { schemaId: 'schema.RecurringJobAccepted', schemaVersion: 1 }, estimatedBytes: 192 } }], handlerTimeMs: 3, slo: { latencyP95Ms: 150, availability: 0.999 } },
+          { id: 'run-job-now', name: 'Run a job on demand', method: 'POST', path: '/jobs/{jobId}/executions', request: { schema: { schemaId: 'schema.RunJobNow', schemaVersion: 1 }, estimatedBytes: 512 }, responses: [{ statusCode: '202', body: { schema: { schemaId: 'schema.JobAccepted', schemaVersion: 1 }, estimatedBytes: 256 } }], handlerTimeMs: 2, slo: { latencyP95Ms: 100, availability: 0.999 } },
+        ],
+      },
+      {
+        id: 'recurrence-api', version: 1, name: 'Recurrence Materializer API', ownerNodeId: recurrenceMaterializer.id,
+        operations: [{ id: 'materialize-recurring-executions', name: 'Materialize due recurring occurrences', method: 'POST', path: '/internal/recurrences/materialize-due', responses: [{ statusCode: '202' }], handlerTimeMs: 2 }],
       },
       {
         id: 'coordinator-api', version: 1, name: 'Coordinator API', ownerNodeId: coordinator.id,
@@ -178,19 +205,28 @@ export const createJobSchedulerExample = (): ProjectFile => {
           id: 'jobs', name: 'jobs', columns: [
             { id: 'job-id', name: 'job_id', type: { kind: 'uuid' }, nullable: false },
             { id: 'idempotency-key', name: 'idempotency_key', type: { kind: 'string', maxLength: 160 }, nullable: false },
+            { id: 'job-trigger-kind', name: 'trigger_kind', type: { kind: 'string', maxLength: 24 }, nullable: false },
             { id: 'payload', name: 'payload', type: { kind: 'json' }, nullable: false },
+            { id: 'schedule-expression', name: 'schedule_expression', type: { kind: 'string', maxLength: 160 }, nullable: true },
+            { id: 'schedule-time-zone', name: 'schedule_time_zone', type: { kind: 'string', maxLength: 64 }, nullable: true },
+            { id: 'schedule-version', name: 'schedule_version', type: { kind: 'integer', bits: 64 }, nullable: false },
+            { id: 'next-run-at', name: 'next_run_at', type: { kind: 'datetime' }, nullable: true },
+            { id: 'misfire-policy', name: 'misfire_policy', type: { kind: 'string', maxLength: 24 }, nullable: true },
+            { id: 'overlap-policy', name: 'overlap_policy', type: { kind: 'string', maxLength: 24 }, nullable: true },
             { id: 'created-at', name: 'created_at', type: { kind: 'datetime' }, nullable: false },
-          ], primaryKey: { id: 'pk-jobs', name: 'jobs_pk', columnIds: ['job-id'] }, uniqueKeys: [{ id: 'uk-job-idempotency', name: 'jobs_idempotency_uk', columnIds: ['idempotency-key'] }], foreignKeys: [], indexes: [], estimatedRows: 100_000_000, estimatedRowBytes: 1_024,
+          ], primaryKey: { id: 'pk-jobs', name: 'jobs_pk', columnIds: ['job-id'] }, uniqueKeys: [{ id: 'uk-job-idempotency', name: 'jobs_idempotency_uk', columnIds: ['idempotency-key'] }], foreignKeys: [], indexes: [{ id: 'ix-recurring-jobs-due', name: 'jobs_recurring_due', columnIds: ['job-trigger-kind', 'next-run-at'], includedColumnIds: ['job-id', 'schedule-version'], kind: 'btree', unique: false }], estimatedRows: 100_000_000, estimatedRowBytes: 1_280,
         },
         {
           id: 'executions', name: 'executions', columns: [
             { id: 'execution-id', name: 'execution_id', type: { kind: 'uuid' }, nullable: false },
             { id: 'execution-job-id', name: 'job_id', type: { kind: 'uuid' }, nullable: false },
+            { id: 'execution-trigger-kind', name: 'trigger_kind', type: { kind: 'string', maxLength: 24 }, nullable: false },
+            { id: 'execution-schedule-version', name: 'schedule_version', type: { kind: 'integer', bits: 64 }, nullable: false },
             { id: 'execution-status', name: 'status', type: { kind: 'string', maxLength: 32 }, nullable: false },
             { id: 'run-at', name: 'run_at', type: { kind: 'datetime' }, nullable: false },
             { id: 'current-attempt', name: 'current_attempt', type: { kind: 'integer', bits: 32 }, nullable: false },
             { id: 'execution-version', name: 'version', type: { kind: 'integer', bits: 64 }, nullable: false },
-          ], primaryKey: { id: 'pk-executions', name: 'executions_pk', columnIds: ['execution-id'] }, uniqueKeys: [], foreignKeys: [{ id: 'fk-execution-job', name: 'executions_job_fk', columnIds: ['execution-job-id'], referencedTableId: 'jobs', referencedColumnIds: ['job-id'] }], indexes: [{ id: 'ix-due-executions', name: 'executions_due', columnIds: ['execution-status', 'run-at'], includedColumnIds: ['execution-id', 'execution-version'], kind: 'btree', unique: false }], estimatedRows: 100_000_000, estimatedRowBytes: 384,
+          ], primaryKey: { id: 'pk-executions', name: 'executions_pk', columnIds: ['execution-id'] }, uniqueKeys: [{ id: 'uk-execution-occurrence', name: 'executions_occurrence_uk', columnIds: ['execution-job-id', 'execution-schedule-version', 'run-at'] }], foreignKeys: [{ id: 'fk-execution-job', name: 'executions_job_fk', columnIds: ['execution-job-id'], referencedTableId: 'jobs', referencedColumnIds: ['job-id'] }], indexes: [{ id: 'ix-due-executions', name: 'executions_due', columnIds: ['execution-status', 'run-at'], includedColumnIds: ['execution-id', 'execution-version'], kind: 'btree', unique: false }], estimatedRows: 100_000_000, estimatedRowBytes: 448,
         },
         {
           id: 'attempts', name: 'attempts', columns: [
@@ -225,6 +261,29 @@ export const createJobSchedulerExample = (): ProjectFile => {
         ],
       },
       {
+        id: 'create-recurring-job-flow', version: 1, name: 'Recurring schedule creation', entryOperation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-recurring-job' },
+        actions: [
+          { id: 'accept-recurring-job', kind: 'api-call', dependsOn: [], sourceNodeId: clients.id, targetNodeId: jobService.id, operation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-recurring-job' } },
+          { id: 'insert-recurring-job', kind: 'data-access', dependsOn: ['accept-recurring-job'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'jobs', operation: 'insert', estimatedRows: 1 },
+        ],
+      },
+      {
+        id: 'run-job-now-flow', version: 1, name: 'On-demand execution creation', entryOperation: { apiId: 'job-api', apiVersion: 1, operationId: 'run-job-now' },
+        actions: [
+          { id: 'accept-on-demand-run', kind: 'api-call', dependsOn: [], sourceNodeId: clients.id, targetNodeId: jobService.id, operation: { apiId: 'job-api', apiVersion: 1, operationId: 'run-job-now' } },
+          { id: 'insert-on-demand-execution', kind: 'data-access', dependsOn: ['accept-on-demand-run'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'insert', estimatedRows: 1 },
+        ],
+      },
+      {
+        id: 'materialize-recurring-flow', version: 1, name: 'Recurring occurrence materialization', entryOperation: { apiId: 'recurrence-api', apiVersion: 1, operationId: 'materialize-recurring-executions' },
+        actions: [
+          { id: 'trigger-recurrence-scan', kind: 'api-call', dependsOn: [], sourceNodeId: recurrenceScheduler.id, targetNodeId: recurrenceMaterializer.id, operation: { apiId: 'recurrence-api', apiVersion: 1, operationId: 'materialize-recurring-executions' } },
+          { id: 'scan-due-recurring-jobs', kind: 'data-access', dependsOn: ['trigger-recurrence-scan'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'jobs', operation: 'index-read', indexId: 'ix-recurring-jobs-due', estimatedRows: 16 },
+          { id: 'insert-recurring-occurrence', kind: 'data-access', dependsOn: ['scan-due-recurring-jobs'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'executions', operation: 'insert', estimatedRows: 1 },
+          { id: 'advance-recurring-schedule', kind: 'data-access', dependsOn: ['insert-recurring-occurrence'], nodeId: store.id, model: { modelId: 'job-store-model', modelVersion: 1 }, objectId: 'jobs', operation: 'update', estimatedRows: 1 },
+        ],
+      },
+      {
         id: 'dispatch-due-flow', version: 1, name: 'Due scan, outbox dispatch and worker claim', entryOperation: { apiId: 'coordinator-api', apiVersion: 1, operationId: 'dispatch-due-executions' },
         actions: [
           { id: 'trigger-due-scan', kind: 'api-call', dependsOn: [], sourceNodeId: dueScheduler.id, targetNodeId: coordinator.id, operation: { apiId: 'coordinator-api', apiVersion: 1, operationId: 'dispatch-due-executions' } },
@@ -254,14 +313,23 @@ export const createJobSchedulerExample = (): ProjectFile => {
   }
 
   const experiment = project.experiments[0]!
-  experiment.seed = 'one-time-job-scheduler'
+  experiment.seed = 'mixed-job-scheduler'
   experiment.simulation = { durationSeconds: 6, sampleIntervalMs: 250, maxRequests: 2_000, traceLimit: 200, maxHops: 32 }
   experiment.workloads = [{ id: 'job-submission-compatibility-load', name: 'Superseded capacity load', sourceNodeId: clients.id, requestsPerSecond: 1, startAtSeconds: 5, durationSeconds: 1, pattern: 'constant', requestBytes: 1_024 }]
   experiment.operationWorkloads = [
     {
-      id: 'job-submissions', name: 'One-time job submissions', sourceNodeId: clients.id,
-      phases: [{ id: 'submission-steady', startAtSeconds: 0, durationSeconds: 5, requestsPerSecond: 12, pattern: 'poisson' }],
-      operationMix: [{ operation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-job' }, interaction: { interactionId: 'create-job-flow', interactionVersion: 1 }, weight: 1, requestBytes: 1_024, responseBytes: 256, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 }, valueSizeDistribution: { kind: 'fixed', bytes: 1_024 } }],
+      id: 'job-commands', name: 'Scheduled and on-demand job commands', sourceNodeId: clients.id,
+      phases: [{ id: 'submission-steady', startAtSeconds: 0, durationSeconds: 5, requestsPerSecond: 15, pattern: 'poisson' }],
+      operationMix: [
+        { operation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-job' }, interaction: { interactionId: 'create-job-flow', interactionVersion: 1 }, weight: 0.4, requestBytes: 1_024, responseBytes: 256, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 }, valueSizeDistribution: { kind: 'fixed', bytes: 1_024 } },
+        { operation: { apiId: 'job-api', apiVersion: 1, operationId: 'create-recurring-job' }, interaction: { interactionId: 'create-recurring-job-flow', interactionVersion: 1 }, weight: 0.2, requestBytes: 1_152, responseBytes: 192, keyDistribution: { kind: 'uniform', keySpaceSize: 100_000 }, valueSizeDistribution: { kind: 'fixed', bytes: 1_024 } },
+        { operation: { apiId: 'job-api', apiVersion: 1, operationId: 'run-job-now' }, interaction: { interactionId: 'run-job-now-flow', interactionVersion: 1 }, weight: 0.4, requestBytes: 512, responseBytes: 256, keyDistribution: { kind: 'uniform', keySpaceSize: 1_000_000 }, valueSizeDistribution: { kind: 'fixed', bytes: 512 } },
+      ],
+    },
+    {
+      id: 'recurring-materialization-cycle', name: 'Recurring occurrence materialization', sourceNodeId: recurrenceScheduler.id,
+      phases: [{ id: 'scheduler-owned', startAtSeconds: 0, durationSeconds: 6, requestsPerSecond: 1, pattern: 'constant' }],
+      operationMix: [{ operation: { apiId: 'recurrence-api', apiVersion: 1, operationId: 'materialize-recurring-executions' }, interaction: { interactionId: 'materialize-recurring-flow', interactionVersion: 1 }, weight: 1, requestBytes: 256, responseBytes: 64, keyDistribution: { kind: 'uniform', keySpaceSize: 100_000 } }],
     },
     {
       id: 'due-dispatch-cycle', name: 'Due execution dispatch', sourceNodeId: dueScheduler.id,

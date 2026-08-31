@@ -4,7 +4,7 @@ This article is the only thread of knowledge. Follow each step:
 
 > Pressure or failure → Why the current solution fails → Minimum new mechanism → Guarantee obtained → Cost and boundary
 
-The core scenario is a one-time job. Cron, complete API/Schema, fixed Shard number and production management do not enter this mainline.
+The reliability derivation begins with a one-time job so that occurrence generation does not hide the hard execution problems. Recurring schedules and on-demand triggers reuse the resulting Execution → Attempt → Lease kernel; complete Cron calendar semantics, complete API/Schema, fixed Shard number and production management do not enter this mainline.
 
 ## 1. Minimal system and boundaries
 
@@ -259,4 +259,4 @@ Stop after you can answer the following questions in closed book:
 - How to cover all Shards after data is fragmented and tolerate repeated scanning?
 - Why doesn't extending MQ Consumer replace database atomic preemption?
 
-Cron and implementation fragments enter [`optional/`](optional/) on demand; production management, workflow and multi-region stay in [Parking Lot](PARKING-LOT.md).
+Detailed Cron calendar semantics and implementation fragments enter [`optional/`](optional/) on demand; production management, workflow and multi-region stay in [Parking Lot](PARKING-LOT.md).

@@ -46,15 +46,58 @@ const legacyPresetProject = {
 
 test('switches theme and preserves it after reload', async ({ page }) => {
   await page.goto('/')
-  const themeToggle = page.getByRole('button', { name: /Switch to (light|dark) theme/ })
-  await expect(themeToggle).toBeVisible()
-  const initialTheme = await page.locator('html').getAttribute('data-theme')
-  await themeToggle.click()
-  await expect(page.locator('html')).not.toHaveAttribute('data-theme', initialTheme ?? '')
-  const selectedTheme = await page.locator('html').getAttribute('data-theme')
-  expect(selectedTheme).toMatch(/^(dark|light)$/)
+  await page.evaluate(() => window.localStorage.setItem('theme', 'dark'))
+  const hydrationErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('hydrated')) hydrationErrors.push(message.text())
+  })
+
   await page.reload()
-  await expect(page.locator('html')).toHaveAttribute('data-theme', selectedTheme!)
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  const themeToggle = page.getByRole('button', { name: /Switch to (light|dark) theme/ })
+  await expect(themeToggle).toHaveAccessibleName('Switch to light theme')
+  await themeToggle.click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(themeToggle).toHaveAccessibleName('Switch to dark theme')
+  expect(hydrationErrors).toEqual([])
+})
+
+test('themes async edge labels with the canvas', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Job scheduler/ }).click()
+
+  const labelBackgrounds = page.locator('.react-flow__edge-textbg')
+  await expect(labelBackgrounds.first()).toBeVisible()
+  await expect(labelBackgrounds).toHaveCount(2)
+
+  const themeColors = async () => {
+    const fills = await labelBackgrounds.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill))
+    const expected = await page.locator('.canvas-stage').evaluate((canvas) => {
+      const probe = document.createElement('span')
+      probe.style.color = 'var(--panel-raised)'
+      canvas.appendChild(probe)
+      const color = getComputedStyle(probe).color
+      probe.remove()
+      return color
+    })
+    return { fills, expected }
+  }
+
+  const initialTheme = await page.locator('html').getAttribute('data-theme')
+  expect(initialTheme).toMatch(/^(dark|light)$/)
+  const initial = await themeColors()
+  expect(initial.fills).toEqual([initial.expected, initial.expected])
+
+  const nextTheme = initialTheme === 'dark' ? 'light' : 'dark'
+  await page.getByRole('button', { name: /Switch to (light|dark) theme/ }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', nextTheme)
+  await expect.poll(themeColors).not.toEqual(initial)
+  const switched = await themeColors()
+  expect(switched.fills).toEqual([switched.expected, switched.expected])
+  expect(switched.fills[0]).not.toBe(initial.fills[0])
 })
 
 test('hides, restores and persists adaptable workbench panels', async ({ page }) => {
@@ -174,11 +217,14 @@ test('runs the reusable data-platform topology and exposes domain metrics', asyn
   await expect(page.locator('.domain-metrics').filter({ hasText: 'bytes/s' })).toBeVisible()
 })
 
-test('loads the one-time job scheduler and exposes executable scheduling paths', async ({ page }) => {
+test('loads scheduled, recurring and on-demand job paths', async ({ page }) => {
   await page.goto('/')
   await openExamplePicker(page)
   await page.getByRole('button', { name: /Job scheduler/ }).click()
-  await expect(page.getByText('10 components')).toBeVisible()
+  await expect(page.getByText('12 components')).toBeVisible()
+  await expect(page.getByTestId('rf__node-recurrence-scheduler')).toContainText('Scheduler')
+  await expect(page.getByTestId('rf__node-recurrence-scheduler')).toContainText('1 run every 1000 ms')
+  await expect(page.getByTestId('rf__node-recurrence-materializer')).toContainText('Occurrence Materializer')
   await expect(page.getByTestId('rf__node-due-scan-scheduler')).toContainText('Scheduler')
   await expect(page.getByTestId('rf__node-due-scan-scheduler')).toContainText('1 run every 500 ms')
   await expect(page.getByTestId('rf__node-execution-queue')).toContainText('Queue')
@@ -186,6 +232,8 @@ test('loads the one-time job scheduler and exposes executable scheduling paths',
   await page.getByRole('button', { name: 'Run simulation' }).click()
   await expect(page.getByText(/released [1-9][0-9]* · skipped 0 · pending 0/).first()).toBeVisible({ timeout: 15_000 })
   const results = page.getByRole('table')
+  await expect(results.getByText('Recurring schedule clock', { exact: true })).toBeVisible()
+  await expect(results.getByText('Occurrence Materializer', { exact: true })).toBeVisible()
   await expect(results.getByText('Due scan clock', { exact: true })).toBeVisible()
   await expect(results.getByText('Workers', { exact: true })).toBeVisible()
   await expect(results.getByText('Authoritative Job Store', { exact: true })).toBeVisible()
@@ -217,12 +265,12 @@ test('keeps component summaries inside their node and provides complete right-cl
   await page.getByRole('menuitem', { name: 'Copy component' }).click()
   await page.locator('.react-flow__pane').click({ button: 'right', position: { x: 420, y: 300 } })
   await page.getByRole('menuitem', { name: 'Paste component' }).click()
-  await expect(page.getByText('11 components')).toBeVisible()
+  await expect(page.getByText('13 components')).toBeVisible()
 
   const pasted = page.locator('.react-flow__node.selected')
   await pasted.click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Delete component' }).click()
-  await expect(page.getByText('10 components')).toBeVisible()
+  await expect(page.getByText('12 components')).toBeVisible()
 })
 
 test('switches the workbench to Chinese and preserves the locale', async ({ page }) => {
