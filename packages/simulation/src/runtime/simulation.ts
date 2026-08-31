@@ -514,7 +514,9 @@ class OperationWorkloadGenerator extends Entity<SystemDesignSimulation> {
   }
 }
 
-type ActionOutcome = 'success' | 'failure' | 'cache-hit' | 'cache-miss'
+type ActionOutcome = 'success' | 'failure' | 'cache-hit' | 'cache-miss' | 'skipped'
+type ActionNodeResult = { success: true; duration: number } | { success: false; reason: ReasonCode }
+type ActionRouteSelection = { nodeId: string; edgeId: string }
 
 class OperationExecution extends Entity<SystemDesignSimulation> {
   success = false
@@ -524,31 +526,34 @@ class OperationExecution extends Entity<SystemDesignSimulation> {
   async script() {
     const simulation = this.simulation
     const outcomes = new Map<string, ActionOutcome>()
+    const failureReasons = new Map<string, ReasonCode>()
+    const recoveredFailures = new Set<string>()
     for (const action of this.plan.actions) {
       const dependenciesSucceeded = action.dependsOn.every((dependency) => {
         const outcome = outcomes.get(dependency)
-        return outcome !== undefined && outcome !== 'failure'
+        if (action.condition?.actionId === dependency) return outcome !== undefined && outcome !== 'skipped'
+        return outcome !== undefined && outcome !== 'failure' && outcome !== 'skipped'
       })
       const conditionSatisfied = !action.condition || outcomes.get(action.condition.actionId) === action.condition.outcome
       if (!dependenciesSucceeded || !conditionSatisfied) {
         simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: `${this.request.traceId}:action:${action.id}`, parentSpanId: this.request.spanId, nodeId: action.nodeId, operationId: this.plan.operation.operationId, actionId: action.id, type: 'action-skipped', status: 'cancelled', attributes: actionAttributes(action) })
-        outcomes.set(action.id, 'failure')
+        outcomes.set(action.id, 'skipped')
         continue
       }
       const execution = new OperationActionExecution(this.request, this.plan, action)
-      const brokerType = action.kind === 'event-publish' ? simulation.nodes.get(action.nodeId)?.type : undefined
-      if (action.kind === 'event-consume' || (action.kind === 'event-publish' && brokerType !== 'topic')) {
-        simulation.activate(execution)
-        outcomes.set(action.id, 'success')
-        continue
-      }
       await simulation.activate(execution)
       outcomes.set(action.id, execution.outcome)
       if (execution.outcome === 'failure') {
-        simulation.failed += 1
-        simulation.emitOperationEvent(this.request, 'operation-completed', 'error', { durationMs: round(simulation.timeNow - this.request.createdAtMs), reason: execution.reason })
-        return
+        failureReasons.set(action.id, execution.reason)
+      } else if (action.condition?.outcome === 'failure') {
+        recoveredFailures.add(action.condition.actionId)
       }
+    }
+    const unresolvedFailure = [...failureReasons].find(([actionId]) => !recoveredFailures.has(actionId))
+    if (unresolvedFailure) {
+      simulation.failed += 1
+      simulation.emitOperationEvent(this.request, 'operation-completed', 'error', { durationMs: round(simulation.timeNow - this.request.createdAtMs), reason: unresolvedFailure[1] })
+      return
     }
     simulation.completed += 1
     this.success = true
@@ -569,13 +574,19 @@ class SchedulerOperationExecution extends Entity<SystemDesignSimulation> {
 class OperationActionExecution extends Entity<SystemDesignSimulation> {
   outcome: ActionOutcome = 'failure'
   reason: ReasonCode = 'intrinsic_error'
+  private executionNodeId: string
+  private readonly routeSelections: ActionRouteSelection[] = []
+  private routeOutcomesRecorded = false
 
-  constructor(private readonly root: RequestState, private readonly plan: CompiledOperationPlan, private readonly action: CompiledOperationAction) { super() }
+  constructor(private readonly root: RequestState, private readonly plan: CompiledOperationPlan, private readonly action: CompiledOperationAction) {
+    super()
+    this.executionNodeId = action.nodeId
+  }
 
   async script() {
     const simulation = this.simulation
     const spanId = `${this.root.traceId}:action:${this.action.id}`
-    const runtime = simulation.runtimes.get(this.action.nodeId)
+    let runtime = simulation.runtimes.get(this.action.nodeId)
     const startedAtMs = simulation.timeNow
     const attributes = actionAttributes(this.action)
     simulation.eventSink.emit({ timestampMs: round(startedAtMs), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: this.action.nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'action-started', status: 'pending', attributes })
@@ -584,27 +595,8 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       await this.executeWorkflow(runtime, startedAtMs, attributes)
       return
     }
-    for (const edgeId of this.action.edgeIds) {
-      const edge = simulation.compiled.edges.find((candidate) => candidate.id === edgeId)
-      if (!edge) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
-      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.source, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-started', status: 'pending', bytes: this.root.bytes, attributes })
-      const edgeFailure = simulation.activeFaults('edge', edgeId, 'region-outage').length > 0 ? 'region_outage' as const
-        : (() => { const probability = composeLossProbability(simulation.activeFaults('edge', edgeId, 'packet-loss')); return probability > 0 && simulation.random() < probability ? 'packet_loss' as const : undefined })()
-      if (edgeFailure) {
-        simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.target, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-returned', status: 'error', reason: edgeFailure, durationMs: round(simulation.timeNow - startedAtMs), bytes: this.root.bytes, attributes })
-        this.finish(false, edgeFailure, startedAtMs, attributes); return
-      }
-      const edgeLatency = applyLatencyFaults(0, simulation.activeFaults('edge', edgeId, 'latency-spike'))
-      if (edgeLatency > 0) await this.delay(edgeLatency)
-      if (edge.target !== this.action.nodeId) {
-        const transit = await this.processNode(edge.target, { ...this.root, incomingEdgeId: edgeId, bytes: this.root.bytes }, attributes, false)
-        if (!transit.success) { this.finish(false, transit.reason, startedAtMs, attributes); return }
-      }
-      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: edge.target, edgeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'dependency-returned', status: 'ok', durationMs: round(simulation.timeNow - startedAtMs), bytes: this.root.bytes, attributes })
-    }
     let request: RequestState = {
       ...this.root, spanId, parentSpanId: this.root.spanId, operationAction: this.action, actionId: this.action.id,
-      ...(this.action.edgeIds.length === 0 ? {} : { incomingEdgeId: this.action.edgeIds[this.action.edgeIds.length - 1]! }),
       bytes: this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.action.requestBytes ?? this.root.bytes,
       ...(this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.root.payloadBytes) === undefined ? {} : { payloadBytes: this.action.event?.estimatedPayloadBytes ?? this.action.cache?.estimatedValueBytes ?? this.root.payloadBytes },
       ...(this.action.data === undefined ? {} : { entityId: this.action.data.objectId, queryShape: this.action.data.operation, operation: ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'write' as const : 'read' as const }),
@@ -618,11 +610,33 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
         realtimeChannelId: renderPattern(this.action.realtime.channelPattern),
       }
     }
+    const route = this.action.edgeIds.map((edgeId) => simulation.compiled.edges.find((candidate) => candidate.id === edgeId))
+    if (route.some((edge) => edge === undefined)) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
+    const resolvedRoute = route as CompiledConnection[]
+    let terminalEdge: CompiledConnection | undefined
+    for (let index = 0; index < resolvedRoute.length; index += 1) {
+      const selected = this.selectRouteEdge(resolvedRoute, index, request)
+      if (!selected) { this.finish(false, 'no_healthy_target', startedAtMs, attributes); return }
+      const { edge, replacement, substituteTarget } = selected
+      if (replacement) resolvedRoute.splice(index, resolvedRoute.length - index, edge, ...replacement)
+      else resolvedRoute[index] = edge
+      if (substituteTarget) this.executionNodeId = edge.target
+      const finalHop = index === resolvedRoute.length - 1
+      if (finalHop) {
+        terminalEdge = edge
+        break
+      }
+      const transit = await this.executeHop(edge, request, attributes, edge.target, false)
+      if (!transit.success) { this.finish(false, transit.reason, startedAtMs, attributes); return }
+      request = { ...request, incomingEdgeId: edge.id, hops: request.hops + 1 }
+    }
+    runtime = simulation.runtimes.get(this.executionNodeId)
+    if (!runtime) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
     let topicDelivery: { runtime: RuntimeNode; request: RequestState } | undefined
     if (this.action.event?.operation === 'consume' && this.action.sourceNodeId) {
       const broker = simulation.runtimes.get(this.action.sourceNodeId)
       if (broker?.node.type === 'topic' && broker.state?.prepareDelivery) {
-        const firstEdgeId = this.action.edgeIds[0]
+        const firstEdgeId = resolvedRoute[0]?.id
         const subscriptionEdges = (simulation.outgoing.get(broker.node.id) ?? []).filter((edge) => edge.routingMode === 'async-publish')
         const subscriptionIndex = subscriptionEdges.findIndex((edge) => edge.id === firstEdgeId)
         if (subscriptionIndex < 0 || subscriptionIndex >= broker.node.config.subscriptionCount) { this.finish(false, 'missing_node', startedAtMs, attributes); return }
@@ -640,7 +654,7 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     const domainDecision = runtime.state?.begin(request, simulation.timeNow, simulation.random)
     const domainRequest = domainDecision?.patch ? { ...request, ...domainDecision.patch } : request
     for (const event of domainDecision?.events ?? []) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
-    const final = await this.processNode(runtime.node.id, domainRequest, attributes, true)
+    const final = await this.executeHop(terminalEdge, domainRequest, attributes, runtime.node.id, true)
     if (!final.success) {
       const domainCompletion = runtime.state?.complete(domainRequest, false, simulation.timeNow)
       for (const event of completionEvents(domainCompletion)) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
@@ -702,6 +716,66 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       ...(dataCost ? { recordsExamined: dataCost.recordsExamined, bytesProcessed: dataCost.bytesProcessed, explanation: dataCost.explanation } : {}),
       ...(searchCost ? { recordsExamined: searchCost.recordsExamined, bytesProcessed: searchCost.bytesProcessed, explanation: searchCost.explanation, searchFanOut: searchCost.fanOut, searchCandidates: searchCost.candidates, searchResultCount: searchCost.resultCount, searchStale: searchCost.stale, searchVisibilityLagMs: searchCost.visibilityLagMs } : {}),
     })
+  }
+
+  private selectRouteEdge(route: CompiledConnection[], index: number, request: RequestState): { edge: CompiledConnection; replacement?: CompiledConnection[]; substituteTarget?: boolean } | undefined {
+    const simulation = this.simulation
+    const planned = route[index]!
+    const node = simulation.nodes.get(planned.source)
+    if (node?.type !== 'load-balancer' && node?.type !== 'global-router') return { edge: planned }
+    const outgoing = (simulation.outgoing.get(node.id) ?? []).filter((edge) => edge.routingMode !== 'async-publish')
+    const choices = outgoing.flatMap((edge) => {
+      const continuation = this.findRoute(edge.target, this.action.nodeId, planned.routingMode)
+      if (continuation !== undefined) return [{ edge, continuation, substituteTarget: false }]
+      if (index === route.length - 1 && this.compatibleExecutionTarget(edge.target, this.action.nodeId)) {
+        return [{ edge, continuation: [] as CompiledConnection[], substituteTarget: true }]
+      }
+      return []
+    })
+    if (choices.length === 0) return undefined
+    const candidates = choices.map((choice) => choice.edge)
+    const selected = node.type === 'load-balancer'
+      ? simulation.chooseLoadBalancerEdge(node, candidates)
+      : simulation.chooseGlobalRouterEdge(node, candidates, request)
+    if (!selected) return undefined
+    const choice = choices.find((candidate) => candidate.edge.id === selected.id)!
+    this.routeSelections.push({ nodeId: node.id, edgeId: selected.id })
+    return { edge: selected, replacement: choice.continuation, ...(choice.substituteTarget ? { substituteTarget: true } : {}) }
+  }
+
+  private findRoute(sourceNodeId: string, targetNodeId: string, routingMode: CompiledConnection['routingMode']): CompiledConnection[] | undefined {
+    if (sourceNodeId === targetNodeId) return []
+    const asynchronous = routingMode === 'async-publish'
+    const queue = [sourceNodeId]
+    const visited = new Set(queue)
+    const previous = new Map<string, { nodeId: string; edge: CompiledConnection }>()
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      for (const edge of this.simulation.outgoing.get(current) ?? []) {
+        if ((edge.routingMode === 'async-publish') !== asynchronous || visited.has(edge.target)) continue
+        visited.add(edge.target)
+        previous.set(edge.target, { nodeId: current, edge })
+        if (edge.target === targetNodeId) {
+          const path: CompiledConnection[] = []
+          let cursor = targetNodeId
+          while (cursor !== sourceNodeId) {
+            const step = previous.get(cursor)!
+            path.unshift(step.edge)
+            cursor = step.nodeId
+          }
+          return path
+        }
+        queue.push(edge.target)
+      }
+    }
+    return undefined
+  }
+
+  private compatibleExecutionTarget(candidateNodeId: string, declaredNodeId: string) {
+    const candidate = this.simulation.nodes.get(candidateNodeId)
+    const declared = this.simulation.nodes.get(declaredNodeId)
+    return candidate !== undefined && declared !== undefined
+      && candidate.type === declared.type && candidate.componentVersion === declared.componentVersion
   }
 
   private async executeWorkflow(runtime: RuntimeNode, startedAtMs: number, attributes: Record<string, string | number | boolean>) {
@@ -795,14 +869,119 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     return { success: !timedOut && !failed, reason: timedOut ? 'timeout' : failed ? 'intrinsic_error' : 'none' }
   }
 
-  private async processNode(nodeId: string, request: RequestState, attributes: Record<string, string | number | boolean>, finalNode: boolean): Promise<{ success: true; duration: number } | { success: false; reason: ReasonCode }> {
+  private async executeHop(edge: CompiledConnection | undefined, request: RequestState, attributes: Record<string, string | number | boolean>, targetNodeId: string, finalNode: boolean): Promise<ActionNodeResult> {
+    const simulation = this.simulation
+    if (!edge) {
+      const result = await this.processNode(targetNodeId, request, attributes, finalNode)
+      void simulation.activate(new OperationContinuation())
+      return result
+    }
+    const actionSpanId = `${this.root.traceId}:action:${this.action.id}`
+    const gateKeys = edge.routingMode === 'async-publish'
+      ? [`edge:${edge.id}`, `node:${edge.target}`].filter((key) => simulation.deliveryGates.has(key))
+      : []
+    const admittedGateKeys: string[] = []
+    for (const key of gateKeys) {
+      const decision = simulation.deliveryGates.get(key)!.admit()
+      if (!decision.accepted) {
+        for (const admitted of admittedGateKeys) simulation.deliveryGates.get(admitted)!.acknowledge()
+        simulation.eventSink.emit({
+          timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: actionSpanId, parentSpanId: this.root.spanId,
+          nodeId: edge.source, edgeId: edge.id, operationId: this.plan.operation.operationId, actionId: this.action.id,
+          type: decision.deadLettered ? 'message-dead-lettered' : 'request-failed', status: decision.status, reason: decision.reason, bytes: request.bytes,
+          attributes: { ...attributes, terminal: false, routingMode: edge.routingMode },
+        })
+        void simulation.activate(new OperationContinuation())
+        return { success: false, reason: decision.reason }
+      }
+      admittedGateKeys.push(key)
+    }
+    simulation.eventSink.emit({
+      timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: actionSpanId, parentSpanId: this.root.spanId,
+      nodeId: edge.source, edgeId: edge.id, operationId: this.plan.operation.operationId, actionId: this.action.id,
+      type: 'dependency-started', status: 'pending', bytes: request.bytes, attributes: { ...attributes, routingMode: edge.routingMode },
+    })
+    const timeout = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'timeout')[0]
+    const retry = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'retry')[0]
+    const circuitPolicy = policiesFor(simulation.compiled.policies, 'edge', edge.id, 'circuit-breaker')[0]
+    const protectedHop = timeout !== undefined || retry !== undefined || circuitPolicy !== undefined
+    const maxAttempts = retry?.config.maxAttempts ?? 1
+    let result: ActionNodeResult = { success: false, reason: 'intrinsic_error' }
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const attemptStartedAtMs = simulation.timeNow
+        const attemptSpanId = protectedHop ? `${actionSpanId}:attempt:${edge.id}:${attempt}` : actionSpanId
+        const circuit = simulation.circuitBreakers.get(edge.id)
+        const acquired = circuit?.acquire(simulation.timeNow)
+        simulation.emitCircuitTransition(edge.id, edge.source, acquired?.transition)
+        if (protectedHop) {
+          simulation.eventSink.emit({
+            timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: attemptSpanId, parentSpanId: actionSpanId,
+            nodeId: edge.target, edgeId: edge.id, operationId: this.plan.operation.operationId, actionId: this.action.id, attempt,
+            type: 'attempt-started', status: acquired && !acquired.allowed ? 'rejected' : 'pending', reason: acquired && !acquired.allowed ? 'circuit_open' : 'none', bytes: request.bytes,
+            ...(acquired === undefined ? {} : { attributes: { circuitState: acquired.state } }),
+          })
+        }
+        if (acquired && !acquired.allowed) {
+          result = { success: false, reason: 'circuit_open' }
+        } else {
+          const edgeFailure = simulation.activeFaults('edge', edge.id, 'region-outage').length > 0 ? 'region_outage' as const
+            : (() => { const probability = composeLossProbability(simulation.activeFaults('edge', edge.id, 'packet-loss')); return probability > 0 && simulation.random() < probability ? 'packet_loss' as const : undefined })()
+          if (edgeFailure) result = { success: false, reason: edgeFailure }
+          else {
+            const edgeLatency = applyLatencyFaults(0, simulation.activeFaults('edge', edge.id, 'latency-spike'))
+            if (edgeLatency > 0) await this.delay(edgeLatency)
+            result = await this.processNode(targetNodeId, { ...request, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, hops: request.hops + 1, spanId: attemptSpanId, parentSpanId: actionSpanId }, attributes, finalNode)
+          }
+          simulation.circuitOutcome(edge.id, edge.source, acquired?.permit, result.success)
+        }
+        if (!result.success && result.reason === 'timeout') {
+          simulation.eventSink.emit({
+            timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: attemptSpanId, parentSpanId: actionSpanId,
+            nodeId: edge.target, edgeId: edge.id, operationId: this.plan.operation.operationId, actionId: this.action.id, attempt,
+            type: 'timeout-fired', status: 'error', reason: 'timeout', durationMs: round(simulation.timeNow - attemptStartedAtMs), bytes: request.bytes,
+          })
+        }
+        simulation.eventSink.emit({
+          timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: attemptSpanId,
+          ...(protectedHop ? { parentSpanId: actionSpanId } : { parentSpanId: this.root.spanId }), nodeId: edge.target, edgeId: edge.id,
+          operationId: this.plan.operation.operationId, actionId: this.action.id, attempt, type: 'dependency-returned', status: result.success ? 'ok' : 'error',
+          reason: result.success ? 'none' : result.reason, durationMs: round(simulation.timeNow - attemptStartedAtMs), bytes: request.bytes, attributes,
+        })
+        if (result.success || attempt >= maxAttempts) {
+          void simulation.activate(new OperationContinuation())
+          return result
+        }
+        const nextAttempt = attempt + 1
+        const delayMs = retry ? retryDelayMs(retry.config, nextAttempt, simulation.random) : 0
+        simulation.eventSink.emit({
+          timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: attemptSpanId, parentSpanId: actionSpanId,
+          nodeId: edge.source, edgeId: edge.id, operationId: this.plan.operation.operationId, actionId: this.action.id, attempt: nextAttempt,
+          type: 'retry-scheduled', status: 'pending', reason: result.reason, attributes: { backoffMs: round(delayMs) },
+        })
+        if (delayMs > 0) await this.delay(delayMs)
+      }
+      return result
+    } finally {
+      for (const key of admittedGateKeys) simulation.deliveryGates.get(key)!.acknowledge()
+      if (admittedGateKeys.length > 0) {
+        simulation.eventSink.emit({
+          timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: actionSpanId, parentSpanId: this.root.spanId,
+          nodeId: edge.target, edgeId: edge.id, operationId: this.plan.operation.operationId, actionId: this.action.id,
+          type: 'message-acknowledged', status: 'ok', bytes: request.bytes, attributes: { ...attributes, routingMode: edge.routingMode },
+        })
+      }
+    }
+  }
+
+  private async processNode(nodeId: string, request: RequestState, attributes: Record<string, string | number | boolean>, finalNode: boolean): Promise<ActionNodeResult> {
     const simulation = this.simulation
     const runtime = simulation.runtimes.get(nodeId)
     if (!runtime || runtime.node.type === 'traffic') return runtime ? { success: true, duration: 0 } : { success: false, reason: 'missing_node' }
     const rateLimit = simulation.rateLimits.get(nodeId)
     if (rateLimit) {
       const accepted = rateLimit.admit(simulation.timeNow)
-      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: accepted ? 'rate-limit-accepted' : 'rate-limit-rejected', status: accepted ? 'ok' : 'rejected', reason: accepted ? 'none' : 'rate_limited', attributes: { ...attributes, tokensRemaining: rateLimit.available } })
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: request.spanId, ...(request.parentSpanId === undefined ? {} : { parentSpanId: request.parentSpanId }), nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: accepted ? 'rate-limit-accepted' : 'rate-limit-rejected', status: accepted ? 'ok' : 'rejected', reason: accepted ? 'none' : 'rate_limited', attributes: { ...attributes, tokensRemaining: rateLimit.available } })
       if (!accepted) { runtime.failed += 1; runtime.rejected += 1; return { success: false, reason: 'rate_limited' } }
     }
     const fault = simulation.failureReason(runtime.node, request)
@@ -814,7 +993,7 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     }
     if (runtime.resource.unitsInUse >= effectiveCapacity) {
       this.enterQueueImmediately(runtime.waiting); runtime.maxWaiting = Math.max(runtime.maxWaiting, runtime.waiting.pop)
-      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'request-queued', status: 'pending', attributes: { ...attributes, queueLength: runtime.waiting.pop } })
+      simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: request.spanId, ...(request.parentSpanId === undefined ? {} : { parentSpanId: request.parentSpanId }), nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'request-queued', status: 'pending', attributes: { ...attributes, queueLength: runtime.waiting.pop } })
     }
     await this.enterQueue(runtime.resource)
     if (runtime.waiting.items.has(this)) this.leaveQueue(runtime.waiting)
@@ -836,10 +1015,22 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
 
   private finish(success: boolean, reason: ReasonCode, startedAtMs: number, attributes: Record<string, string | number | boolean>) {
     const simulation = this.simulation
+    if (!this.routeOutcomesRecorded) {
+      for (const selection of this.routeSelections) {
+        simulation.recordLoadBalancerOutcome(selection.nodeId, selection.edgeId, success)
+        simulation.recordGlobalRouterOutcome(selection.nodeId, selection.edgeId, success)
+      }
+      this.routeOutcomesRecorded = true
+    }
     this.outcome = success ? this.outcome : 'failure'
     this.reason = reason
-    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId: this.action.nodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'action-completed', status: success ? 'ok' : 'error', durationMs: round(simulation.timeNow - startedAtMs), reason, attributes })
+    simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId: `${this.root.traceId}:action:${this.action.id}`, parentSpanId: this.root.spanId, nodeId: this.executionNodeId, operationId: this.plan.operation.operationId, actionId: this.action.id, type: 'action-completed', status: success ? 'ok' : 'error', durationMs: round(simulation.timeNow - startedAtMs), reason, attributes: { ...attributes, ...(this.executionNodeId === this.action.nodeId ? {} : { declaredNodeId: this.action.nodeId, selectedNodeId: this.executionNodeId }) } })
   }
+}
+
+// Keep the FEC at the current virtual time until the caller of a nested async hop resumes.
+class OperationContinuation extends Entity<SystemDesignSimulation> {
+  async script() { await this.delay(0) }
 }
 
 class AttemptTimeout extends Entity<SystemDesignSimulation> {

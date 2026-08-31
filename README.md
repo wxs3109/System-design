@@ -224,14 +224,14 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 未来平台化方向：[Future Extension Roadmap](docs/roadmap/future-extensions.md)。
 
-当前进度：P2.0 到 P2.5，以及 P2.6a Scheduler、P2.6b CDN、P2.6c Search Index、P2.6d Topic、P2.6e Realtime Gateway、P2.6f Workflow 和 P2.6g Global Router 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。这七个新增行为都是独立 executable variant，不是预设或装饰节点。当前优先完善 operation-aware 执行一致性、运行控制和个人使用体验；P2.7 到 P2.10 均为延期的未来扩展。
+当前进度：P2.0 到 P2.5，以及 P2.6a Scheduler、P2.6b CDN、P2.6c Search Index、P2.6d Topic、P2.6e Realtime Gateway、P2.6f Workflow 和 P2.6g Global Router 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。这七个新增行为都是独立 executable variant，不是预设或装饰节点。Operation-aware action path 与既有路由、可靠性策略、异步背压和失败恢复的执行边界也已收口；当前优先完善运行控制和个人使用体验。P2.7 到 P2.10 均为延期的未来扩展。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
 - 顶层 Palette 只显示组件类别；Relational/Document/Key-Value、API Service/Worker 等行为变体在选择所属类别后出现，preset 仅作为可选模板。
 - 用订单系统验收 API → Service → Cache/Database → Event 的完整可执行链路。
 - 按独立 settlement 扩展 Search、Topic、Realtime、Workflow 和 Global Routing；这些行为均已完成，并且配置变化会产生可测结果。
-- 先收口 operation-aware action path 与现有路由、可靠性策略、异步背压和失败恢复的执行一致性。
+- Operation-aware action path 已复用现有路由、可靠性策略和异步背压状态，并支持显式失败恢复分支。
 - 优先完善暂停、单步、加速以及实际个人使用中暴露的工作流问题。
 - SDK、插件沙箱、批量实验、分享和可选适配器保留为未来扩展，不阻塞当前核心平台。
 
@@ -279,7 +279,7 @@ Phase 1 的 P1.6 已完成：项目迁移、序列化、固定种子重放、计
 
 Phase 2 的 P2.2 与 P2.3 已完成：`ProjectFile v3` 区分 `capacity-only` 与 `business-aware`，提供版本化 API、数据、事件、Cache Key、Interaction 和 operation workload 合同；v1/v2 项目会确定性迁移且不虚构业务定义；Definitions UI 能通用编辑并通过 OpenAPI/DBML 适配器交换这些合同。
 
-Phase 2 的 P2.4 已完成：operation workload 会编译为拓扑绑定的交互计划，按依赖和条件执行 API/service、数据、缓存与事件 action；表或 collection 的 cardinality、记录大小、索引形态、estimated rows、handler time、operation mix 和键分布会进入可复现的成本与负载模型。Results 展示 operation 成功/失败/p95 和 action 延迟、records examined、bytes processed，Trace 保留 operation/action 身份。具体公式和仍属描述性的字段见 [Simulation Model Assumptions](docs/model-assumptions.md)。
+Phase 2 的 P2.4 已完成：operation workload 会编译为拓扑绑定的交互计划，按依赖和条件执行 API/service、数据、缓存与事件 action；表或 collection 的 cardinality、记录大小、索引形态、estimated rows、handler time、operation mix 和键分布会进入可复现的成本与负载模型。Action hop 会应用 retry、timeout、Circuit Breaker、Rate Limit、异步 Backpressure、Load Balancer 和 Global Router 的既有状态，成功的 `failure` 条件分支可以恢复前序 action。Results 展示 operation 成功/失败/p95 和 action 延迟、records examined、bytes processed，Trace 保留 operation/action 身份。具体公式和仍属描述性的字段见 [Simulation Model Assumptions](docs/model-assumptions.md)。
 
 当前仍是早期平台：P2.5 已用完全由通用合同组成的订单系统完成浏览器纵切；P2.6c 用 Product Search 与 streaming Log Search 验收同一 Search Index 行为；P2.6d 用 Order event fan-out 与 Incident fan-out 验收同一 Topic 行为；P2.6e 用 Realtime chat 与 Collaborative editing 验收同一 Realtime Gateway；P2.6f 又让通用 Workflow Definition 和 `workflow` action 真正执行步骤检查点、幂等重放、超时、有限退避重试、反向补偿和补偿失败；P2.6g 则让普通 Global storefront 与 Multi-region failover 场景复用同一 Global Router，在显式 Region、workload cohort TTL 和健康传播模型下产生可解释的路由、缓存与故障转移指标。所谓持久状态目前只存在于一次仿真运行内，不代表真实数据库或跨进程恢复；Global Router 也不是 DNS、Anycast/BGP 或跨区域复制的真实协议模拟。后续新增组件仍必须拥有独立、可测的运行时语义，不能用新增图标替代端到端行为。
 

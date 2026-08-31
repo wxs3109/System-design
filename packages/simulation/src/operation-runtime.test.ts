@@ -55,7 +55,7 @@ describe('operation-aware runtime', () => {
     expect(first.events.filter((event) => event.type === 'action-completed').map((event) => event.actionId).sort()).toEqual(['cache-order', 'call-api', 'consume-order', 'publish-order', 'write-order', 'write-order-items'])
     const operationCompleted = first.events.find((event) => event.type === 'operation-completed')!
     const publishCompleted = first.events.find((event) => event.type === 'action-completed' && event.actionId === 'publish-order')!
-    expect(operationCompleted.timestampMs).toBeLessThanOrEqual(publishCompleted.timestampMs)
+    expect(operationCompleted.timestampMs).toBeGreaterThanOrEqual(publishCompleted.timestampMs)
     expect(first.events.filter((event) => event.type === 'database-written')).toEqual(expect.arrayContaining([
       expect.objectContaining({ operationId: 'create-order', actionId: 'write-order', attributes: expect.objectContaining({ dataOperation: 'insert', recordsExamined: 1 }) }),
     ]))
@@ -213,5 +213,101 @@ describe('operation-aware runtime', () => {
     const hotShare = Number(hotResult.nodes.find((node) => node.nodeId === 'orders-db')?.details.hottestShardShare)
     expect(hotShare).toBeGreaterThan(uniformShare)
     expect(largeResult.summary.latencyP95Ms).toBeGreaterThan(uniformResult.summary.latencyP95Ms)
+  })
+
+  it('applies retry and circuit-breaker policies to operation action edges', async () => {
+    const project = operationOnly()
+    const experiment = project.experiments[0]!
+    experiment.operationWorkloads[0]!.operationMix = [experiment.operationWorkloads[0]!.operationMix[0]!]
+    experiment.faults = [{ id: 'database-packet-loss', type: 'packet-loss', target: { kind: 'edge', id: 'orders-to-db' }, startAtSeconds: 0, durationSeconds: 30, factor: 1, enabled: true }]
+    project.topology.policies = [
+      { id: 'database-retry', type: 'retry', version: 1, target: { kind: 'edge', id: 'orders-to-db' }, order: 0, enabled: true, config: { maxAttempts: 2, backoff: 'fixed', baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 } },
+      { id: 'database-circuit', type: 'circuit-breaker', version: 1, target: { kind: 'edge', id: 'orders-to-db' }, order: 1, enabled: true, config: { failureThreshold: 1, openDurationMs: 10_000, halfOpenMaxProbes: 1 } },
+    ]
+
+    const result = await runSimulation(project, 'operation-reliability-policies')
+    const attempts = result.events.filter((event) => event.type === 'attempt-started' && event.edgeId === 'orders-to-db' && event.actionId === 'write-order')
+    expect(attempts).toHaveLength(2)
+    expect(result.events.some((event) => event.type === 'retry-scheduled' && event.edgeId === 'orders-to-db')).toBe(true)
+    expect(result.events.some((event) => event.type === 'circuit-opened' && event.edgeId === 'orders-to-db')).toBe(true)
+    expect(attempts[1]).toMatchObject({ status: 'rejected', reason: 'circuit_open' })
+    expect(result.summary).toMatchObject({ generatedRequests: 1, completedRequests: 0, failedRequests: 1 })
+  })
+
+  it('uses async backpressure outcomes in a failure recovery branch', async () => {
+    const project = operationOnly()
+    const experiment = project.experiments[0]!
+    experiment.operationWorkloads[0]!.operationMix = [experiment.operationWorkloads[0]!.operationMix[0]!]
+    project.topology.edges.push({ id: 'orders-to-recovery', source: 'orders-service', target: 'fulfillment-worker', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
+    project.topology.policies = [{ id: 'publish-backpressure', type: 'backpressure', version: 1, target: { kind: 'edge', id: 'orders-to-stream' }, order: 0, enabled: true, config: { maxInFlight: 0, overflow: 'dead-letter' } }]
+    const interaction = project.definitions.interactions.find((candidate) => candidate.id === 'create-order-flow')!
+    const consume = interaction.actions.pop()!
+    interaction.actions.push(
+      { id: 'recover-publish', kind: 'service-call', dependsOn: ['publish-order'], condition: { actionId: 'publish-order', outcome: 'failure' }, sourceNodeId: 'orders-service', targetNodeId: 'fulfillment-worker' },
+      consume,
+    )
+
+    const result = await runSimulation(project, 'operation-backpressure-recovery')
+    expect(result.events.some((event) => event.type === 'message-dead-lettered' && event.edgeId === 'orders-to-stream' && event.actionId === 'publish-order')).toBe(true)
+    expect(result.events.find((event) => event.type === 'action-completed' && event.actionId === 'publish-order')).toMatchObject({ status: 'error', reason: 'dead_lettered' })
+    expect(result.events.find((event) => event.type === 'action-completed' && event.actionId === 'recover-publish')).toMatchObject({ status: 'ok' })
+    expect(result.events.some((event) => event.type === 'action-skipped' && event.actionId === 'consume-order')).toBe(true)
+    expect(result.summary).toMatchObject({ generatedRequests: 1, completedRequests: 1, failedRequests: 0 })
+  })
+
+  it('executes operation API calls through Load Balancer target selection', async () => {
+    const project = operationOnly()
+    const loadBalancer = { ...createNode('load-balancer', 'orders-lb', { x: 100, y: 0 }), componentVersion: 1 }
+    const replica = { ...createNode('service', 'orders-service-replica', { x: 200, y: 100 }), componentVersion: 1 }
+    if (loadBalancer.type !== 'load-balancer' || replica.type !== 'service') throw new Error('Expected Load Balancer and Service nodes')
+    Object.assign(loadBalancer.config, { algorithm: 'round-robin', routingTimeMs: 1, maxQueueSize: 100 })
+    Object.assign(replica.config, { serviceTimeMs: 1, jitterMs: 0, errorRate: 0, replicas: 1, concurrencyPerReplica: 10 })
+    project.topology.nodes.push(loadBalancer, replica)
+    project.topology.edges = project.topology.edges.filter((edge) => edge.id !== 'client-to-orders')
+    project.topology.edges.push(
+      { id: 'client-to-lb', source: 'client-traffic', target: loadBalancer.id, sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'lb-to-primary', source: loadBalancer.id, target: 'orders-service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'lb-to-replica', source: loadBalancer.id, target: replica.id, sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+    )
+    const interaction = project.definitions.interactions.find((candidate) => candidate.id === 'create-order-flow')!
+    interaction.actions = [interaction.actions[0]!]
+    const experiment = project.experiments[0]!
+    experiment.operationWorkloads[0]!.operationMix = [experiment.operationWorkloads[0]!.operationMix[0]!]
+    experiment.operationWorkloads[0]!.phases = [{ id: 'two-requests', startAtSeconds: 0, durationSeconds: 0.2, requestsPerSecond: 10, pattern: 'constant' }]
+
+    const result = await runSimulation(project, 'operation-load-balancer-routing')
+    const selections = result.events.filter((event) => event.type === 'dependency-started' && event.nodeId === loadBalancer.id).map((event) => event.edgeId)
+    expect(selections).toEqual(['lb-to-primary', 'lb-to-replica'])
+    expect(result.events.filter((event) => event.type === 'action-completed' && event.actionId === 'call-api').map((event) => event.nodeId)).toEqual(['orders-service', replica.id])
+    expect(result.summary).toMatchObject({ generatedRequests: 2, completedRequests: 2, failedRequests: 0 })
+  })
+
+  it('executes operation API calls through Global Router geo selection', async () => {
+    const project = operationOnly()
+    const router = { ...createNode('global-router', 'orders-global-router', { x: 100, y: 0 }), componentVersion: 1 }
+    const eastReplica = { ...createNode('service', 'orders-service-east', { x: 200, y: 100 }), componentVersion: 1 }
+    if (router.type !== 'global-router' || eastReplica.type !== 'service') throw new Error('Expected Global Router and Service nodes')
+    Object.assign(router.config, { routingPolicy: 'geo', lookupTimeMs: 1, jitterMs: 0, decisionTtlMs: 1_000 })
+    Object.assign(eastReplica.config, { serviceTimeMs: 1, jitterMs: 0, errorRate: 0, replicas: 1, concurrencyPerReplica: 10 })
+    project.topology.nodes.push(router, eastReplica)
+    project.topology.edges = project.topology.edges.filter((edge) => edge.id !== 'client-to-orders')
+    project.topology.edges.push(
+      { id: 'client-to-global', source: 'client-traffic', target: router.id, sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'global-to-west', source: router.id, target: 'orders-service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'global-to-east', source: router.id, target: eastReplica.id, sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+    )
+    project.topology.groups = [
+      { id: 'region-west', name: 'West', kind: 'region', nodeIds: ['orders-service'] },
+      { id: 'region-east', name: 'East', kind: 'region', nodeIds: ['client-traffic', eastReplica.id] },
+    ]
+    const interaction = project.definitions.interactions.find((candidate) => candidate.id === 'create-order-flow')!
+    interaction.actions = [interaction.actions[0]!]
+    const experiment = project.experiments[0]!
+    experiment.operationWorkloads[0]!.operationMix = [experiment.operationWorkloads[0]!.operationMix[0]!]
+
+    const result = await runSimulation(project, 'operation-global-router-geo')
+    expect(result.events.find((event) => event.type === 'global-route-selected')).toMatchObject({ edgeId: 'global-to-east', attributes: { clientRegionId: 'region-east', selectedRegionId: 'region-east' } })
+    expect(result.events.find((event) => event.type === 'action-completed' && event.actionId === 'call-api')).toMatchObject({ nodeId: eastReplica.id, attributes: { declaredNodeId: 'orders-service', selectedNodeId: eastReplica.id } })
+    expect(result.summary).toMatchObject({ generatedRequests: 1, completedRequests: 1, failedRequests: 0 })
   })
 })

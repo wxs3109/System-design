@@ -147,9 +147,9 @@ The database model remains an explainable system-design approximation, not a SQL
 
 Exit criteria: changing an operation mix, removing a supporting index, increasing cardinality or payload size, introducing a hot partition key, or changing a cache path produces deterministic and directionally justified changes in latency, throughput, queueing, shard load, and traces. No order-specific or case-specific runtime branch is allowed.
 
-Status: complete. The generic compiler resolves operation workloads to versioned API/interaction plans, infers caller context from prior actions, validates synchronous versus asynchronous topology paths, and preserves capacity-only execution. The runtime executes ordered and conditional actions through real component resources, queues and faults; database costs, named cache operations, and event payloads feed operation/action telemetry. Results expose operation counts and p95 latency plus per-action duration, records examined, and bytes processed. Unsupported contract semantics produce descriptive warnings and are bounded in [Simulation model assumptions](../model-assumptions.md). P2.5 now owns the full order-system browser acceptance and comparative scenarios.
+Status: complete. The generic compiler resolves operation workloads to versioned API/interaction plans, infers caller context from prior actions, validates synchronous versus asynchronous topology paths, and preserves capacity-only execution. The runtime executes ordered and conditional actions through real component resources, queues and faults; database costs, named cache operations, and event payloads feed operation/action telemetry. Operation hops now compose existing retry, circuit-breaker, timeout, rate-limit, asynchronous backpressure, Load Balancer, and Global Router state, while successful `failure` branches can recover an earlier action failure. Results expose operation counts and p95 latency plus per-action duration, records examined, and bytes processed. Unsupported contract semantics produce descriptive warnings and are bounded in [Simulation model assumptions](../model-assumptions.md). P2.5 owns the full order-system browser acceptance and comparative scenarios.
 
-Deferred integration boundary: P2.4 does not yet compose edge retry/circuit-breaker policies, async backpressure gates, or load-balancer selection into operation action paths, and action failures terminate an operation before a reserved `failure` condition can recover it. These limits are explicit in the model assumptions and must be closed before Phase 2 is considered done; they do not change the completed P2.4 contract-to-runtime vertical slice.
+Integration boundary: closed. Focused runtime coverage proves operation-edge retry/circuit transitions, async backpressure and dead-letter outcomes, successful failure-conditioned recovery, round-robin Load Balancer selection, and geo Global Router selection. Remaining approximations are model boundaries rather than bypasses and stay explicit in [Simulation model assumptions](../model-assumptions.md).
 
 ### P2.5 — Generic vertical acceptance: order system
 
@@ -224,7 +224,7 @@ Each settlement runs its focused tests plus the complete `pnpm check` gate befor
 - [x] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
 - [x] the generic order-system acceptance project proves the end-to-end workflow;
 - [x] representative systems use shared behavior variants without case-specific runtime or editor branches;
-- [ ] operation-aware action paths compose the documented routing, reliability-policy, asynchronous backpressure, and failure-recovery behavior instead of bypassing those shared execution semantics;
+- [x] operation-aware action paths compose the documented routing, reliability-policy, asynchronous backpressure, and failure-recovery behavior instead of bypassing those shared execution semantics;
 - [x] Phase 1 projects preserve their documented execution meaning;
 - [x] the complete current `pnpm check` suite passes.
 
@@ -232,6 +232,6 @@ Future SDK, plugin-isolation, batch, and sharing criteria belong to the future r
 
 ## 9. Current execution order
 
-P2.6 is complete through P2.6g Global Router. The current priority is personal-use stabilization: first close the deferred P2.4 operation-aware execution boundary, then improve the run controls and workflows that become painful during real use. Prefer fixes, model consistency, and everyday usability over new infrastructure variants.
+P2.6 is complete through P2.6g Global Router, and the deferred P2.4 operation-aware execution boundary is closed. The current priority is personal-use stabilization: improve pause, single-step, speed controls, and workflows that become painful during real use. Prefer fixes, model consistency, and everyday usability over new infrastructure variants.
 
 P2.7 and later settlements remain paused future extensions. Do not begin them unless they are explicitly reprioritized after concrete use demonstrates a need for third-party variants, plugin loading, automated parameter sweeps, or shared/server-run artifacts.
