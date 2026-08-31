@@ -40,6 +40,22 @@ export const validateScenarioForSimulation = (input: unknown): ScenarioValidatio
     const subscriptions = (outgoing.get(topic.id) ?? []).filter((edge) => edge.routingMode === 'async-publish').length
     if (subscriptions < topic.config.subscriptionCount) warnings.push(`Topic ${topic.name} has ${topic.config.subscriptionCount - subscriptions} offline subscription slot(s); their retained backlog can grow until retention expires.`)
   }
+  for (const router of [...enabledNodes.values()].filter((node) => node.type === 'global-router')) {
+    if (router.config.routingPolicy === 'geo') {
+      const clientSources = scenario.workloads.filter((workload) => {
+        const seen = new Set<string>()
+        const visit = (nodeId: string): boolean => {
+          if (seen.has(nodeId)) return false
+          seen.add(nodeId)
+          if (nodeId === router.id) return true
+          return (outgoing.get(nodeId) ?? []).some((edge) => visit(edge.target))
+        }
+        return visit(workload.sourceNodeId)
+      })
+      const missing = clientSources.filter((workload) => !compiled.nodeRegions.has(workload.sourceNodeId))
+      if (missing.length > 0) warnings.push(`Global Router ${router.name} has ${missing.length} workload source(s) without a region; they use weighted fallback.`)
+    }
+  }
   const reachable = new Set<string>()
   const visit = (nodeId: string) => { if (reachable.has(nodeId)) return; reachable.add(nodeId); for (const edge of outgoing.get(nodeId) ?? []) visit(edge.target) }
   for (const workload of scenario.workloads) visit(workload.sourceNodeId)

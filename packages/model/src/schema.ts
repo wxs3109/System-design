@@ -12,6 +12,7 @@ export const componentTypeSchema = z.enum([
   'workflow',
   'network',
   'load-balancer',
+  'global-router',
   'realtime-gateway',
   'service',
   'queue',
@@ -93,6 +94,19 @@ export const loadBalancerConfigSchema = z.object({
   maxQueueSize: z.number().int().min(0).max(1_000_000).default(10_000),
   failureThreshold: positiveIntegerSchema.max(1_000).default(1),
   recoveryTimeMs: nonNegativeSchema.max(3_600_000).default(5_000),
+})
+
+export const globalRouterConfigSchema = z.object({
+  routingPolicy: z.enum(['geo', 'weighted', 'health-aware']).default('geo'),
+  capacity: positiveIntegerSchema.max(1_000_000).default(10_000),
+  lookupTimeMs: positiveSchema.default(1),
+  jitterMs: nonNegativeSchema.default(0.2),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(100_000),
+  decisionTtlMs: positiveSchema.max(86_400_000).default(60_000),
+  healthCheckIntervalMs: positiveSchema.max(3_600_000).default(1_000),
+  unhealthyThreshold: positiveIntegerSchema.max(1_000).default(2),
+  healthyThreshold: positiveIntegerSchema.max(1_000).default(2),
+  failoverDelayMs: nonNegativeSchema.max(3_600_000).default(5_000),
 })
 
 export const realtimeGatewayConfigSchema = z.object({
@@ -274,6 +288,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('load-balancer'),
     config: loadBalancerConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('global-router'),
+    config: globalRouterConfigSchema,
   }),
   z.object({
     ...commonNodeFields,
@@ -472,6 +491,7 @@ export type Position = z.infer<typeof positionSchema>
 export type ComponentNode = z.infer<typeof componentNodeSchema>
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>
 export type WorkflowConfig = z.infer<typeof workflowConfigSchema>
+export type GlobalRouterConfig = z.infer<typeof globalRouterConfigSchema>
 export type CdnConfig = z.infer<typeof cdnConfigSchema>
 export type SearchIndexConfig = z.infer<typeof searchIndexConfigSchema>
 export type TopicConfig = z.infer<typeof topicConfigSchema>

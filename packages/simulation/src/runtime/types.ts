@@ -20,6 +20,9 @@ export interface RequestState {
   reliabilityAttempt?: ReliabilityAttempt
   deliveryGateKeys?: string[]
   loadBalancerNodeId?: string
+  globalRouterNodeId?: string
+  globalRouterClientKey?: string
+  clientRegionId?: string
   branchPath?: string
   queuedAtMs?: number
   startedAtMs?: number

@@ -13,6 +13,7 @@ import { policiesFor } from '../policies/compiler'
 import { CircuitBreaker, retryDelayMs, type CircuitCompletionResult, type CircuitPermit, type CircuitTransition, type ReliabilityCall } from '../policies/reliability'
 import type { LoadBalancerRuntimeState, ReliabilityCompletionContext, RequestGroup, RequestState, RuntimeNode, SchedulerRuntimeState } from './types'
 import { actionAttributes, estimateDataAccessCost, sampleKey, sampleValueBytes } from '../components/operation-cost'
+import { GlobalRouterState, type GlobalRouterHealthTransition } from '../components/global-router-state'
 
 const completionEvents = (completion: ComponentStateCompletion | undefined) => completion === undefined ? [] : Array.isArray(completion) ? completion : completion.events
 const completionFailure = (completion: ComponentStateCompletion | undefined) => completion !== undefined && !Array.isArray(completion) && !completion.success ? completion.reason : undefined
@@ -27,6 +28,7 @@ export class SystemDesignSimulation extends Simulation {
   readonly eventSink: RuntimeEventSink
   readonly deliveryGates = new Map<string, BackpressureGate>()
   readonly loadBalancers = new Map<string, LoadBalancerRuntimeState>()
+  readonly globalRouters = new Map<string, GlobalRouterState>()
   readonly circuitBreakers = new Map<string, CircuitBreaker>()
   readonly rateLimits = new Map<string, TokenBucket>()
   readonly schedulers = new Map<string, SchedulerRuntimeState>()
@@ -61,6 +63,7 @@ export class SystemDesignSimulation extends Simulation {
         ...(state === undefined ? {} : { state }),
       })
       if (node.type === 'load-balancer') this.loadBalancers.set(node.id, { roundRobinIndex: 0, targets: new Map() })
+      if (node.type === 'global-router') this.globalRouters.set(node.id, new GlobalRouterState(node.config))
       if (node.type === 'scheduler') this.schedulers.set(node.id, {
         releaseTicks: 0, scheduledRuns: 0, releasedRuns: 0, queuedRuns: 0, skippedRuns: 0, completedRuns: 0, failedRuns: 0, catchUpRuns: 0,
         activeRuns: 0, maxActiveRuns: 0, nextRunId: 0, pending: [],
@@ -81,6 +84,7 @@ export class SystemDesignSimulation extends Simulation {
     for (const workload of this.scenario.workloads) if (!operationSources.has(workload.sourceNodeId)) this.activate(new WorkloadGenerator(workload))
     for (const phase of this.compiled.operations.phases) this.activate(new OperationWorkloadGenerator(phase))
     for (const node of this.nodes.values()) if (node.type === 'scheduler') this.activate(new SchedulerGenerator(node, this.compiled.operations.schedulerWorkloads.get(node.id)))
+    for (const node of this.nodes.values()) if (node.type === 'global-router' && node.config.routingPolicy === 'health-aware') this.activate(new GlobalRouterHealthProbe(node))
     this.activate(new MetricsSampler())
   }
 
@@ -190,6 +194,33 @@ export class SystemDesignSimulation extends Simulation {
     state.targets.set(edgeId, target)
   }
 
+  chooseGlobalRouterEdge(node: Extract<ComponentNode, { type: 'global-router' }>, edges: CompiledConnection[], request: RequestState) {
+    const state = this.globalRouters.get(node.id)!
+    const clientKey = request.globalRouterClientKey ?? request.key ?? request.traceId
+    const decision = state.select({
+      clientKey, ...(request.clientRegionId === undefined ? {} : { clientRegionId: request.clientRegionId }), policy: node.config.routingPolicy, nowMs: this.timeNow, random: this.random,
+      targets: edges.map((edge) => ({ edgeId: edge.id, weight: edge.weight, ...(this.compiled.nodeRegions.get(edge.target) === undefined ? {} : { regionId: this.compiled.nodeRegions.get(edge.target)! }) })),
+    })
+    const selectedRegionId = decision.target ? this.compiled.nodeRegions.get(edges.find((edge) => edge.id === decision.target!.edgeId)?.target ?? '') : undefined
+    const attributes = { clientKey, routingPolicy: node.config.routingPolicy, cacheHit: decision.cacheHit, cacheExpired: decision.cacheExpired, geoMatched: decision.geoMatched, ...(request.clientRegionId === undefined ? {} : { clientRegionId: request.clientRegionId }), ...(selectedRegionId === undefined ? {} : { selectedRegionId }) }
+    this.eventSink.emit({ timestampMs: round(this.timeNow), requestId: String(request.id), traceId: request.traceId, spanId: request.spanId, nodeId: node.id, ...(decision.target === undefined ? {} : { edgeId: decision.target.edgeId }), type: decision.cacheHit ? 'global-route-cache-hit' : decision.cacheExpired ? 'global-route-cache-expired' : 'global-route-selected', status: decision.target ? 'ok' : 'rejected', reason: decision.target ? 'none' : 'no_healthy_target', attributes })
+    if (decision.failoverDelayMs !== undefined && decision.target) this.eventSink.emit({ timestampMs: round(this.timeNow), requestId: String(request.id), traceId: request.traceId, spanId: request.spanId, nodeId: node.id, edgeId: decision.target.edgeId, type: 'global-router-failover', status: 'ok', attributes: { ...attributes, previousEdgeId: decision.previousEdgeId ?? '', failoverDelayMs: round(decision.failoverDelayMs) } })
+    return decision.target === undefined ? undefined : edges.find((edge) => edge.id === decision.target!.edgeId)
+  }
+
+  recordGlobalRouterOutcome(nodeId: string, edgeId: string, success: boolean) {
+    const node = this.nodes.get(nodeId)
+    if (node?.type !== 'global-router' || node.config.routingPolicy !== 'health-aware') return
+    const transition = this.globalRouters.get(nodeId)!.recordOutcome(edgeId, success, this.timeNow)
+    this.emitGlobalRouterHealthTransition(nodeId, transition)
+  }
+
+  emitGlobalRouterHealthTransition(nodeId: string, transition: GlobalRouterHealthTransition | undefined) {
+    if (!transition) return
+    const unhealthy = transition.type === 'target-unhealthy'
+    this.eventSink.emit({ timestampMs: round(this.timeNow), nodeId, edgeId: transition.edgeId, type: unhealthy ? 'global-router-target-unhealthy' : 'global-router-target-recovered', status: unhealthy ? 'error' : 'ok', attributes: unhealthy ? { detectedAtMs: transition.detectedAtMs, effectiveAtMs: transition.effectiveAtMs, propagationDelayMs: transition.effectiveAtMs - transition.detectedAtMs } : { recoveredAtMs: transition.recoveredAtMs } })
+  }
+
   emitCircuitTransition(edgeId: string, nodeId: string, transition: CircuitTransition | undefined) {
     if (!transition) return
     const type = transition === 'opened' ? 'circuit-opened' : transition === 'half-opened' ? 'circuit-half-opened' : 'circuit-closed'
@@ -250,8 +281,11 @@ export class SystemDesignSimulation extends Simulation {
     if (catchUp) state.catchUpRuns += 1
     const traceId = `trace-${this.requestId}`
     const bytes = run.operationPlan?.requestBytes ?? node.config.requestBytes
+    const clientRegionId = this.compiled.nodeRegions.get(node.id)
     const request: RequestState = {
       id: this.requestId, createdAtMs: this.timeNow, bytes, payloadBytes: bytes, hops: 0, traceId, spanId: `${traceId}:0`,
+      globalRouterClientKey: run.workloadId === undefined ? `scheduler:${node.id}` : `workload:${run.workloadId}`,
+      ...(clientRegionId === undefined ? {} : { clientRegionId }),
       schedulerNodeId: node.id, schedulerRunId: run.schedulerRunId, ...(run.operationPlan === undefined ? {} : { operationPlan: run.operationPlan, operationId: run.operationPlan.operation.operationId, key: sampleKey(run.operationPlan.keyDistribution, this.random, this.requestId) }),
     }
     this.eventSink.emit({
@@ -308,8 +342,39 @@ export class SystemDesignSimulation extends Simulation {
               activeRuns: scheduler.activeRuns, maxActiveRuns: scheduler.maxActiveRuns, pendingRuns: scheduler.pending.length,
             }
           })()),
+          ...(runtime.node.type !== 'global-router' ? {} : (() => {
+            const snapshot = this.globalRouters.get(runtime.node.id)!.snapshot(this.timeNow)
+            return {
+              globalRoutingDecisions: snapshot.decisions, globalRouterCacheHits: snapshot.cacheHits, globalRouterCacheMisses: snapshot.cacheMisses, globalRouterCacheExpirations: snapshot.cacheExpirations,
+              globalRouterCacheHitRate: snapshot.cacheHitRate, globalRouterCachedDecisions: snapshot.cachedDecisions, globalRouterGeoMatches: snapshot.geoMatches, globalRouterFailedOutcomes: snapshot.failedOutcomes,
+              globalRouterUnhealthyTransitions: snapshot.unhealthyTransitions, globalRouterRecoveries: snapshot.recoveries, globalRouterFailovers: snapshot.failovers, globalRouterCumulativeFailoverDelayMs: snapshot.cumulativeFailoverDelayMs,
+              globalRouterMaxFailoverDelayMs: snapshot.maxFailoverDelayMs, globalRouterCurrentlyUnhealthy: snapshot.currentlyUnhealthy,
+              ...Object.fromEntries(Object.entries(snapshot.selectionsByTarget).slice(0, 16).map(([edgeId, count], index) => [`globalRouterTarget${index}Selections`, count])),
+            }
+          })()),
         },
       })
+    }
+  }
+}
+
+class GlobalRouterHealthProbe extends Entity<SystemDesignSimulation> {
+  constructor(private readonly node: Extract<ComponentNode, { type: 'global-router' }>) { super() }
+
+  async script() {
+    const simulation = this.simulation
+    const intervalMs = this.node.config.healthCheckIntervalMs
+    const durationMs = simulation.scenario.simulation.durationSeconds * 1_000
+    while (simulation.timeNow + intervalMs <= durationMs) {
+      await this.delay(intervalMs)
+      const state = simulation.globalRouters.get(this.node.id)!
+      for (const edge of simulation.outgoing.get(this.node.id) ?? []) {
+        if (!state.needsRecoveryProbe(edge.id)) continue
+        const target = simulation.nodes.get(edge.target)
+        const healthy = target !== undefined && simulation.failureReason(target, { id: 0, createdAtMs: simulation.timeNow, bytes: 0, hops: 0, traceId: 'health-probe', spanId: 'health-probe', incomingEdgeId: edge.id }) === undefined
+        const transition = state.probe(edge.id, healthy, simulation.timeNow)
+        simulation.emitGlobalRouterHealthTransition(this.node.id, transition)
+      }
     }
   }
 }
@@ -397,7 +462,8 @@ class WorkloadGenerator extends Entity<SystemDesignSimulation> {
       const traceId = `trace-${simulation.requestId}`
       const hotKeyFaults = simulation.activeFaults('workload', workload.id, 'hot-key')
       const hotKeyProbabilityOverride = hotKeyFaults.length === 0 ? undefined : 1 - hotKeyFaults.reduce((remaining, fault) => remaining * (1 - (fault.factor ?? 0.8)), 1)
-      simulation.activate(new RequestEntity({ id: simulation.requestId, createdAtMs: simulation.timeNow, bytes: workload.requestBytes, hops: 0, traceId, spanId: `${traceId}:0`, ...(hotKeyProbabilityOverride === undefined ? {} : { hotKeyProbabilityOverride }) }, workload.sourceNodeId))
+      const clientRegionId = simulation.compiled.nodeRegions.get(workload.sourceNodeId)
+      simulation.activate(new RequestEntity({ id: simulation.requestId, createdAtMs: simulation.timeNow, bytes: workload.requestBytes, hops: 0, traceId, spanId: `${traceId}:0`, globalRouterClientKey: `workload:${workload.id}`, ...(clientRegionId === undefined ? {} : { clientRegionId }), ...(hotKeyProbabilityOverride === undefined ? {} : { hotKeyProbabilityOverride }) }, workload.sourceNodeId))
       const trafficMultiplier = simulation.activeFaults('workload', workload.id, 'traffic-spike').reduce((value, fault) => value * (fault.factor ?? 3), 1)
       const interval = 1_000 / (workload.requestsPerSecond * trafficMultiplier)
       const delay = workload.pattern === 'constant' ? interval : -Math.log(Math.max(Number.EPSILON, 1 - simulation.random())) * interval
@@ -436,6 +502,7 @@ class OperationWorkloadGenerator extends Entity<SystemDesignSimulation> {
       const request: RequestState = {
         id: simulation.requestId, createdAtMs: simulation.timeNow, bytes, payloadBytes: bytes, hops: 0, traceId, spanId: `${traceId}:operation`,
         operationPlan: plan, operationId: plan.operation.operationId, key: sampleKey(hotKeyDistribution, simulation.random, simulation.requestId),
+        globalRouterClientKey: `workload:${phase.workloadId}`, ...(simulation.compiled.nodeRegions.get(phase.sourceNodeId) === undefined ? {} : { clientRegionId: simulation.compiled.nodeRegions.get(phase.sourceNodeId)! }),
       }
       simulation.emitOperationEvent(request, 'operation-started', 'pending')
       simulation.activate(new OperationExecution(request, plan))
@@ -821,11 +888,14 @@ class AttemptResult extends Entity<SystemDesignSimulation> {
     if ((this.success || call.attempt >= call.maxAttempts) && this.request.loadBalancerNodeId) {
       simulation.recordLoadBalancerOutcome(this.request.loadBalancerNodeId, attempt.edgeId, this.success)
     }
+    if ((this.success || call.attempt >= call.maxAttempts) && this.request.globalRouterNodeId) {
+      simulation.recordGlobalRouterOutcome(this.request.globalRouterNodeId, attempt.edgeId, this.success)
+    }
     if (this.success || call.attempt >= call.maxAttempts) {
       const { reliabilityCall: _call, reliabilityAttempt: _attempt, ...settled } = this.request
       const {
         incomingEdgeId: _settledIncomingEdgeId, incomingRoutingMode: _settledIncomingRoutingMode,
-        dependencyStartedAtMs: _settledDependencyStartedAtMs, loadBalancerNodeId: _settledLoadBalancerNodeId,
+        dependencyStartedAtMs: _settledDependencyStartedAtMs, loadBalancerNodeId: _settledLoadBalancerNodeId, globalRouterNodeId: _settledGlobalRouterNodeId,
         ...withoutCurrentDependency
       } = settled
       const resumed: RequestState = {
@@ -835,6 +905,9 @@ class AttemptResult extends Entity<SystemDesignSimulation> {
         ...(call.callerRequest.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: call.callerRequest.incomingRoutingMode }),
         ...(call.callerRequest.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: call.callerRequest.dependencyStartedAtMs }),
         ...(call.callerRequest.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: call.callerRequest.loadBalancerNodeId }),
+        ...(call.callerRequest.globalRouterNodeId === undefined ? {} : { globalRouterNodeId: call.callerRequest.globalRouterNodeId }),
+        ...(call.callerRequest.globalRouterClientKey === undefined ? {} : { globalRouterClientKey: call.callerRequest.globalRouterClientKey }),
+        ...(call.callerRequest.clientRegionId === undefined ? {} : { clientRegionId: call.callerRequest.clientRegionId }),
         ...(call.callerRequest.resumeNodeId === undefined ? {} : { resumeNodeId: call.callerRequest.resumeNodeId }),
         ...(call.callerRequest.resumeOutgoingPort === undefined ? {} : { resumeOutgoingPort: call.callerRequest.resumeOutgoingPort }),
         ...(call.callerRequest.resumeRequestSpanId === undefined ? {} : { resumeRequestSpanId: call.callerRequest.resumeRequestSpanId }),
@@ -927,6 +1000,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     const simulation = this.simulation
     if (!this.request.incomingEdgeId || this.request.dependencyStartedAtMs === undefined || this.request.incomingRoutingMode === 'async-publish') return
     if (this.request.loadBalancerNodeId) simulation.recordLoadBalancerOutcome(this.request.loadBalancerNodeId, this.request.incomingEdgeId, success)
+    if (this.request.globalRouterNodeId) simulation.recordGlobalRouterOutcome(this.request.globalRouterNodeId, this.request.incomingEdgeId, success)
     simulation.eventSink.emit({
       timestampMs: round(simulation.timeNow), requestId: String(this.request.id), traceId: this.request.traceId, spanId: this.request.spanId,
       ...(this.request.parentSpanId === undefined ? {} : { parentSpanId: this.request.parentSpanId }), nodeId: node.id, edgeId: this.request.incomingEdgeId,
@@ -949,7 +1023,7 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
   }
 
   private clearDependency() {
-    const { incomingEdgeId: _incomingEdgeId, incomingRoutingMode: _incomingRoutingMode, dependencyStartedAtMs: _dependencyStartedAtMs, loadBalancerNodeId: _loadBalancerNodeId, ...request } = this.request
+    const { incomingEdgeId: _incomingEdgeId, incomingRoutingMode: _incomingRoutingMode, dependencyStartedAtMs: _dependencyStartedAtMs, loadBalancerNodeId: _loadBalancerNodeId, globalRouterNodeId: _globalRouterNodeId, ...request } = this.request
     this.request = request
   }
 
@@ -1224,6 +1298,9 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
                 ...(request.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: request.incomingRoutingMode }),
                 ...(request.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: request.dependencyStartedAtMs }),
                 ...(request.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: request.loadBalancerNodeId }),
+                ...(request.globalRouterNodeId === undefined ? {} : { globalRouterNodeId: request.globalRouterNodeId }),
+                ...(request.globalRouterClientKey === undefined ? {} : { globalRouterClientKey: request.globalRouterClientKey }),
+                ...(request.clientRegionId === undefined ? {} : { clientRegionId: request.clientRegionId }),
                 ...(request.resumeNodeId === undefined ? {} : { resumeNodeId: request.resumeNodeId }),
                 ...(request.resumeOutgoingPort === undefined ? {} : { resumeOutgoingPort: request.resumeOutgoingPort }),
                 ...(request.resumeRequestSpanId === undefined ? {} : { resumeRequestSpanId: request.resumeRequestSpanId }),
@@ -1235,10 +1312,12 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
         }
         return
       }
-      const edge = node.type === 'load-balancer' ? simulation.chooseLoadBalancerEdge(node, synchronousEdges) : simulation.chooseEdge(synchronousEdges)
+      const edge = node.type === 'load-balancer' ? simulation.chooseLoadBalancerEdge(node, synchronousEdges)
+        : node.type === 'global-router' ? simulation.chooseGlobalRouterEdge(node, synchronousEdges, this.request)
+          : simulation.chooseEdge(synchronousEdges)
       if (!edge) {
         runtime.failed += 1
-        simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'no_healthy_target', attributes: { terminal: false, routingAlgorithm: node.type === 'load-balancer' ? node.config.algorithm : 'weighted' } })
+        simulation.emitRequestEvent(this.request, node, 'request-failed', 'rejected', { reason: 'no_healthy_target', attributes: { terminal: false, routingAlgorithm: node.type === 'load-balancer' ? node.config.algorithm : node.type === 'global-router' ? node.config.routingPolicy : 'weighted' } })
         this.finishBranch(false, node, 'no_healthy_target')
         return
       }
@@ -1257,6 +1336,9 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
             ...(request.incomingRoutingMode === undefined ? {} : { incomingRoutingMode: request.incomingRoutingMode }),
             ...(request.dependencyStartedAtMs === undefined ? {} : { dependencyStartedAtMs: request.dependencyStartedAtMs }),
             ...(request.loadBalancerNodeId === undefined ? {} : { loadBalancerNodeId: request.loadBalancerNodeId }),
+            ...(request.globalRouterNodeId === undefined ? {} : { globalRouterNodeId: request.globalRouterNodeId }),
+            ...(request.globalRouterClientKey === undefined ? {} : { globalRouterClientKey: request.globalRouterClientKey }),
+            ...(request.clientRegionId === undefined ? {} : { clientRegionId: request.clientRegionId }),
             ...(request.resumeNodeId === undefined ? {} : { resumeNodeId: request.resumeNodeId }),
             ...(request.resumeOutgoingPort === undefined ? {} : { resumeOutgoingPort: request.resumeOutgoingPort }),
             ...(request.resumeRequestSpanId === undefined ? {} : { resumeRequestSpanId: request.resumeRequestSpanId }),
@@ -1264,13 +1346,13 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
           ...(retry === undefined ? {} : { retry: retry.config }), ...(timeout === undefined ? {} : { timeout: timeout.config }),
         }
         simulation.activate(new ReliabilityAttemptEntity(
-          { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, reliabilityCall: call, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}), ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: selectedOutgoingPort, resumeRequestSpanId: parentSpanId } : {}) },
+          { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, reliabilityCall: call, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}), ...(node.type === 'global-router' ? { globalRouterNodeId: node.id } : {}), ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: selectedOutgoingPort, resumeRequestSpanId: parentSpanId } : {}) },
           edge.target, { countsAsRequest: this.countsAsRequest, ...(this.group === undefined ? {} : { group: this.group }) },
         ))
         return
       }
       this.nodeId = edge.target
-      this.request = { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}), ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: selectedOutgoingPort, resumeRequestSpanId: parentSpanId } : {}) }
+      this.request = { ...request, hops: request.hops + 1, parentSpanId, spanId: `${request.traceId}:${request.hops + 1}`, incomingEdgeId: edge.id, incomingRoutingMode: edge.routingMode, dependencyStartedAtMs: simulation.timeNow, ...(node.type === 'load-balancer' ? { loadBalancerNodeId: node.id } : {}), ...(node.type === 'global-router' ? { globalRouterNodeId: node.id } : {}), ...(runtime.state?.dependencyComplete ? { resumeNodeId: node.id, resumeOutgoingPort: selectedOutgoingPort, resumeRequestSpanId: parentSpanId } : {}) }
     }
   }
 }

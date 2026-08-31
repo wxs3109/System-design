@@ -410,6 +410,33 @@ test('edits and runs Workflow examples with durable and compensation evidence', 
   await expect(bookingAction.getByText(/workflow compensated/)).toBeVisible()
 })
 
+test('runs Global Router examples with geo-cache and delayed-failover evidence', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Global storefront/ }).click()
+  await expect(page.getByText('7 components')).toBeVisible()
+  await page.getByTestId('rf__node-storefront-global-router').dispatchEvent('click')
+  await expect(page.getByLabel('Routing policy')).toHaveValue('geo')
+  await expect(page.getByLabel('Decision TTL (ms)')).toHaveValue('500')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+  const storefrontRow = page.getByRole('row').filter({ hasText: 'Storefront global router' })
+  await expect(storefrontRow.getByText(/route cache hit/)).toBeVisible()
+  await expect(storefrontRow.getByText(/geo matches [1-9]/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Multi-region failover/ }).click()
+  await expect(page.getByText('6 components')).toBeVisible()
+  await page.getByTestId('rf__node-failover-global-router').dispatchEvent('click')
+  await expect(page.getByLabel('Routing policy')).toHaveValue('health-aware')
+  await expect(page.getByLabel('Failover propagation (ms)')).toHaveValue('300')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+  const failoverRow = page.getByRole('row').filter({ hasText: 'Failover global router' })
+  await expect(failoverRow.getByText(/failovers [1-9]/)).toBeVisible()
+  await expect(failoverRow.getByText(/max failover delay \(ms\) [1-9]/)).toBeVisible()
+})
+
 test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({

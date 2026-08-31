@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { projectFileV3Schema } from '@system-design/model'
 import { runSimulation } from '@system-design/simulation'
-import { createCloudDriveDeliveryExample, createCollaborativeEditingExample, createIncidentFanOutExample, createLogSearchExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from './examples'
+import { createCloudDriveDeliveryExample, createCollaborativeEditingExample, createGlobalStorefrontExample, createIncidentFanOutExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from './examples'
 
 describe('CDN examples', () => {
   it.each([
@@ -227,5 +227,59 @@ describe('Workflow examples', () => {
     expect(fulfillment.topology.nodes).toHaveLength(7)
     expect(checkout.definitions.workflows[0]?.steps).toHaveLength(3)
     expect(fulfillment.definitions.workflows[0]?.steps).toHaveLength(4)
+  })
+})
+
+describe('Global Router examples', () => {
+  it.each([
+    ['global storefront', createGlobalStorefrontExample, 'storefront-global-router', 'geo'],
+    ['multi-region failover', createMultiRegionFailoverExample, 'failover-global-router', 'health-aware'],
+  ] as const)('provides a valid, executable %s project', async (_name, createExample, routerId, policy) => {
+    const project = createExample()
+    expect(projectFileV3Schema.safeParse(project).success).toBe(true)
+    const router = project.topology.nodes.find((node) => node.id === routerId)
+    expect(router?.type).toBe('global-router')
+    if (router?.type !== 'global-router') throw new Error('Expected the example to contain a Global Router.')
+    expect(router.config.routingPolicy).toBe(policy)
+    expect(project.topology.groups.filter((group) => group.kind === 'region')).toHaveLength(2)
+    expect(project.topology.edges.filter((edge) => edge.source === routerId)).toHaveLength(2)
+
+    const result = await runSimulation(project, `${project.id}-example`)
+    const details = result.nodes.find((node) => node.nodeId === routerId)?.details
+    expect(Number(details?.globalRoutingDecisions)).toBeGreaterThan(0)
+    expect(Number(details?.globalRouterCacheHits)).toBeGreaterThan(0)
+    expect(result.events.some((event) => event.type === 'global-route-selected' && event.nodeId === routerId)).toBe(true)
+  })
+
+  it('routes storefront cohorts to their matching regions and reuses cached decisions', async () => {
+    const result = await runSimulation(createGlobalStorefrontExample(), 'global-storefront-regions')
+    const routeEvents = result.events.filter((event) => ['global-route-selected', 'global-route-cache-hit', 'global-route-cache-expired'].includes(event.type))
+    expect(routeEvents).not.toHaveLength(0)
+    expect(routeEvents.every((event) => event.attributes.clientRegionId === event.attributes.selectedRegionId)).toBe(true)
+    expect(new Set(routeEvents.map((event) => event.attributes.selectedRegionId))).toEqual(new Set(['region-north-america', 'region-europe']))
+  })
+
+  it('keeps stale primary routes before exposing a delayed standby failover', async () => {
+    const result = await runSimulation(createMultiRegionFailoverExample(), 'multi-region-failover-evidence')
+    const details = result.nodes.find((node) => node.nodeId === 'failover-global-router')?.details
+    expect(Number(details?.globalRouterUnhealthyTransitions)).toBeGreaterThan(0)
+    expect(Number(details?.globalRouterFailovers)).toBeGreaterThan(0)
+    expect(Number(details?.globalRouterMaxFailoverDelayMs)).toBeGreaterThanOrEqual(300)
+    expect(result.nodes.find((node) => node.nodeId === 'standby-api')?.processedRequests).toBeGreaterThan(0)
+    expect(result.events.some((event) => event.type === 'global-router-failover' && Number(event.attributes.failoverDelayMs) >= 300)).toBe(true)
+  })
+
+  it('uses distinct geo storefront and health-failover system shapes', () => {
+    const storefront = createGlobalStorefrontExample()
+    const failover = createMultiRegionFailoverExample()
+    const storefrontRouter = storefront.topology.nodes.find((node) => node.type === 'global-router')
+    const failoverRouter = failover.topology.nodes.find((node) => node.type === 'global-router')
+    if (storefrontRouter?.type !== 'global-router' || failoverRouter?.type !== 'global-router') throw new Error('Expected both examples to contain a Global Router.')
+    expect(storefrontRouter.config.routingPolicy).toBe('geo')
+    expect(failoverRouter.config.routingPolicy).toBe('health-aware')
+    expect(storefront.topology.nodes.filter((node) => node.type === 'traffic')).toHaveLength(2)
+    expect(failover.topology.nodes.filter((node) => node.type === 'traffic')).toHaveLength(1)
+    expect(storefront.experiments[0]?.faults).toHaveLength(0)
+    expect(failover.experiments[0]?.faults).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'region-outage' })]))
   })
 })

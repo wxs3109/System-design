@@ -8,7 +8,7 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'scheduler', 'workflow', 'network', 'load-balancer', 'realtime-gateway', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
+      'traffic', 'scheduler', 'workflow', 'network', 'load-balancer', 'global-router', 'realtime-gateway', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
     ])
   })
 
@@ -62,6 +62,15 @@ describe('component registry', () => {
     expect(manifest.category).toBe('gateway')
     expect(manifest.capabilities).toEqual(expect.arrayContaining(['long-lived-connections', 'channel-membership', 'broadcast', 'connection-backpressure']))
     expect(componentCatalog.listPresets('realtime-gateway')).toEqual([])
+  })
+
+  it('declares Global Router as an executable Gateway variant', () => {
+    const router = componentRegistry.createNode('global-router', 'global', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('global-router')
+    expect(router.config).toMatchObject({ routingPolicy: 'geo', decisionTtlMs: 60_000, failoverDelayMs: 5_000 })
+    expect(manifest.category).toBe('gateway')
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['geo-routing', 'weighted-routing', 'health-aware-routing', 'decision-cache', 'failover-propagation']))
+    expect(componentCatalog.listPresets('global-router')).toEqual([])
   })
 
   it('registers Phase 1 data components and defaults Database to v2', () => {
@@ -189,7 +198,7 @@ describe('component creation hierarchy', () => {
       'traffic', 'automation', 'network', 'gateway', 'service', 'cache', 'database', 'object-storage', 'messaging',
     ])
     expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['search-index', 'database'])
-    expect(componentCatalog.listVariants('gateway').map((variant) => variant.type)).toEqual(['load-balancer', 'realtime-gateway'])
+    expect(componentCatalog.listVariants('gateway').map((variant) => variant.type)).toEqual(['load-balancer', 'global-router', 'realtime-gateway'])
     expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler', 'workflow'])
     expect(componentCatalog.listVariants('cache').map((variant) => variant.type)).toEqual(['cache', 'cdn'])
     expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream', 'topic'])

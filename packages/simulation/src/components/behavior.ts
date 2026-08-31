@@ -34,6 +34,10 @@ const behaviors = [
     type: 'load-balancer', capacity: (node) => node.config.capacity, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node) => node.config.routingTimeMs, jitterMs: () => 0, intrinsicErrorRate: () => 0,
   }),
+  defineBehavior<Extract<ComponentNode, { type: 'global-router' }>>({
+    type: 'global-router', capacity: (node) => node.config.capacity, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node) => node.config.lookupTimeMs, jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: () => 0,
+  }),
   defineBehavior<Extract<ComponentNode, { type: 'realtime-gateway' }>>({
     type: 'realtime-gateway', capacity: (node) => node.config.maxConcurrentMessages, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node, request) => request.operationAction?.realtime?.operation === 'connect'

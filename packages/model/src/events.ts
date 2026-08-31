@@ -19,6 +19,7 @@ export const runtimeEventTypeSchema = z.enum([
   'workflow-instance-started', 'workflow-idempotency-replayed', 'workflow-step-attempted', 'workflow-step-checkpointed', 'workflow-step-failed',
   'workflow-step-timed-out', 'workflow-retry-scheduled', 'workflow-compensation-started', 'workflow-compensation-completed',
   'workflow-instance-completed', 'workflow-instance-failed',
+  'global-route-selected', 'global-route-cache-hit', 'global-route-cache-expired', 'global-router-target-unhealthy', 'global-router-target-recovered', 'global-router-failover',
   'operation-started', 'operation-completed', 'action-started', 'action-completed', 'action-skipped',
   'fault-activated', 'fault-recovered', 'metric-sampled', 'node-snapshot',
 ])

@@ -71,4 +71,39 @@ describe('generic project compiler', () => {
     project.experiments[0]!.workloads = [{ id: 'load', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 100 }]
     expect(validateScenarioForSimulation(project).warnings).toContain('CDN CDN has no connected hit path; cached responses terminate at the CDN node.')
   })
+
+  it('compiles explicit Global Router region membership and rejects ambiguous or missing geo targets', () => {
+    const project = createEmptyProject('global-regions')
+    const traffic = createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }, 'load')
+    const router = createRegisteredNode('global-router', 'router', { x: 100, y: 0 })
+    const service = createRegisteredNode('service', 'service', { x: 200, y: 0 })
+    project.topology.nodes = [traffic, router, service]
+    project.topology.edges = [
+      { id: 'entry', source: 'traffic', target: 'router', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'route', source: 'router', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+    ]
+    project.topology.groups = [{ id: 'west', name: 'West', kind: 'region', nodeIds: ['traffic', 'service'] }]
+    project.experiments[0]!.workloads = [{ id: 'load', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 100 }]
+    expect(compileSimulationInput(project).nodeRegions).toEqual(new Map([['traffic', 'west'], ['service', 'west']]))
+    project.topology.groups = []
+    expect(() => compileSimulationInput(project)).toThrow('each target to belong to one region')
+    project.topology.groups = [{ id: 'west', name: 'West', kind: 'region', nodeIds: ['traffic', 'service'] }, { id: 'east', name: 'East', kind: 'region', nodeIds: ['service'] }]
+    expect(() => compileSimulationInput(project)).toThrow('multiple regions')
+  })
+
+  it('rejects a Global Router with no enabled route target', () => {
+    const project = createEmptyProject('global-no-target')
+    const traffic = createRegisteredNode('traffic', 'traffic', { x: 0, y: 0 }, 'load')
+    const router = createRegisteredNode('global-router', 'router', { x: 100, y: 0 })
+    const service = createRegisteredNode('service', 'service', { x: 200, y: 0 })
+    service.disabled = true
+    project.topology.nodes = [traffic, router, service]
+    project.topology.edges = [
+      { id: 'entry', source: 'traffic', target: 'router', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+      { id: 'disabled-route', source: 'router', target: 'service', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' },
+    ]
+    project.topology.groups = [{ id: 'west', name: 'West', kind: 'region', nodeIds: ['traffic', 'service'] }]
+    project.experiments[0]!.workloads = [{ id: 'load', name: 'Load', sourceNodeId: 'traffic', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 100 }]
+    expect(() => compileSimulationInput(project)).toThrow('requires at least one synchronous route target')
+  })
 })

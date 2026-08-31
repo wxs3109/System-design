@@ -183,9 +183,9 @@ scenarios/              # 可执行示例与回归场景，不包含专用页面
 3. **Preset** 只是一种 variant 的可选初始参数模板，可以附加已有策略，但不增加端口、Schema 或运行能力，也不在 Palette 中单独占一栏。
 4. **业务契约**定义组件实际处理的内容，包括 API operation、事件、table/collection、typed field、主键/分区键、index、关系、访问模式和 workload mix。它们是项目级可复用资源，不能只是塞进节点配置后被仿真忽略。
 
-Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。P2.6a 到 P2.6f 又依次增加了 Scheduler、CDN、Search Index、Topic、Realtime Gateway 和 Workflow：它们分别执行调度释放、边缘缓存、搜索可见性与查询 fan-out、独立订阅状态、长连接/频道广播与每连接背压，以及有持久检查点的多步骤协调。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组；指标与 Trace 是结果视图，不伪装成组件。
+Phase 1 已实现 Traffic Generator、Network Link、Load Balancer、Service、Queue、Cache、Stream、Object Storage 和通用 Database 九种基础行为。P2.6a 到 P2.6g 又依次增加了 Scheduler、CDN、Search Index、Topic、Realtime Gateway、Workflow 和 Global Router：它们分别执行调度释放、边缘缓存、搜索可见性与查询 fan-out、独立订阅状态、长连接/频道广播与每连接背压、有持久检查点的多步骤协调，以及跨显式 Region 的 geo/weighted/health-aware 路由与缓存失效转移。Retry、Timeout、Circuit Breaker、Rate Limit、Backpressure 是策略；Region 和 Availability Zone 是拓扑分组，其中 Region 也为 Global Router 提供明确的客户端与目标位置；指标与 Trace 是结果视图，不伪装成组件。
 
-P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证完整闭环。P2.6a 的 Scheduler 已具备周期/批次释放、seeded jitter、skip/catch-up 与并发限制；P2.6b 的 CDN 使用可执行的 POP、TTL、origin fetch 和传输成本模型；P2.6c 的 Search Index 执行 Document Model、延迟 refresh、分片/副本查询和候选合并；P2.6d 的 Topic 执行独立 subscription 状态、ACK 与 retention；P2.6e 的 Realtime Gateway 执行连接生命周期、频道广播与每连接背压；P2.6f 的 Workflow 则执行顺序步骤检查点、幂等重放、每步超时、有限重试和反向补偿，并由 Payment checkout 与 Order fulfillment 两个普通 v3 项目复用。这些行为都通过同一编辑器、编译器和运行时。下一步是 P2.6g Global Router。
+P2.1b 已完成：Palette 现在使用 category → variant → optional preset 层级，preset 不再单独占区，旧 SQL/NoSQL/API Gateway capacity 模板仅兼容导入且不能新建。P2.2 与 P2.3 已建立 `ProjectFile v3` 业务合同和通用 Definitions 编辑器；P2.4 把 API operation、interaction action、数据访问、Cache Key 和 Event 编译为可执行计划；P2.5 又用普通 v3 订单项目验证完整闭环。P2.6a 的 Scheduler 已具备周期/批次释放、seeded jitter、skip/catch-up 与并发限制；P2.6b 的 CDN 使用可执行的 POP、TTL、origin fetch 和传输成本模型；P2.6c 的 Search Index 执行 Document Model、延迟 refresh、分片/副本查询和候选合并；P2.6d 的 Topic 执行独立 subscription 状态、ACK 与 retention；P2.6e 的 Realtime Gateway 执行连接生命周期、频道广播与每连接背压；P2.6f 的 Workflow 执行顺序步骤检查点、幂等重放、每步超时、有限重试和反向补偿；P2.6g 的 Global Router 则按显式 Region、边权重和健康状态做确定性路由，保留 workload cohort 决策直至 TTL，并把检测阈值、传播等待和缓存残余暴露为故障转移证据。这些行为都通过同一编辑器、编译器和运行时。P2.6 已全部完成；P2.7 SDK extraction 仍是计划项，尚未开始。
 
 详细覆盖依据：[Component Coverage Audit](docs/component-coverage.md)。
 
@@ -222,13 +222,13 @@ Phase 0 的验收物不是某个 Rate Limiter 页面，而是一个可以从空�
 
 详细执行方案：[Phase 2 Implementation Plan](docs/roadmap/phase-2.md)。
 
-当前进度：P2.0 到 P2.5，以及 P2.6a Scheduler、P2.6b CDN、P2.6c Search Index、P2.6d Topic、P2.6e Realtime Gateway 和 P2.6f Workflow 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。这六个新增行为都是独立 executable variant，不是预设或装饰节点。下一步是 P2.6g Global Router。
+当前进度：P2.0 到 P2.5，以及 P2.6a Scheduler、P2.6b CDN、P2.6c Search Index、P2.6d Topic、P2.6e Realtime Gateway、P2.6f Workflow 和 P2.6g Global Router 已完成。Palette 已按 category → variant → optional preset 组织；`ProjectFile v3` 的业务合同可通过通用 Definitions UI 创建、编辑、校验和导出。这七个新增行为都是独立 executable variant，不是预设或装饰节点。P2.7 SDK extraction 尚未开始。
 
 - 建立项目级 API/Event、Data Model、Access Pattern 和 operation-level Workload contracts。
 - 为 Service、Database 和 Workload 提供可编辑的嵌套领域模型，并让 compiler/runtime 真正消费它们。
 - 顶层 Palette 只显示组件类别；Relational/Document/Key-Value、API Service/Worker 等行为变体在选择所属类别后出现，preset 仅作为可选模板。
 - 用订单系统验收 API → Service → Cache/Database → Event 的完整可执行链路。
-- 按独立 settlement 扩展 Search、Topic、Realtime、Workflow 和 Global Routing；前四项已经完成，Global Routing 仍须让配置变化产生可测结果。
+- 按独立 settlement 扩展 Search、Topic、Realtime、Workflow 和 Global Routing；这些行为均已完成，并且配置变化会产生可测结果。
 - 在真实内置组件验证合同后发布 SDK、版本规则和插件沙箱。
 - 支持批量实验、参数扫描、容量边界搜索、分享和可选适配器。
 
@@ -278,7 +278,7 @@ Phase 2 的 P2.2 与 P2.3 已完成：`ProjectFile v3` 区分 `capacity-only` �
 
 Phase 2 的 P2.4 已完成：operation workload 会编译为拓扑绑定的交互计划，按依赖和条件执行 API/service、数据、缓存与事件 action；表或 collection 的 cardinality、记录大小、索引形态、estimated rows、handler time、operation mix 和键分布会进入可复现的成本与负载模型。Results 展示 operation 成功/失败/p95 和 action 延迟、records examined、bytes processed，Trace 保留 operation/action 身份。具体公式和仍属描述性的字段见 [Simulation Model Assumptions](docs/model-assumptions.md)。
 
-当前仍是早期平台：P2.5 已用完全由通用合同组成的订单系统完成浏览器纵切；P2.6c 用 Product Search 与 streaming Log Search 验收同一 Search Index 行为；P2.6d 用 Order event fan-out 与 Incident fan-out 验收同一 Topic 行为；P2.6e 用 Realtime chat 与 Collaborative editing 验收同一 Realtime Gateway；P2.6f 又让通用 Workflow Definition 和 `workflow` action 真正执行步骤检查点、幂等重放、超时、有限退避重试、反向补偿和补偿失败。所谓持久状态目前只存在于一次仿真运行内，不代表真实数据库或跨进程恢复。后续新增组件仍必须拥有独立、可测的运行时语义，不能用新增图标替代端到端行为。
+当前仍是早期平台：P2.5 已用完全由通用合同组成的订单系统完成浏览器纵切；P2.6c 用 Product Search 与 streaming Log Search 验收同一 Search Index 行为；P2.6d 用 Order event fan-out 与 Incident fan-out 验收同一 Topic 行为；P2.6e 用 Realtime chat 与 Collaborative editing 验收同一 Realtime Gateway；P2.6f 又让通用 Workflow Definition 和 `workflow` action 真正执行步骤检查点、幂等重放、超时、有限退避重试、反向补偿和补偿失败；P2.6g 则让普通 Global storefront 与 Multi-region failover 场景复用同一 Global Router，在显式 Region、workload cohort TTL 和健康传播模型下产生可解释的路由、缓存与故障转移指标。所谓持久状态目前只存在于一次仿真运行内，不代表真实数据库或跨进程恢复；Global Router 也不是 DNS、Anycast/BGP 或跨区域复制的真实协议模拟。后续新增组件仍必须拥有独立、可测的运行时语义，不能用新增图标替代端到端行为。
 
 本地运行：
 

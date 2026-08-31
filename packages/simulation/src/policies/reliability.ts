@@ -45,6 +45,9 @@ export interface ReliabilityCall {
     incomingRoutingMode?: import('@system-design/model').RoutingMode
     dependencyStartedAtMs?: number
     loadBalancerNodeId?: string
+    globalRouterNodeId?: string
+    globalRouterClientKey?: string
+    clientRegionId?: string
     resumeNodeId?: string
     resumeOutgoingPort?: string
     resumeRequestSpanId?: string

@@ -25,6 +25,7 @@ export interface CompiledScenario {
   edges: CompiledConnection[]
   policies: Map<string, CompiledPolicy[]>
   operations: CompiledOperations
+  nodeRegions: Map<string, string>
 }
 
 const legacyConnection = (edge: Connection): CompiledConnection => ({ ...edge, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
@@ -40,8 +41,19 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
   let experimentId: string
   let policies = new Map<string, CompiledPolicy[]>()
   let project: ProjectFile | undefined
+  let nodeRegions = new Map<string, string>()
   if (version === 2 || version === 3) {
     project = componentRegistry.validateProject(parseProjectFile(input))
+    const enabledProjectNodeIds = new Set(project.topology.nodes.filter((node) => !node.disabled).map((node) => node.id))
+    const hasEnabledGlobalRouter = project.topology.nodes.some((node) => node.type === 'global-router' && !node.disabled)
+    const regionMemberships = new Map<string, string[]>()
+    for (const group of project.topology.groups.filter((candidate) => candidate.kind === 'region')) {
+      for (const nodeId of group.nodeIds) regionMemberships.set(nodeId, [...(regionMemberships.get(nodeId) ?? []), group.id])
+    }
+    for (const [nodeId, regionIds] of regionMemberships) {
+      if (regionIds.length > 1 && hasEnabledGlobalRouter && enabledProjectNodeIds.has(nodeId)) throw new Error(`Node ${nodeId} belongs to multiple regions (${regionIds.join(', ')}); Global Router requires unambiguous region membership.`)
+      nodeRegions.set(nodeId, regionIds[0]!)
+    }
     const topologyNodes = new Map(project.topology.nodes.map((node) => [node.id, node]))
     for (const edge of project.topology.edges) {
       const source = topologyNodes.get(edge.source)!
@@ -84,8 +96,18 @@ export const compileSimulationInput = (input: unknown): CompiledScenario => {
       }
     }
   }
+  for (const node of nodes.values()) {
+    if (node.type !== 'global-router') continue
+    const routes = (outgoing.get(node.id) ?? []).filter((edge) => edge.routingMode !== 'async-publish')
+    if (routes.length === 0) throw new Error(`Global Router ${node.id} requires at least one synchronous route target.`)
+    if (routes.some((edge) => edge.routingMode !== 'weighted-one')) throw new Error(`Global Router ${node.id} requires weighted-one route edges.`)
+    if (node.config.routingPolicy === 'geo') {
+      const missing = routes.filter((edge) => !nodeRegions.has(edge.target)).map((edge) => edge.target)
+      if (missing.length > 0) throw new Error(`Global Router ${node.id} geo routing requires each target to belong to one region; missing: ${missing.join(', ')}.`)
+    }
+  }
   const operations = project?.schemaVersion === 3 ? compileOperationPlans(project, edges, outgoing) : { phases: [], schedulerWorkloads: new Map(), plans: new Map(), warnings: [] }
-  return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies, operations }
+  return { scenario, projectId: scenario.id, experimentId, nodes, outgoing, edges, policies, operations, nodeRegions }
 }
 
 export const compileScenario = (input: unknown): CompiledScenario => compileSimulationInput(input)

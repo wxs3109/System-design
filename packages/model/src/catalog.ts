@@ -31,6 +31,10 @@ export const componentCatalog = {
     type: 'load-balancer', label: 'Load Balancer', description: 'Routes requests across weighted, round-robin or healthy targets.',
     category: 'gateway', color: '#ec4899', acceptsInput: true, emitsOutput: true,
   },
+  'global-router': {
+    type: 'global-router', label: 'Global Router', description: 'Steers cached client cohorts across regional targets using geo, weighted, or health-aware routing.',
+    category: 'gateway', color: '#be185d', acceptsInput: true, emitsOutput: true,
+  },
   'realtime-gateway': {
     type: 'realtime-gateway', label: 'Realtime Gateway', description: 'Maintains long-lived channel memberships and broadcasts with per-connection backpressure.',
     category: 'gateway', color: '#db2777', acceptsInput: true, emitsOutput: true,
@@ -81,6 +85,7 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
     case 'workflow': return { id, name, position, type, config: { maxConcurrentInstances: 1_000, persistenceTimeMs: 2, defaultStepTimeMs: 100, jitterMs: 1, errorRate: 0, maxQueueSize: 10_000 } }
     case 'network': return { id, name, position, type, config: { latencyMs: 20, jitterMs: 2, bandwidthMbps: 100, parallelism: 1_000, packetLossRate: 0, maxQueueSize: 10_000 } }
     case 'load-balancer': return { id, name, position, type, config: { algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 } }
+    case 'global-router': return { id, name, position, type, config: { routingPolicy: 'geo', capacity: 10_000, lookupTimeMs: 1, jitterMs: 0.2, maxQueueSize: 100_000, decisionTtlMs: 60_000, healthCheckIntervalMs: 1_000, unhealthyThreshold: 2, healthyThreshold: 2, failoverDelayMs: 5_000 } }
     case 'realtime-gateway': return { id, name, position, type, config: { maxConnections: 100_000, connectionDurationMs: 60_000, maxChannelsPerConnection: 10, defaultChannelCount: 100, maxConcurrentMessages: 1_000, handshakeTimeMs: 2, broadcastBaseTimeMs: 1, fanOutTimePerConnectionMs: 0.01, defaultMessageBytes: 1_024, outboundBandwidthMbps: 10, slowConnectionFraction: 0, slowConnectionBandwidthMbps: 0.1, maxPendingBytesPerConnection: 1_048_576, overflowPolicy: 'drop-message', jitterMs: 0.5, errorRate: 0, maxQueueSize: 100_000 } }
     case 'service': return { id, name, position, type, config: { replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 } }
     case 'queue': return { id, name, position, type, config: { consumers: 4, deliveryTimeMs: 10, jitterMs: 2, maxDepth: 10_000, errorRate: 0 } }

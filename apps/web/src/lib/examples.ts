@@ -626,5 +626,95 @@ export const createOrderFulfillmentWorkflowExample = (): ProjectFile => {
   return projectFileV3Schema.parse(project)
 }
 
+export const createGlobalStorefrontExample = (): ProjectFile => {
+  const project = createEmptyProject('global-storefront')
+  project.name = 'Global storefront'
+  const northAmericaClients = createRegisteredNode('traffic', 'north-america-shoppers', { x: 20, y: 80 }, 'north-america-shopping')
+  const europeClients = createRegisteredNode('traffic', 'europe-shoppers', { x: 20, y: 300 }, 'europe-shopping')
+  const router = createRegisteredNode('global-router', 'storefront-global-router', { x: 310, y: 190 })
+  const northAmericaApi = createRegisteredNode('service', 'north-america-storefront', { x: 610, y: 80 })
+  const europeApi = createRegisteredNode('service', 'europe-storefront', { x: 610, y: 300 })
+  const northAmericaCatalog = createRegisteredNode('database', 'north-america-catalog', { x: 900, y: 80 })
+  const europeCatalog = createRegisteredNode('database', 'europe-catalog', { x: 900, y: 300 })
+  northAmericaClients.name = 'North America shoppers'
+  europeClients.name = 'Europe shoppers'
+  router.name = 'Storefront global router'
+  northAmericaApi.name = 'North America storefront'
+  europeApi.name = 'Europe storefront'
+  northAmericaCatalog.name = 'North America catalog'
+  europeCatalog.name = 'Europe catalog'
+  if (router.type !== 'global-router' || northAmericaApi.type !== 'service' || europeApi.type !== 'service') throw new Error('Expected a Global Router and regional Services.')
+  router.config = {
+    ...router.config, routingPolicy: 'geo', capacity: 20_000, lookupTimeMs: 0.4, jitterMs: 0, maxQueueSize: 20_000,
+    decisionTtlMs: 500, healthCheckIntervalMs: 100, unhealthyThreshold: 2, healthyThreshold: 2, failoverDelayMs: 250,
+  }
+  northAmericaApi.config = { ...northAmericaApi.config, replicas: 3, concurrencyPerReplica: 40, serviceTimeMs: 4, jitterMs: 0, errorRate: 0 }
+  europeApi.config = { ...europeApi.config, replicas: 2, concurrencyPerReplica: 40, serviceTimeMs: 5, jitterMs: 0, errorRate: 0 }
+  project.topology.nodes = [northAmericaClients, europeClients, router, northAmericaApi, europeApi, northAmericaCatalog, europeCatalog]
+  project.topology.edges = [
+    connection('north-america-entry', northAmericaClients.id, router.id),
+    connection('europe-entry', europeClients.id, router.id),
+    connection('north-america-route', router.id, northAmericaApi.id),
+    connection('europe-route', router.id, europeApi.id),
+    connection('north-america-catalog-read', northAmericaApi.id, northAmericaCatalog.id),
+    connection('europe-catalog-read', europeApi.id, europeCatalog.id),
+  ]
+  project.topology.groups = [
+    { id: 'region-north-america', name: 'North America', kind: 'region', nodeIds: [northAmericaClients.id, northAmericaApi.id, northAmericaCatalog.id] },
+    { id: 'region-europe', name: 'Europe', kind: 'region', nodeIds: [europeClients.id, europeApi.id, europeCatalog.id] },
+  ]
+  const experiment = project.experiments[0]!
+  experiment.seed = 'global-storefront'
+  experiment.simulation = { durationSeconds: 3, sampleIntervalMs: 100, maxRequests: 500, traceLimit: 200, maxHops: 12 }
+  experiment.workloads = [
+    { id: 'north-america-shopping', name: 'North America shopping', sourceNodeId: northAmericaClients.id, requestsPerSecond: 12, startAtSeconds: 0, durationSeconds: 2, pattern: 'constant', requestBytes: 1_024 },
+    { id: 'europe-shopping', name: 'Europe shopping', sourceNodeId: europeClients.id, requestsPerSecond: 8, startAtSeconds: 0, durationSeconds: 2, pattern: 'constant', requestBytes: 1_024 },
+  ]
+  return projectFileV3Schema.parse(project)
+}
+
+export const createMultiRegionFailoverExample = (): ProjectFile => {
+  const project = createEmptyProject('multi-region-failover')
+  project.name = 'Multi-region failover'
+  const clients = createRegisteredNode('traffic', 'primary-region-clients', { x: 20, y: 190 }, 'failover-traffic')
+  const router = createRegisteredNode('global-router', 'failover-global-router', { x: 310, y: 190 })
+  const primaryApi = createRegisteredNode('service', 'primary-api', { x: 620, y: 80 })
+  const standbyApi = createRegisteredNode('service', 'standby-api', { x: 620, y: 300 })
+  const primaryDatabase = createRegisteredNode('database', 'primary-database', { x: 910, y: 80 })
+  const standbyDatabase = createRegisteredNode('database', 'standby-database', { x: 910, y: 300 })
+  clients.name = 'Primary-region clients'
+  router.name = 'Failover global router'
+  primaryApi.name = 'Primary API'
+  standbyApi.name = 'Standby API'
+  primaryDatabase.name = 'Primary database'
+  standbyDatabase.name = 'Standby database'
+  if (router.type !== 'global-router' || primaryApi.type !== 'service' || standbyApi.type !== 'service') throw new Error('Expected a Global Router and regional Services.')
+  router.config = {
+    ...router.config, routingPolicy: 'health-aware', capacity: 20_000, lookupTimeMs: 0.5, jitterMs: 0, maxQueueSize: 20_000,
+    decisionTtlMs: 400, healthCheckIntervalMs: 100, unhealthyThreshold: 1, healthyThreshold: 1, failoverDelayMs: 300,
+  }
+  primaryApi.config = { ...primaryApi.config, replicas: 3, concurrencyPerReplica: 40, serviceTimeMs: 4, jitterMs: 0, errorRate: 0 }
+  standbyApi.config = { ...standbyApi.config, replicas: 2, concurrencyPerReplica: 30, serviceTimeMs: 6, jitterMs: 0, errorRate: 0 }
+  project.topology.nodes = [clients, router, primaryApi, standbyApi, primaryDatabase, standbyDatabase]
+  project.topology.edges = [
+    connection('failover-entry', clients.id, router.id),
+    { ...connection('primary-route', router.id, primaryApi.id), weight: 1_000_000 },
+    connection('standby-route', router.id, standbyApi.id),
+    connection('primary-data', primaryApi.id, primaryDatabase.id),
+    connection('standby-data', standbyApi.id, standbyDatabase.id),
+  ]
+  project.topology.groups = [
+    { id: 'region-primary', name: 'Primary region', kind: 'region', nodeIds: [clients.id, primaryApi.id, primaryDatabase.id] },
+    { id: 'region-standby', name: 'Standby region', kind: 'region', nodeIds: [standbyApi.id, standbyDatabase.id] },
+    { id: 'primary-service-zone', name: 'Primary service zone', kind: 'zone', nodeIds: [primaryApi.id, primaryDatabase.id] },
+  ]
+  const experiment = project.experiments[0]!
+  experiment.seed = 'multi-region-failover'
+  experiment.simulation = { durationSeconds: 4, sampleIntervalMs: 100, maxRequests: 500, traceLimit: 200, maxHops: 12 }
+  experiment.workloads = [{ id: 'failover-traffic', name: 'Primary-region requests', sourceNodeId: clients.id, requestsPerSecond: 10, startAtSeconds: 0, durationSeconds: 3, pattern: 'constant', requestBytes: 1_024 }]
+  experiment.faults = [{ id: 'primary-region-outage', type: 'region-outage', target: { kind: 'group', id: 'primary-service-zone' }, startAtSeconds: 0.6, durationSeconds: 1.2, enabled: true }]
+  return projectFileV3Schema.parse(project)
+}
+
 /** A normal ProjectFile v3 fixture: the editor and runtime contain no order-specific branches. */
 export const createOrderSystemExample = (): ProjectFile => createOrderSystemContractFixture()

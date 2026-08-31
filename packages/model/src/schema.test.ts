@@ -57,6 +57,17 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.parse(loadBalancer)).toEqual(loadBalancer)
   })
 
+  it('validates Global Router cache, health, and failover configuration', () => {
+    const router = createNode('global-router', 'global', { x: 100, y: 50 })
+    if (router.type !== 'global-router') throw new Error('Expected a Global Router node.')
+    router.config.routingPolicy = 'health-aware'
+    router.config.decisionTtlMs = 30_000
+    expect(scenarioSchema.shape.nodes.element.parse(router)).toEqual(router)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...router, config: { ...router.config, decisionTtlMs: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...router, config: { ...router.config, unhealthyThreshold: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...router, config: { ...router.config, failoverDelayMs: -1 } }).success).toBe(false)
+  })
+
   it('validates Scheduler timing and missed-run configuration', () => {
     const scheduler = createNode('scheduler', 'scheduler', { x: 100, y: 50 })
     if (scheduler.type !== 'scheduler') throw new Error('Expected a Scheduler node.')
