@@ -1,5 +1,7 @@
 # Phase 2 Implementation Plan
 
+> Status: core implementation complete through P2.6g. P2.7 through P2.10 have moved to the deferred [Future Extension Roadmap](./future-extensions.md) and are not current personal-use commitments.
+
 ## 1. Outcome
 
 Phase 2 turns the Phase 1 capacity and failure simulator into a business-aware System Design workbench. Users must be able to define what an API accepts, what a service does, what data a store owns, which indexes and keys support an access pattern, which events are published, and how traffic is split across those operations. The simulator must execute those definitions instead of sending anonymous requests through decorative nodes.
@@ -11,8 +13,7 @@ At the end of Phase 2, users can:
 - bind workload mixes to named operations and inspect operation-specific traces and metrics;
 - measure the effects of indexes, scans, payload sizes, hot keys, read/write mixes, caches, queues, and failures;
 - assemble representative systems without case-specific editor or runtime branches;
-- extend the same contracts through a versioned SDK and isolated plugin boundary;
-- run reproducible batch experiments and share compatible project artifacts.
+- retain a documented future path toward SDKs, isolated plugins, batch experiments, and shared artifacts without making those platform capabilities part of the current personal-use completion gate.
 
 Detailed scope evidence: [Component coverage audit](../component-coverage.md). Current runtime limits remain documented in [Simulation model assumptions](../model-assumptions.md).
 
@@ -126,7 +127,7 @@ The settlement starts with a time-boxed dependency spike. Selection gates includ
 
 Exit criteria: using only the generic UI, a user can create and edit the complete P2.2 fixture, see contract errors before running, export it, reload it, and obtain a structurally identical project. Presets remain nested under their variant chooser.
 
-Status: complete. Definitions and topology are two views over the same `ProjectFile v3`; invalid drafts stay local with field paths while valid edits enter the shared undo/autosave/export history. The existing topology becomes the interaction binding overlay rather than a second diagram. OpenAPI 3.1 uses Scalar validation and DBML uses `@dbml/core` in Node-only routes documented in [the dependency spike](./p2.3-dependency-spike.md), keeping parser implementations out of the browser and simulation Worker.
+Status: complete. Definitions and topology are two views over the same `ProjectFile v3`; invalid drafts stay local with field paths while valid edits enter the shared undo/autosave/export history. The existing topology becomes the interaction binding overlay rather than a second diagram. OpenAPI 3.1 uses Scalar validation and DBML uses `@dbml/core` in Node-only routes documented in [ADR-001](../decisions/adr-001-format-adapters.md), keeping parser implementations out of the browser and simulation Worker.
 
 ### P2.4 — Operation-aware compiler and runtime
 
@@ -196,51 +197,13 @@ P2.6f status: complete. Workflow is an executable Automation-category variant ra
 
 P2.6g status: complete. Global Router is an executable Gateway-category variant rather than a Load Balancer preset. It resolves client and route-target locations only from explicit Region groups; canvas coordinates never imply geography, geo targets must have one unambiguous Region, and geo clients without one use weighted fallback. Geo, weighted, and health-aware policies select only synchronous weighted-one route edges, with seeded edge-weight selection. One decision is cached per workload cohort until its configured TTL, so a cached route intentionally remains stale after a target failure. Health-aware routing samples terminal target outcomes at the configured interval, applies unhealthy and healthy thresholds, waits the configured propagation delay before excluding a target, and probes unhealthy targets for recovery. Route selection/cache/expiry, target health/recovery, failover, cache hit rate, geo matches, target selections, and maximum/cumulative failover delay remain runtime evidence even when request traces are disabled. Global storefront and Multi-region failover are ordinary capacity-only projects that reuse the same editor/compiler/runtime. The model is an explainable control-plane approximation, not DNS, Anycast/BGP, latency-based geography, an active distributed health-check service, traffic-manager quorum, or cross-region data replication.
 
-### P2.7 — SDK extraction
+## 6. Deferred future extensions
 
-Deliverables:
+P2.7 SDK extraction, P2.8 plugin loading and isolation, P2.9 batch experiments, and P2.10 sharing and adapters are retained as possible future platform work in the [Future Extension Roadmap](./future-extensions.md). They are intentionally deferred while the product is used and stabilized as a local, single-user workbench.
 
-- [ ] extract the proven category, variant, preset, contract, adapter, event, metric, and fault interfaces into a documented SDK;
-- [ ] provide CLI scaffolding, conformance tests, a sample external variant, and package validation;
-- [ ] define SDK version, capability, dependency, deprecation, and project-migration rules;
-- [ ] allow custom editor widgets only through declared extension points with generic fallbacks.
+These settlements do not gate the current Phase 2 core. Resume one only when concrete personal-use evidence or a deliberate product-priority change justifies its added complexity.
 
-Exit criteria: the sample package lives outside platform packages, passes conformance tests, appears under its declared category, and installs without edits to the model, workbench, compiler dispatch, reducers, or result pages.
-
-### P2.8 — Plugin loading and isolation
-
-Deliverables:
-
-- [ ] trusted local package installation first;
-- [ ] Worker boundary, capability declaration, CPU/event/memory budgets, and cancellation;
-- [ ] integrity metadata, explicit user consent, failure isolation, and safe diagnostics;
-- [ ] no arbitrary main-thread or DOM execution.
-
-Exit criteria: a malformed, incompatible, slow, or crashing plugin cannot corrupt the project, block the canvas indefinitely, or impersonate built-in events.
-
-### P2.9 — Batch experiments
-
-Deliverables:
-
-- [ ] parameter sweeps across infrastructure and business-contract parameters;
-- [ ] seeded repetitions and aggregate confidence summaries;
-- [ ] bounded parallel Worker pool with progress and cancellation;
-- [ ] capacity-boundary search and reproducible experiment manifests.
-
-Exit criteria: one experiment compares a parameter range without manually cloning projects, while every constituent run remains independently reproducible and inspectable.
-
-### P2.10 — Sharing and adapters
-
-Deliverables:
-
-- [ ] shareable immutable project/experiment artifacts;
-- [ ] team package and contract metadata;
-- [ ] optional server runner using the browser result protocol;
-- [ ] adapter boundary for measured inputs without claiming live infrastructure emulation.
-
-Exit criteria: a shared artifact either reproduces with declared compatible versions or fails with an actionable compatibility error.
-
-## 6. Verification strategy
+## 7. Verification strategy
 
 - Schema and property tests cover IDs, references, migrations, round trips, and generated valid/invalid contracts.
 - Taxonomy tests prove that categories contain variants, presets belong to exactly one variant, and preset removal cannot alter execution.
@@ -251,23 +214,24 @@ Exit criteria: a shared artifact either reproduces with declared compatible vers
 - Determinism tests replay the same v3 project and seed into the same ordered event stream.
 - Browser tests build the order fixture through generic editors and inspect actual operation-specific traces and metrics.
 - Compatibility tests keep ProjectFile v1/v2 imports and capacity-only semantics executable.
-- SDK and isolation tests run identically for built-in and external variants and terminate excessive plugins safely.
 
 Each settlement runs its focused tests plus the complete `pnpm check` gate before commit. Documentation and model assumptions are updated in the same settlement whenever executable meaning changes.
 
-## 7. Phase 2 definition of done
+## 8. Phase 2 core definition of done
 
 - [x] the palette follows category → variant → optional preset, with no separate preset shelf;
 - [x] ProjectFile v3 represents APIs, data models, events, interactions, and operation-aware workloads;
 - [x] those contracts affect compilation, runtime events, traces, and measured results rather than only decorating forms;
 - [x] the generic order-system acceptance project proves the end-to-end workflow;
 - [x] representative systems use shared behavior variants without case-specific runtime or editor branches;
-- [ ] at least one external package installs and runs through the public SDK;
-- [ ] plugin failures and unsupported versions fail safely;
-- [ ] batch experiments are deterministic and cancellable;
-- [ ] Phase 1 projects preserve their documented execution meaning;
-- [ ] the complete check and conformance suites pass.
+- [ ] operation-aware action paths compose the documented routing, reliability-policy, asynchronous backpressure, and failure-recovery behavior instead of bypassing those shared execution semantics;
+- [x] Phase 1 projects preserve their documented execution meaning;
+- [x] the complete current `pnpm check` suite passes.
 
-## 8. Immediate execution order
+Future SDK, plugin-isolation, batch, and sharing criteria belong to the future roadmap and do not block this definition of done.
 
-P2.6 is complete through P2.6g Global Router. P2.7 SDK extraction is the next planned settlement but has not started; keep it paused until explicitly resumed. When resumed, extract only the category, variant, contract, event, metric, and fault extension points proven by the completed built-in behaviors.
+## 9. Current execution order
+
+P2.6 is complete through P2.6g Global Router. The current priority is personal-use stabilization: first close the deferred P2.4 operation-aware execution boundary, then improve the run controls and workflows that become painful during real use. Prefer fixes, model consistency, and everyday usability over new infrastructure variants.
+
+P2.7 and later settlements remain paused future extensions. Do not begin them unless they are explicitly reprioritized after concrete use demonstrates a need for third-party variants, plugin loading, automated parameter sweeps, or shared/server-run artifacts.
