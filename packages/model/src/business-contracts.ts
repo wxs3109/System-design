@@ -271,9 +271,17 @@ const eventPublishActionSchema = z.object({
 const eventConsumeActionSchema = z.object({
   ...actionBaseFields, kind: z.literal('event-consume'), consumerNodeId: contractIdSchema, brokerNodeId: contractIdSchema, event: eventReferenceSchema,
 }).strict()
+const realtimeActionSchema = z.object({
+  ...actionBaseFields, kind: z.literal('realtime'), nodeId: contractIdSchema, operation: z.enum(['connect', 'broadcast', 'disconnect']),
+  connectionPattern: z.string().trim().min(1).max(500).default('connection:{request}'),
+  channelPattern: z.string().trim().min(1).max(500).default('channel:{key}'), messageBytes: positiveBytesSchema.optional(),
+}).strict().superRefine((action, context) => {
+  if (action.operation === 'broadcast' && action.messageBytes === undefined) context.addIssue({ code: 'custom', path: ['messageBytes'], message: 'Broadcast requires a message size.' })
+  if (action.operation !== 'broadcast' && action.messageBytes !== undefined) context.addIssue({ code: 'custom', path: ['messageBytes'], message: `${action.operation} cannot define a message size.` })
+})
 
 export const interactionActionSchema = z.discriminatedUnion('kind', [
-  apiCallActionSchema, serviceCallActionSchema, dataAccessActionSchema, cacheAccessActionSchema, eventPublishActionSchema, eventConsumeActionSchema,
+  apiCallActionSchema, serviceCallActionSchema, dataAccessActionSchema, cacheAccessActionSchema, eventPublishActionSchema, eventConsumeActionSchema, realtimeActionSchema,
 ])
 
 export const interactionDefinitionSchema = z.object({

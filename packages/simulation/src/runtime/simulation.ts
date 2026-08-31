@@ -4,7 +4,7 @@ import type { ComponentNode, Fault, FaultTarget, FaultType, ReasonCode, RuntimeE
 import type { CompiledConnection, CompiledScenario } from '../compiler/compiler'
 import type { CompiledOperationAction, CompiledOperationPhase, CompiledOperationPlan, CompiledSchedulerWorkload } from '../compiler/operation-plan'
 import { getNodeBehavior } from '../components/behavior'
-import { createComponentStateRuntime, type ComponentDomainEvent } from '../components/data-runtime'
+import { createComponentStateRuntime, type ComponentDomainEvent, type ComponentStateCompletion } from '../components/data-runtime'
 import { applyCapacityFaults, applyLatencyFaults, composeLossProbability, faultEndsAtMs, faultReason, faultStartsAtMs, resolveActiveFaults } from '../faults/resolver'
 import { round } from '../telemetry/math'
 import { RuntimeEventSink } from '../telemetry/event-sink'
@@ -13,6 +13,9 @@ import { policiesFor } from '../policies/compiler'
 import { CircuitBreaker, retryDelayMs, type CircuitCompletionResult, type CircuitPermit, type CircuitTransition, type ReliabilityCall } from '../policies/reliability'
 import type { LoadBalancerRuntimeState, ReliabilityCompletionContext, RequestGroup, RequestState, RuntimeNode, SchedulerRuntimeState } from './types'
 import { actionAttributes, estimateDataAccessCost, sampleKey, sampleValueBytes } from '../components/operation-cost'
+
+const completionEvents = (completion: ComponentStateCompletion | undefined) => completion === undefined ? [] : Array.isArray(completion) ? completion : completion.events
+const completionFailure = (completion: ComponentStateCompletion | undefined) => completion !== undefined && !Array.isArray(completion) && !completion.success ? completion.reason : undefined
 
 export class SystemDesignSimulation extends Simulation {
   readonly scenario: Scenario
@@ -536,6 +539,14 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
       ...(this.action.data === undefined ? {} : { entityId: this.action.data.objectId, queryShape: this.action.data.operation, operation: ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'write' as const : 'read' as const }),
       ...(this.action.event === undefined ? {} : { eventId: this.action.event.eventId }),
     }
+    if (this.action.realtime) {
+      const key = request.key ?? `key:${request.id}`
+      const renderPattern = (pattern: string) => pattern.replaceAll('{request}', String(request.id)).replaceAll('{key}', key)
+      request = {
+        ...request, key, realtimeConnectionId: renderPattern(this.action.realtime.connectionPattern),
+        realtimeChannelId: renderPattern(this.action.realtime.channelPattern),
+      }
+    }
     let topicDelivery: { runtime: RuntimeNode; request: RequestState } | undefined
     if (this.action.event?.operation === 'consume' && this.action.sourceNodeId) {
       const broker = simulation.runtimes.get(this.action.sourceNodeId)
@@ -560,7 +571,8 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     for (const event of domainDecision?.events ?? []) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
     const final = await this.processNode(runtime.node.id, domainRequest, attributes, true)
     if (!final.success) {
-      runtime.state?.complete(domainRequest, false, simulation.timeNow)
+      const domainCompletion = runtime.state?.complete(domainRequest, false, simulation.timeNow)
+      for (const event of completionEvents(domainCompletion)) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
       runtime.state?.outcome?.(domainRequest)
       if (topicDelivery?.runtime.state?.dependencyComplete) {
         const events = topicDelivery.runtime.state.dependencyComplete(topicDelivery.request, false, simulation.timeNow)
@@ -588,8 +600,17 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
           : `Search fans out to ${fanOut} shards and merges ${candidates} candidates into ${resultCount} results.`,
       }
     }
-    const domainEvents = runtime.state?.complete(domainRequest, true, simulation.timeNow) ?? []
+    const domainCompletion = runtime.state?.complete(domainRequest, true, simulation.timeNow)
+    const domainEvents = completionEvents(domainCompletion)
     for (const event of this.action.data && runtime.node.type === 'database' ? domainEvents.filter((candidate) => candidate.type !== 'database-read' && candidate.type !== 'database-written') : domainEvents) simulation.eventSink.emit({ timestampMs: round(simulation.timeNow), requestId: String(this.root.id), traceId: this.root.traceId, spanId, parentSpanId: this.root.spanId, nodeId: runtime.node.id, operationId: this.plan.operation.operationId, actionId: this.action.id, type: event.type, status: event.status, ...(event.bytes === undefined ? {} : { bytes: event.bytes }), ...(event.attributes === undefined ? {} : { attributes: { ...attributes, ...event.attributes } }) })
+    const domainFailure = completionFailure(domainCompletion)
+    if (domainFailure) {
+      this.finish(false, domainFailure, startedAtMs, {
+        ...attributes,
+        ...(this.action.realtime ? { realtimeFanOut: domainRequest.realtimeFanOut ?? 0, realtimeChannelId: domainRequest.realtimeChannelId ?? '' } : {}),
+      })
+      return
+    }
     if (this.action.data && runtime.node.type === 'database') {
       const type = ['insert', 'update', 'delete'].includes(this.action.data.operation) ? 'database-written' as const : 'database-read' as const
       const routeEvent = domainEvents.find((event) => event.type === type)
@@ -606,6 +627,7 @@ class OperationActionExecution extends Entity<SystemDesignSimulation> {
     this.reason = 'none'
     this.finish(true, 'none', startedAtMs, {
       ...attributes,
+      ...(this.action.realtime ? { realtimeFanOut: domainRequest.realtimeFanOut ?? 0, realtimeChannelId: domainRequest.realtimeChannelId ?? '', explanation: this.action.realtime.operation === 'broadcast' ? `Broadcast targets ${domainRequest.realtimeFanOut ?? 0} active connection(s) in ${domainRequest.realtimeChannelId ?? 'the selected channel'}.` : `${this.action.realtime.operation} updates long-lived connection membership.` } : {}),
       ...(dataCost ? { recordsExamined: dataCost.recordsExamined, bytesProcessed: dataCost.bytesProcessed, explanation: dataCost.explanation } : {}),
       ...(searchCost ? { recordsExamined: searchCost.recordsExamined, bytesProcessed: searchCost.bytesProcessed, explanation: searchCost.explanation, searchFanOut: searchCost.fanOut, searchCandidates: searchCost.candidates, searchResultCount: searchCost.resultCount, searchStale: searchCost.stale, searchVisibilityLagMs: searchCost.visibilityLagMs } : {}),
     })
@@ -883,10 +905,12 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
     this.domainStarted = true
   }
 
-  private completeDomain(runtime: RuntimeNode, success: boolean) {
-    if (!this.domainStarted || this.domainCompleted || !runtime.state) return
-    this.emitDomainEvents(runtime.node, runtime.state.complete(this.request, success, this.simulation.timeNow))
+  private completeDomain(runtime: RuntimeNode, success: boolean): ReasonCode | undefined {
+    if (!this.domainStarted || this.domainCompleted || !runtime.state) return undefined
+    const completion = runtime.state.complete(this.request, success, this.simulation.timeNow)
+    this.emitDomainEvents(runtime.node, completionEvents(completion))
     this.domainCompleted = true
+    return completionFailure(completion)
   }
 
   private finishBranch(success: boolean, node: ComponentNode, reason: ReasonCode = 'none', terminalAttributes: Record<string, string | number | boolean> = {}) {
@@ -1014,7 +1038,13 @@ class RequestEntity extends Entity<SystemDesignSimulation> {
           this.failAfterService(node, failureReason)
           return
         }
-        this.completeDomain(runtime, true)
+        const domainFailure = this.completeDomain(runtime, true)
+        if (domainFailure) {
+          runtime.failed += 1
+          runtime.rejected += 1
+          this.failAfterService(node, domainFailure)
+          return
+        }
         simulation.emitRequestEvent(this.request, node, 'request-completed', 'ok', { durationMs: round(simulation.timeNow - (this.request.startedAtMs ?? simulation.timeNow)), queueDurationMs: this.request.queuedAtMs === undefined ? 0 : round((this.request.startedAtMs ?? simulation.timeNow) - this.request.queuedAtMs) })
         if (this.settleAttempt(true, node, 'none')) return
         this.acknowledgeDeliveries(node)

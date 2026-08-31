@@ -25,11 +25,15 @@ describe('runtime telemetry contracts', () => {
     expect(simulationProgressSchema.safeParse(progress).success).toBe(false)
   })
 
-  it.each(['cache-hit', 'cdn-pop-selected', 'cdn-origin-fetch', 'search-index-write-accepted', 'search-index-refreshed', 'search-query-completed', 'stream-record-appended', 'topic-message-published', 'topic-message-delivered', 'topic-message-acknowledged', 'topic-message-expired', 'object-read', 'database-written'] as const)('accepts the %s domain event', (type) => {
+  it.each(['cache-hit', 'cdn-pop-selected', 'cdn-origin-fetch', 'search-index-write-accepted', 'search-index-refreshed', 'search-query-completed', 'stream-record-appended', 'topic-message-published', 'topic-message-delivered', 'topic-message-acknowledged', 'topic-message-expired', 'realtime-connection-opened', 'realtime-broadcast', 'realtime-backpressure', 'realtime-connection-closed', 'object-read', 'database-written'] as const)('accepts the %s domain event', (type) => {
     expect(runtimeEventSchema.parse({ runId: 'run', timestampMs: 1, sequence: 0, requestId: '1', traceId: 'trace', spanId: 'span', nodeId: 'data', type, status: 'ok' }).type).toBe(type)
   })
 
   it.each(['node_down', 'packet_loss', 'latency_spike', 'region_outage'] as const)('accepts the %s fault reason', (reason) => {
     expect(runtimeEventSchema.parse({ runId: 'run', timestampMs: 1, sequence: 0, type: 'fault-activated', status: 'error', reason }).reason).toBe(reason)
+  })
+
+  it.each(['connection_capacity', 'channel_capacity'] as const)('accepts the %s Realtime Gateway reason', (reason) => {
+    expect(runtimeEventSchema.parse({ runId: 'run', timestampMs: 1, sequence: 0, type: 'action-completed', status: 'error', reason }).reason).toBe(reason)
   })
 })

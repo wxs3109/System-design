@@ -101,6 +101,26 @@ describe('ProjectFile v3', () => {
     expect(projectFileV3Schema.safeParse(wrongConsumer).success).toBe(false)
   })
 
+  it('validates realtime actions against Realtime Gateway nodes', () => {
+    const fixture = createOrderSystemContractFixture()
+    fixture.topology.nodes.push({ ...createNode('realtime-gateway', 'order-live', { x: 600, y: 100 }), componentVersion: 1 })
+    fixture.topology.edges.push({ id: 'orders-to-live', source: 'orders-service', target: 'order-live', sourcePort: 'out', targetPort: 'in', weight: 1, sourceSemantic: 'request', targetSemantic: 'request', routingMode: 'weighted-one' })
+    fixture.definitions.interactions[0]!.actions.splice(1, 0, { id: 'broadcast-order', kind: 'realtime', dependsOn: ['call-api'], nodeId: 'order-live', operation: 'broadcast', connectionPattern: 'order-client:{request}', channelPattern: 'order:{key}', messageBytes: 512 })
+    expect(projectFileV3Schema.safeParse(fixture).success).toBe(true)
+
+    const wrongTarget = structuredClone(fixture)
+    const action = wrongTarget.definitions.interactions[0]!.actions.find((candidate) => candidate.kind === 'realtime')!
+    if (action.kind !== 'realtime') throw new Error('Expected realtime action')
+    action.nodeId = 'orders-db'
+    expect(projectFileV3Schema.safeParse(wrongTarget).success).toBe(false)
+
+    const missingMessageBytes = structuredClone(fixture)
+    const broadcast = missingMessageBytes.definitions.interactions[0]!.actions.find((candidate) => candidate.kind === 'realtime')!
+    if (broadcast.kind !== 'realtime') throw new Error('Expected realtime action')
+    broadcast.messageBytes = undefined
+    expect(projectFileV3Schema.safeParse(missingMessageBytes).success).toBe(false)
+  })
+
   it('keeps empty current projects explicitly capacity-only', () => {
     expect(createEmptyProject()).toMatchObject({ schemaVersion: 3, modelingMode: 'capacity-only', definitions: { schemaVersion: 1 }, experiments: [{ operationWorkloads: [] }] })
   })

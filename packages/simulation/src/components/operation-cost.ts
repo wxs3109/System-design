@@ -70,4 +70,5 @@ export const actionAttributes = (action: CompiledOperationAction) => ({
   ...(action.data === undefined ? {} : { dataOperation: action.data.operation, dataObjectId: action.data.objectId, modelId: action.data.modelId }),
   ...(action.cache === undefined ? {} : { cacheOperation: action.cache.operation, cacheKeyId: action.cache.keyId }),
   ...(action.event === undefined ? {} : { eventOperation: action.event.operation, eventId: action.event.eventId }),
+  ...(action.realtime === undefined ? {} : { realtimeOperation: action.realtime.operation, realtimeConnectionPattern: action.realtime.connectionPattern, realtimeChannelPattern: action.realtime.channelPattern, ...(action.realtime.messageBytes === undefined ? {} : { realtimeMessageBytes: action.realtime.messageBytes }) }),
 })

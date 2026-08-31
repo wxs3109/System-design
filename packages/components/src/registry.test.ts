@@ -8,7 +8,7 @@ describe('component registry', () => {
     expect(service.componentVersion).toBe(1)
     expect(componentRegistry.describeNode(service)).toContain('concurrent')
     expect(componentRegistry.list().map((manifest) => manifest.type)).toEqual([
-      'traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
+      'traffic', 'scheduler', 'network', 'load-balancer', 'realtime-gateway', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database',
     ])
   })
 
@@ -44,6 +44,15 @@ describe('component registry', () => {
     expect(loadBalancer.config).toMatchObject({ algorithm: 'weighted', failureThreshold: 1 })
     expect(manifest.configFields.find((field) => field.key === 'algorithm')).toMatchObject({ kind: 'select' })
     expect(manifest.capabilities).toContain('health-aware-routing')
+  })
+
+  it('declares Realtime Gateway as an executable Gateway variant', () => {
+    const gateway = componentRegistry.createNode('realtime-gateway', 'realtime', { x: 0, y: 0 })
+    const manifest = componentRegistry.get('realtime-gateway')
+    expect(gateway.config).toMatchObject({ maxConnections: 100_000, defaultChannelCount: 100, overflowPolicy: 'drop-message' })
+    expect(manifest.category).toBe('gateway')
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['long-lived-connections', 'channel-membership', 'broadcast', 'connection-backpressure']))
+    expect(componentCatalog.listPresets('realtime-gateway')).toEqual([])
   })
 
   it('registers Phase 1 data components and defaults Database to v2', () => {
@@ -171,6 +180,7 @@ describe('component creation hierarchy', () => {
       'traffic', 'automation', 'network', 'gateway', 'service', 'cache', 'database', 'object-storage', 'messaging',
     ])
     expect(componentCatalog.listVariants('database').map((variant) => variant.type)).toEqual(['search-index', 'database'])
+    expect(componentCatalog.listVariants('gateway').map((variant) => variant.type)).toEqual(['load-balancer', 'realtime-gateway'])
     expect(componentCatalog.listVariants('automation').map((variant) => variant.type)).toEqual(['scheduler'])
     expect(componentCatalog.listVariants('cache').map((variant) => variant.type)).toEqual(['cache', 'cdn'])
     expect(componentCatalog.listVariants('messaging').map((variant) => variant.type)).toEqual(['queue', 'stream', 'topic'])

@@ -1,7 +1,7 @@
 import type { ComponentNode, ComponentType } from '@system-design/model'
 import { estimateDataAccessCost } from './operation-cost'
 
-export interface RequestPayload { bytes: number; operation?: 'read' | 'write'; operationAction?: import('../compiler/operation-plan').CompiledOperationAction; cdnOutcome?: 'hit' | 'miss'; searchCandidateCount?: number; searchFanOut?: number; searchResultCount?: number; searchStale?: boolean; searchVisibilityLagMs?: number }
+export interface RequestPayload { bytes: number; operation?: 'read' | 'write'; operationAction?: import('../compiler/operation-plan').CompiledOperationAction; cdnOutcome?: 'hit' | 'miss'; searchCandidateCount?: number; searchFanOut?: number; searchResultCount?: number; searchStale?: boolean; searchVisibilityLagMs?: number; realtimeFanOut?: number }
 export interface NodeBehavior<TNode extends ComponentNode = ComponentNode> {
   type: TNode['type']
   capacity(node: TNode): number
@@ -28,6 +28,17 @@ const behaviors = [
   defineBehavior<Extract<ComponentNode, { type: 'load-balancer' }>>({
     type: 'load-balancer', capacity: (node) => node.config.capacity, maximumWaiting: (node) => node.config.maxQueueSize,
     baseServiceTimeMs: (node) => node.config.routingTimeMs, jitterMs: () => 0, intrinsicErrorRate: () => 0,
+  }),
+  defineBehavior<Extract<ComponentNode, { type: 'realtime-gateway' }>>({
+    type: 'realtime-gateway', capacity: (node) => node.config.maxConcurrentMessages, maximumWaiting: (node) => node.config.maxQueueSize,
+    baseServiceTimeMs: (node, request) => request.operationAction?.realtime?.operation === 'connect'
+      ? node.config.handshakeTimeMs
+      : request.operationAction?.realtime?.operation === 'broadcast'
+        ? node.config.broadcastBaseTimeMs + node.config.fanOutTimePerConnectionMs * (request.realtimeFanOut ?? 0)
+        : request.operationAction?.realtime?.operation === 'disconnect'
+          ? node.config.broadcastBaseTimeMs
+          : node.config.handshakeTimeMs + node.config.broadcastBaseTimeMs + node.config.fanOutTimePerConnectionMs * (request.realtimeFanOut ?? 0),
+    jitterMs: (node) => node.config.jitterMs, intrinsicErrorRate: (node) => node.config.errorRate,
   }),
   defineBehavior<Extract<ComponentNode, { type: 'service' }>>({
     type: 'service', capacity: (node) => node.config.replicas * node.config.concurrencyPerReplica, maximumWaiting: (node) => node.config.maxQueueSize,

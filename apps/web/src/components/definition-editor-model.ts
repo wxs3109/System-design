@@ -214,6 +214,7 @@ export const referencedNodeIds = (resource: DefinitionResource): string[] => {
     if ('producerNodeId' in action) ids.push(action.producerNodeId)
     if ('consumerNodeId' in action) ids.push(action.consumerNodeId)
     if ('brokerNodeId' in action) ids.push(action.brokerNodeId)
+    if (action.kind === 'realtime') ids.push(action.nodeId)
   })
   return [...new Set(ids)]
 }

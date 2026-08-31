@@ -397,5 +397,129 @@ export const createIncidentFanOutExample = (): ProjectFile => {
   return projectFileV3Schema.parse(project)
 }
 
+export const createRealtimeChatExample = (): ProjectFile => {
+  const project = createEmptyProject('realtime-chat')
+  project.name = 'Realtime chat'
+  project.modelingMode = 'business-aware'
+  const clients = createRegisteredNode('traffic', 'chat-clients', { x: 30, y: 180 }, 'chat-compatibility-load')
+  const api = createRegisteredNode('service', 'chat-api', { x: 330, y: 180 })
+  const gateway = createRegisteredNode('realtime-gateway', 'chat-realtime-gateway', { x: 650, y: 180 })
+  clients.name = 'Chat clients'
+  api.name = 'Chat API'
+  gateway.name = 'Chat realtime gateway'
+  api.config = { ...api.config, replicas: 3, concurrencyPerReplica: 30, serviceTimeMs: 2, jitterMs: 0, errorRate: 0 }
+  gateway.config = {
+    ...gateway.config, maxConnections: 25_000, connectionDurationMs: 30_000, maxChannelsPerConnection: 8, defaultChannelCount: 200,
+    maxConcurrentMessages: 500, handshakeTimeMs: 1, broadcastBaseTimeMs: 0.5, fanOutTimePerConnectionMs: 0.005,
+    defaultMessageBytes: 512, outboundBandwidthMbps: 2, slowConnectionFraction: 0.1, slowConnectionBandwidthMbps: 0.02,
+    maxPendingBytesPerConnection: 4_096, overflowPolicy: 'drop-message', jitterMs: 0, errorRate: 0, maxQueueSize: 10_000,
+  }
+  project.topology.nodes = [clients, api, gateway]
+  project.topology.edges = [
+    connection('chat-clients-to-api', 'chat-clients', 'chat-api'),
+    connection('chat-api-to-realtime', 'chat-api', 'chat-realtime-gateway'),
+  ]
+  project.definitions = {
+    schemaVersion: 1,
+    jsonSchemas: [{
+      id: 'schema.ChatMessage', version: 1, name: 'Chat message', dialect: 'https://json-schema.org/draft/2020-12/schema',
+      schema: { type: 'object', required: ['roomId', 'senderId', 'body'], properties: { roomId: { type: 'string' }, senderId: { type: 'string' }, body: { type: 'string' } } },
+    }],
+    apis: [{
+      id: 'chat-api-contract', version: 1, name: 'Chat API', ownerNodeId: 'chat-api', operations: [{
+        id: 'send-chat-message', name: 'Send chat message', method: 'POST', path: '/rooms/{roomId}/messages',
+        request: { schema: { schemaId: 'schema.ChatMessage', schemaVersion: 1 }, estimatedBytes: 512 }, responses: [{ statusCode: '202' }],
+        handlerTimeMs: 2, slo: { latencyP95Ms: 100, availability: 0.999 },
+      }],
+    }],
+    dataModels: [], events: [], cacheKeys: [],
+    interactions: [{
+      id: 'chat-message-flow', version: 1, name: 'Connect and broadcast a chat message',
+      entryOperation: { apiId: 'chat-api-contract', apiVersion: 1, operationId: 'send-chat-message' },
+      actions: [
+        { id: 'accept-chat-message', kind: 'api-call', dependsOn: [], sourceNodeId: 'chat-clients', targetNodeId: 'chat-api', operation: { apiId: 'chat-api-contract', apiVersion: 1, operationId: 'send-chat-message' } },
+        { id: 'connect-chat-client', kind: 'realtime', dependsOn: ['accept-chat-message'], nodeId: 'chat-realtime-gateway', operation: 'connect', connectionPattern: 'chat-client:{request}', channelPattern: 'room:shared' },
+        { id: 'broadcast-chat-message', kind: 'realtime', dependsOn: ['connect-chat-client'], nodeId: 'chat-realtime-gateway', operation: 'broadcast', connectionPattern: 'chat-client:{request}', channelPattern: 'room:shared', messageBytes: 512 },
+      ],
+    }],
+  }
+  const experiment = project.experiments[0]!
+  experiment.seed = 'realtime-chat'
+  experiment.simulation = { durationSeconds: 4, sampleIntervalMs: 100, maxRequests: 1_000, traceLimit: 100, maxHops: 12 }
+  experiment.workloads = [{ id: 'chat-compatibility-load', name: 'Compatibility load', sourceNodeId: 'chat-clients', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 512 }]
+  experiment.operationWorkloads = [{
+    id: 'chat-message-operations', name: 'Room messages', sourceNodeId: 'chat-clients',
+    phases: [{ id: 'chat-steady', startAtSeconds: 0, durationSeconds: 3, requestsPerSecond: 30, pattern: 'constant' }],
+    operationMix: [{
+      operation: { apiId: 'chat-api-contract', apiVersion: 1, operationId: 'send-chat-message' }, interaction: { interactionId: 'chat-message-flow', interactionVersion: 1 },
+      weight: 1, requestBytes: 512, responseBytes: 64, keyDistribution: { kind: 'hotspot', keySpaceSize: 200, hotKeyCount: 2, hotTrafficFraction: 0.8 },
+      valueSizeDistribution: { kind: 'fixed', bytes: 512 },
+    }],
+  }]
+  return projectFileV3Schema.parse(project)
+}
+
+export const createCollaborativeEditingExample = (): ProjectFile => {
+  const project = createEmptyProject('collaborative-editing')
+  project.name = 'Collaborative editing'
+  project.modelingMode = 'business-aware'
+  const editors = createRegisteredNode('traffic', 'document-editors', { x: 30, y: 180 }, 'editing-compatibility-load')
+  const api = createRegisteredNode('service', 'collaboration-api', { x: 330, y: 180 })
+  const gateway = createRegisteredNode('realtime-gateway', 'editing-realtime-gateway', { x: 650, y: 180 })
+  editors.name = 'Document editors'
+  api.name = 'Collaboration API'
+  gateway.name = 'Editing realtime gateway'
+  api.config = { ...api.config, replicas: 4, concurrencyPerReplica: 40, serviceTimeMs: 1, jitterMs: 0, errorRate: 0 }
+  gateway.config = {
+    ...gateway.config, maxConnections: 5_000, connectionDurationMs: 60_000, maxChannelsPerConnection: 3, defaultChannelCount: 1_000,
+    maxConcurrentMessages: 1_000, handshakeTimeMs: 0.8, broadcastBaseTimeMs: 0.2, fanOutTimePerConnectionMs: 0.002,
+    defaultMessageBytes: 256, outboundBandwidthMbps: 5, slowConnectionFraction: 0.25, slowConnectionBandwidthMbps: 0.005,
+    maxPendingBytesPerConnection: 512, overflowPolicy: 'disconnect', jitterMs: 0, errorRate: 0, maxQueueSize: 20_000,
+  }
+  project.topology.nodes = [editors, api, gateway]
+  project.topology.edges = [
+    connection('editors-to-collaboration-api', 'document-editors', 'collaboration-api'),
+    connection('collaboration-api-to-realtime', 'collaboration-api', 'editing-realtime-gateway'),
+  ]
+  project.definitions = {
+    schemaVersion: 1,
+    jsonSchemas: [{
+      id: 'schema.DocumentOperation', version: 1, name: 'Document operation', dialect: 'https://json-schema.org/draft/2020-12/schema',
+      schema: { type: 'object', required: ['documentId', 'editorId', 'operation'], properties: { documentId: { type: 'string' }, editorId: { type: 'string' }, operation: { type: 'object' }, revision: { type: 'integer' } } },
+    }],
+    apis: [{
+      id: 'collaboration-api-contract', version: 1, name: 'Collaboration API', ownerNodeId: 'collaboration-api', operations: [{
+        id: 'apply-document-operation', name: 'Apply document operation', method: 'POST', path: '/documents/{documentId}/operations',
+        request: { schema: { schemaId: 'schema.DocumentOperation', schemaVersion: 1 }, estimatedBytes: 256 }, responses: [{ statusCode: '202' }],
+        handlerTimeMs: 1, slo: { latencyP95Ms: 50, availability: 0.9999 },
+      }],
+    }],
+    dataModels: [], events: [], cacheKeys: [],
+    interactions: [{
+      id: 'document-operation-flow', version: 1, name: 'Connect and broadcast a document operation',
+      entryOperation: { apiId: 'collaboration-api-contract', apiVersion: 1, operationId: 'apply-document-operation' },
+      actions: [
+        { id: 'accept-document-operation', kind: 'api-call', dependsOn: [], sourceNodeId: 'document-editors', targetNodeId: 'collaboration-api', operation: { apiId: 'collaboration-api-contract', apiVersion: 1, operationId: 'apply-document-operation' } },
+        { id: 'connect-document-editor', kind: 'realtime', dependsOn: ['accept-document-operation'], nodeId: 'editing-realtime-gateway', operation: 'connect', connectionPattern: 'editor:{request}', channelPattern: 'document:shared' },
+        { id: 'broadcast-document-operation', kind: 'realtime', dependsOn: ['connect-document-editor'], nodeId: 'editing-realtime-gateway', operation: 'broadcast', connectionPattern: 'editor:{request}', channelPattern: 'document:shared', messageBytes: 256 },
+      ],
+    }],
+  }
+  const experiment = project.experiments[0]!
+  experiment.seed = 'collaborative-editing'
+  experiment.simulation = { durationSeconds: 4, sampleIntervalMs: 100, maxRequests: 1_500, traceLimit: 100, maxHops: 12 }
+  experiment.workloads = [{ id: 'editing-compatibility-load', name: 'Compatibility load', sourceNodeId: 'document-editors', requestsPerSecond: 1, startAtSeconds: 0, durationSeconds: 1, pattern: 'constant', requestBytes: 256 }]
+  experiment.operationWorkloads = [{
+    id: 'document-operation-workload', name: 'Collaborative document edits', sourceNodeId: 'document-editors',
+    phases: [{ id: 'editing-steady', startAtSeconds: 0, durationSeconds: 3, requestsPerSecond: 50, pattern: 'constant' }],
+    operationMix: [{
+      operation: { apiId: 'collaboration-api-contract', apiVersion: 1, operationId: 'apply-document-operation' }, interaction: { interactionId: 'document-operation-flow', interactionVersion: 1 },
+      weight: 1, requestBytes: 256, responseBytes: 64, keyDistribution: { kind: 'hotspot', keySpaceSize: 1_000, hotKeyCount: 20, hotTrafficFraction: 0.7 },
+      valueSizeDistribution: { kind: 'fixed', bytes: 256 },
+    }],
+  }]
+  return projectFileV3Schema.parse(project)
+}
+
 /** A normal ProjectFile v3 fixture: the editor and runtime contain no order-specific branches. */
 export const createOrderSystemExample = (): ProjectFile => createOrderSystemContractFixture()

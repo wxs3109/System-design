@@ -4,7 +4,7 @@ import { getNodeBehavior, registeredBehaviorTypes } from './behavior'
 
 describe('runtime component behavior registry', () => {
   it('provides behavior for every built-in component', () => {
-    expect(registeredBehaviorTypes()).toEqual(['traffic', 'scheduler', 'network', 'load-balancer', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database'])
+    expect(registeredBehaviorTypes()).toEqual(['traffic', 'scheduler', 'network', 'load-balancer', 'realtime-gateway', 'service', 'queue', 'cache', 'cdn', 'search-index', 'stream', 'topic', 'object-storage', 'database'])
     const service = createNode('service', 'service', { x: 0, y: 0 })
     expect(getNodeBehavior(service).capacity(service)).toBe(20)
     const legacyDatabase = createNode('database', 'legacy-database', { x: 0, y: 0 })
@@ -33,5 +33,15 @@ describe('runtime component behavior registry', () => {
     cdn.config.originBandwidthMbps = 50
     const behavior = getNodeBehavior(cdn)
     expect(behavior.baseServiceTimeMs(cdn, { bytes: 1_000, cdnOutcome: 'miss' })).toBeGreaterThan(behavior.baseServiceTimeMs(cdn, { bytes: 1_000, cdnOutcome: 'hit' }))
+  })
+
+  it('charges Realtime Gateway broadcasts for connection fan-out', () => {
+    const gateway = createNode('realtime-gateway', 'realtime', { x: 0, y: 0 })
+    if (gateway.type !== 'realtime-gateway') throw new Error('Expected Realtime Gateway')
+    gateway.config.fanOutTimePerConnectionMs = 0.5
+    const behavior = getNodeBehavior(gateway)
+    const action = { kind: 'realtime', realtime: { operation: 'broadcast', channelPattern: 'room:{key}' } } as import('../compiler/operation-plan').CompiledOperationAction
+    expect(behavior.baseServiceTimeMs(gateway, { bytes: 1_000, operationAction: action, realtimeFanOut: 100 }))
+      .toBeGreaterThan(behavior.baseServiceTimeMs(gateway, { bytes: 1_000, operationAction: action, realtimeFanOut: 1 }))
   })
 })

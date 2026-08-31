@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { projectFileV3Schema } from '@system-design/model'
 import { runSimulation } from '@system-design/simulation'
-import { createCloudDriveDeliveryExample, createIncidentFanOutExample, createLogSearchExample, createOrderEventFanOutExample, createProductSearchExample, createVideoDeliveryExample } from './examples'
+import { createCloudDriveDeliveryExample, createCollaborativeEditingExample, createIncidentFanOutExample, createLogSearchExample, createOrderEventFanOutExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from './examples'
 
 describe('CDN examples', () => {
   it.each([
@@ -133,5 +133,60 @@ describe('Topic examples', () => {
     expect({ subscriptions: orders.config.subscriptionCount, retention: orders.config.retentionMs }).not.toEqual({
       subscriptions: incidents.config.subscriptionCount, retention: incidents.config.retentionMs,
     })
+  })
+})
+
+describe('Realtime Gateway examples', () => {
+  it.each([
+    ['realtime chat', createRealtimeChatExample, 'chat-realtime-gateway', 'drop-message'],
+    ['collaborative editing', createCollaborativeEditingExample, 'editing-realtime-gateway', 'disconnect'],
+  ] as const)('provides a valid, executable business-aware %s project', async (_name, createExample, gatewayId, overflowPolicy) => {
+    const project = createExample()
+    expect(projectFileV3Schema.safeParse(project).success).toBe(true)
+    expect(project.modelingMode).toBe('business-aware')
+    expect(project.experiments[0]?.operationWorkloads).toHaveLength(1)
+    const gateway = project.topology.nodes.find((node) => node.id === gatewayId)
+    expect(gateway?.type).toBe('realtime-gateway')
+    if (gateway?.type !== 'realtime-gateway') throw new Error('Expected the example to contain a Realtime Gateway.')
+    expect(gateway.config.overflowPolicy).toBe(overflowPolicy)
+    const actions = project.definitions.interactions[0]?.actions.filter((action) => action.kind === 'realtime') ?? []
+    expect(actions.map((action) => action.operation)).toEqual(['connect', 'broadcast'])
+    expect(actions[0]?.channelPattern).toBe(actions[1]?.channelPattern)
+    expect(project.topology.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: project.definitions.apis[0]?.ownerNodeId, target: gatewayId, routingMode: 'weighted-one' }),
+    ]))
+
+    const result = await runSimulation(project, `${project.id}-example`)
+    const details = result.nodes.find((node) => node.nodeId === gatewayId)?.details
+    expect(Number(details?.realtimeAcceptedConnections)).toBeGreaterThan(0)
+    expect(Number(details?.realtimeActiveChannels)).toBeGreaterThan(0)
+    expect(Number(details?.realtimeBroadcasts)).toBeGreaterThan(0)
+    expect(Number(details?.realtimeFanOutCopies)).toBeGreaterThan(Number(details?.realtimeBroadcasts))
+    expect(Number(details?.realtimeDeliveredCopies) + Number(details?.realtimePendingMessages) + Number(details?.realtimeDroppedCopies)).toBeGreaterThan(0)
+    expect(result.events.some((event) => event.type === 'realtime-connection-opened' && event.nodeId === gatewayId)).toBe(true)
+    expect(result.events.some((event) => event.type === 'realtime-broadcast' && event.nodeId === gatewayId)).toBe(true)
+  })
+
+  it('uses different room traffic and connection-backpressure policies rather than relabeling one topology', () => {
+    const chat = createRealtimeChatExample().topology.nodes.find((node) => node.type === 'realtime-gateway')
+    const editing = createCollaborativeEditingExample().topology.nodes.find((node) => node.type === 'realtime-gateway')
+    if (chat?.type !== 'realtime-gateway' || editing?.type !== 'realtime-gateway') throw new Error('Expected both examples to contain a Realtime Gateway.')
+    expect({ channels: chat.config.defaultChannelCount, slowFraction: chat.config.slowConnectionFraction, overflow: chat.config.overflowPolicy }).not.toEqual({
+      channels: editing.config.defaultChannelCount, slowFraction: editing.config.slowConnectionFraction, overflow: editing.config.overflowPolicy,
+    })
+    expect(createRealtimeChatExample().definitions.interactions[0]?.actions.find((action) => action.kind === 'realtime')?.channelPattern).toBe('room:shared')
+    expect(createCollaborativeEditingExample().definitions.interactions[0]?.actions.find((action) => action.kind === 'realtime')?.channelPattern).toBe('document:shared')
+  })
+
+  it('exercises both message-drop and slow-client-disconnect overflow behavior', async () => {
+    const chat = await runSimulation(createRealtimeChatExample(), 'realtime-chat-overflow')
+    const chatDetails = chat.nodes.find((node) => node.nodeId === 'chat-realtime-gateway')?.details
+    expect(Number(chatDetails?.realtimeDroppedCopies)).toBeGreaterThan(0)
+    expect(Number(chatDetails?.realtimeOverflowDisconnects)).toBe(0)
+
+    const editing = await runSimulation(createCollaborativeEditingExample(), 'collaborative-editing-overflow')
+    const editingDetails = editing.nodes.find((node) => node.nodeId === 'editing-realtime-gateway')?.details
+    expect(Number(editingDetails?.realtimeDroppedCopies)).toBeGreaterThan(0)
+    expect(Number(editingDetails?.realtimeOverflowDisconnects)).toBeGreaterThan(0)
   })
 })

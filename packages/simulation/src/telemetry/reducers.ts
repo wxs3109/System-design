@@ -162,7 +162,7 @@ export const reduceActionMetrics = (events: readonly RuntimeEvent[], aggregate?:
     value.bytes += Number(event.attributes.bytesProcessed ?? 0)
     if (typeof event.attributes.explanation === 'string' && event.attributes.explanation) value.explanation = event.attributes.explanation
     for (const [name, detail] of Object.entries(event.attributes)) {
-      if (name.startsWith('search') && (typeof detail === 'string' || typeof detail === 'number' || typeof detail === 'boolean')) value.details[name] = detail
+      if ((name.startsWith('search') || name.startsWith('realtime')) && (typeof detail === 'string' || typeof detail === 'number' || typeof detail === 'boolean')) value.details[name] = detail
     }
     byAction.set(key, value)
   }

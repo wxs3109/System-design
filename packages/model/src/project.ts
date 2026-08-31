@@ -314,6 +314,8 @@ const validateBusinessReferences = (project: {
         requireNode(action.nodeId, [...path, 'nodeId'], 'cache')
         const key = referenceKey(action.key.cacheKeyId, action.key.cacheKeyVersion)
         if (!cacheKeys.has(key)) addReferenceIssue(context, [...path, 'key'], `Unknown cache-key contract: ${key}`)
+      } else if (action.kind === 'realtime') {
+        requireNode(action.nodeId, [...path, 'nodeId'], 'realtime-gateway')
       } else {
         const brokerNodeId = action.brokerNodeId
         const broker = requireNode(brokerNodeId, [...path, 'brokerNodeId'])

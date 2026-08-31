@@ -47,6 +47,9 @@ export interface RequestState {
   searchResultCount?: number
   searchStale?: boolean
   searchVisibilityLagMs?: number
+  realtimeConnectionId?: string
+  realtimeChannelId?: string
+  realtimeFanOut?: number
   topicSubscriptionId?: string
   topicMessageId?: number
   asyncDeliveryDelayMs?: number

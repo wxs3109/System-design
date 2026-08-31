@@ -100,6 +100,17 @@ describe('scenario schema', () => {
     expect(scenarioSchema.shape.nodes.element.safeParse({ ...topic, config: { ...topic.config, maxRetainedMessages: 0 } }).success).toBe(false)
   })
 
+  it('validates Realtime Gateway connection, channel, and backpressure configuration', () => {
+    const gateway = createNode('realtime-gateway', 'gateway', { x: 100, y: 50 })
+    if (gateway.type !== 'realtime-gateway') throw new Error('Expected a Realtime Gateway node.')
+    gateway.config.maxConnections = 50_000
+    gateway.config.overflowPolicy = 'disconnect'
+    expect(scenarioSchema.shape.nodes.element.parse(gateway)).toEqual(gateway)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...gateway, config: { ...gateway.config, maxConnections: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...gateway, config: { ...gateway.config, outboundBandwidthMbps: 0 } }).success).toBe(false)
+    expect(scenarioSchema.shape.nodes.element.safeParse({ ...gateway, config: { ...gateway.config, slowConnectionBandwidthMbps: gateway.config.outboundBandwidthMbps + 1 } }).success).toBe(false)
+  })
+
   it('validates fault-specific factor bounds', () => {
     const base = { id: 'fault', target: { kind: 'edge' as const, id: 'edge-1' }, startAtSeconds: 0, durationSeconds: 1, enabled: true }
     expect(faultSchema.safeParse({ ...base, type: 'packet-loss', factor: 0.25 }).success).toBe(true)

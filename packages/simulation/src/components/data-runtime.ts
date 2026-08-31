@@ -1,8 +1,9 @@
-import type { ComponentNode, EventStatus, RuntimeEventType } from '@system-design/model'
+import type { ComponentNode, EventStatus, ReasonCode, RuntimeEventType } from '@system-design/model'
 import type { CompiledOperationAction } from '../compiler/operation-plan'
 import { CdnState, ObjectStorageState, PartitionedStreamState, ShardedDatabaseState, VirtualCacheState } from './data-state'
 import { SearchIndexState, type SearchRefreshResult } from './search-state'
 import { TopicState, type TopicExpiredDelivery, type TopicMessage } from './topic-state'
+import { RealtimeGatewayState } from './realtime-gateway-state'
 
 export interface StatefulRequest {
   id: number
@@ -21,6 +22,9 @@ export interface StatefulRequest {
   searchResultCount?: number
   searchStale?: boolean
   searchVisibilityLagMs?: number
+  realtimeConnectionId?: string
+  realtimeChannelId?: string
+  realtimeFanOut?: number
   incomingRoutingMode?: 'weighted-one' | 'fan-out' | 'async-publish'
   incomingEdgeId?: string
   topicSubscriptionId?: string
@@ -40,15 +44,23 @@ export interface ComponentStateSnapshot {
 }
 
 export interface ComponentStateDecision {
-  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'searchCandidateCount' | 'searchFanOut' | 'searchResultCount' | 'searchStale' | 'searchVisibilityLagMs' | 'topicSubscriptionId' | 'topicMessageId' | 'bytes'>>
+  patch?: Partial<Pick<StatefulRequest, 'key' | 'operation' | 'outgoingPort' | 'cdnOutcome' | 'cdnPop' | 'searchCandidateCount' | 'searchFanOut' | 'searchResultCount' | 'searchStale' | 'searchVisibilityLagMs' | 'topicSubscriptionId' | 'topicMessageId' | 'realtimeConnectionId' | 'realtimeChannelId' | 'realtimeFanOut' | 'bytes'>>
   events?: ComponentDomainEvent[]
 }
+
+export interface RejectedComponentCompletion {
+  events: ComponentDomainEvent[]
+  success: false
+  reason: ReasonCode
+}
+
+export type ComponentStateCompletion = ComponentDomainEvent[] | RejectedComponentCompletion
 
 export interface ComponentDeliveryDecision extends ComponentStateDecision { deliver: boolean }
 
 export interface ComponentStateRuntime {
   begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision
-  complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
+  complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentStateCompletion
   prepareDelivery?(request: StatefulRequest, subscriptionId: string, nowMs: number): ComponentDeliveryDecision
   dependencyComplete?(request: StatefulRequest, success: boolean, nowMs: number): ComponentDomainEvent[]
   snapshot(nowMs: number): ComponentStateSnapshot
@@ -417,6 +429,101 @@ class TopicRuntime implements ComponentStateRuntime {
   }
 }
 
+class RealtimeGatewayRuntime implements ComponentStateRuntime {
+  private readonly gateway
+  private readonly pending = new Map<string, { operation: 'connect' | 'broadcast' | 'disconnect' | 'connect-and-broadcast'; connectionId: string; channelId: string; messageBytes: number; slow: boolean }>()
+
+  constructor(private readonly node: Extract<ComponentNode, { type: 'realtime-gateway' }>) {
+    this.gateway = new RealtimeGatewayState({
+      maxConnections: node.config.maxConnections, connectionDurationMs: node.config.connectionDurationMs,
+      maxChannelsPerConnection: node.config.maxChannelsPerConnection, maxPendingBytesPerConnection: node.config.maxPendingBytesPerConnection,
+      outboundBandwidthMbps: node.config.outboundBandwidthMbps, slowConnectionBandwidthMbps: node.config.slowConnectionBandwidthMbps,
+      overflowPolicy: node.config.overflowPolicy,
+    })
+  }
+
+  begin(request: StatefulRequest, nowMs: number, random: () => number): ComponentStateDecision {
+    const action = request.operationAction?.realtime
+    const operation = action?.operation ?? 'connect-and-broadcast'
+    const key = request.key ?? `key:${request.id % this.node.config.defaultChannelCount}`
+    const renderPattern = (pattern: string) => pattern.replaceAll('{request}', String(request.id)).replaceAll('{key}', key)
+    const channelId = request.realtimeChannelId ?? renderPattern(action?.channelPattern ?? 'channel:{key}')
+    const connectionId = request.realtimeConnectionId ?? renderPattern(action?.connectionPattern ?? 'connection:{request}')
+    const messageBytes = action?.messageBytes ?? request.payloadBytes ?? this.node.config.defaultMessageBytes
+    const events = this.advanceEvents(nowMs)
+    const currentMembers = this.gateway.channelMemberCount(channelId)
+    const fanOut = operation === 'broadcast' ? currentMembers : operation === 'connect-and-broadcast' ? currentMembers + 1 : 0
+    const slow = (operation === 'connect' || operation === 'connect-and-broadcast') && random() < this.node.config.slowConnectionFraction
+    this.pending.set(token(request), { operation, connectionId, channelId, messageBytes, slow })
+    return { patch: { key, realtimeConnectionId: connectionId, realtimeChannelId: channelId, realtimeFanOut: fanOut, bytes: operation === 'broadcast' ? messageBytes : request.bytes }, events }
+  }
+
+  complete(request: StatefulRequest, success: boolean, nowMs: number): ComponentStateCompletion {
+    const value = this.pending.get(token(request))
+    this.pending.delete(token(request))
+    const events = this.advanceEvents(nowMs)
+    if (!value) return events
+    if (!success) return [...events, { type: 'realtime-operation-failed', status: 'error', attributes: { operation: value.operation, connectionId: value.connectionId, channelId: value.channelId } }]
+    if (value.operation === 'connect' || value.operation === 'connect-and-broadcast') {
+      const connected = this.gateway.connect(value.connectionId, nowMs, { bandwidthMbps: value.slow ? this.node.config.slowConnectionBandwidthMbps : this.node.config.outboundBandwidthMbps, slow: value.slow })
+      if (!connected.accepted) return {
+        events: [...events, { type: 'realtime-connection-rejected', status: 'rejected', attributes: { connectionId: value.connectionId, channelId: value.channelId, reason: connected.reason } }],
+        success: false, reason: 'connection_capacity',
+      }
+      const joined = this.gateway.join(value.connectionId, value.channelId, nowMs)
+      if (!joined.accepted) return {
+        events: [...events, { type: 'realtime-channel-rejected', status: 'rejected', attributes: { connectionId: value.connectionId, channelId: value.channelId, reason: joined.reason } }],
+        success: false, reason: 'channel_capacity',
+      }
+      const connectedEvents: ComponentDomainEvent[] = [
+        ...events,
+        { type: 'realtime-connection-opened', status: 'ok', attributes: { connectionId: value.connectionId, channelId: value.channelId, slow: connected.connection.slow, alreadyConnected: connected.alreadyConnected } },
+        { type: 'realtime-channel-joined', status: 'ok', attributes: { connectionId: value.connectionId, channelId: value.channelId, alreadyMember: joined.alreadyMember } },
+      ]
+      if (value.operation === 'connect') return connectedEvents
+      const broadcast = this.gateway.broadcast(value.channelId, value.messageBytes, nowMs)
+      return [...connectedEvents, ...this.broadcastEvents(value.channelId, value.messageBytes, broadcast)]
+    }
+    if (value.operation === 'broadcast') {
+      const broadcast = this.gateway.broadcast(value.channelId, value.messageBytes, nowMs)
+      return [...events, ...this.broadcastEvents(value.channelId, value.messageBytes, broadcast)]
+    }
+    const disconnected = this.gateway.disconnect(value.connectionId, nowMs)
+    return [...events, { type: 'realtime-connection-closed', status: disconnected.disconnected ? 'ok' : 'rejected', attributes: { connectionId: value.connectionId, cause: 'explicit', disconnected: disconnected.disconnected } }]
+  }
+
+  snapshot(nowMs: number): ComponentStateSnapshot {
+    const value = this.gateway.snapshot(nowMs)
+    return { metrics: {
+      realtimeActiveConnections: value.activeConnections, realtimePeakConnections: value.peakConnections, realtimeAcceptedConnections: value.acceptedConnections, realtimeRejectedConnections: value.rejectedConnections,
+      realtimeDisconnectedConnections: value.disconnectedConnections, realtimeExpiredConnections: value.expiredConnections, realtimeOverflowDisconnects: value.overflowDisconnects,
+      realtimeActiveChannels: value.activeChannels, realtimeChannelMemberships: value.channelMemberships, realtimeMaximumChannelMembers: value.maximumChannelMembers, realtimeBroadcasts: value.broadcasts,
+      realtimeFanOutCopies: value.attemptedFanOutCopies, realtimeDeliveredCopies: value.deliveredCopies, realtimePendingMessages: value.pendingMessages, realtimePendingBytes: value.pendingBytes, realtimePeakPendingBytes: value.peakPendingBytes,
+      realtimeDroppedCopies: value.backpressuredCopies + value.disconnectedDroppedCopies, realtimeDroppedBytes: value.backpressuredBytes + value.disconnectedDroppedBytes,
+    }, events: this.lifecycleEvents(value.expiredConnectionIds ?? [], value.drainedDeliveries ?? 0, value.drainedBytes ?? 0) }
+  }
+
+  private advanceEvents(nowMs: number): ComponentDomainEvent[] {
+    const value = this.gateway.advanceTo(nowMs)
+    return this.lifecycleEvents(value.expiredConnectionIds, value.deliveredCopies, value.deliveredBytes)
+  }
+
+  private lifecycleEvents(expiredConnectionIds: readonly string[], deliveredCopies: number, deliveredBytes: number): ComponentDomainEvent[] {
+    return [
+      ...(deliveredCopies > 0 || deliveredBytes > 0 ? [{ type: 'realtime-delivery-drained' as const, status: 'ok' as const, bytes: deliveredBytes, attributes: { deliveredCopies, deliveredBytes } }] : []),
+      ...expiredConnectionIds.map((connectionId) => ({ type: 'realtime-connection-closed' as const, status: 'ok' as const, attributes: { connectionId, cause: 'expired' } })),
+    ]
+  }
+
+  private broadcastEvents(channelId: string, messageBytes: number, broadcast: ReturnType<RealtimeGatewayState['broadcast']>): ComponentDomainEvent[] {
+    return [
+      { type: 'realtime-broadcast', status: 'ok', bytes: messageBytes, attributes: { channelId, fanOut: broadcast.memberCount, enqueued: broadcast.enqueued.length, backpressured: broadcast.backpressured.length } },
+      ...broadcast.backpressured.map((delivery) => ({ type: 'realtime-backpressure' as const, status: 'rejected' as const, bytes: messageBytes, attributes: { channelId, connectionId: delivery.connectionId, policy: this.node.config.overflowPolicy } })),
+      ...broadcast.disconnectedConnectionIds.map((id) => ({ type: 'realtime-connection-closed' as const, status: 'rejected' as const, attributes: { connectionId: id, cause: 'backpressure' } })),
+    ]
+  }
+}
+
 class ObjectStorageRuntime implements ComponentStateRuntime {
   private readonly storage = new ObjectStorageState()
   private readonly pending = new Map<string, { operation: 'read' | 'write'; bytes: number }>()
@@ -486,6 +593,7 @@ export const createComponentStateRuntime = (node: ComponentNode): ComponentState
     case 'search-index': return new SearchIndexRuntime(node)
     case 'stream': return new StreamRuntime(node)
     case 'topic': return new TopicRuntime(node)
+    case 'realtime-gateway': return new RealtimeGatewayRuntime(node)
     case 'object-storage': return new ObjectStorageRuntime(node)
     case 'database': return node.componentVersion === 2 ? new DatabaseRuntime(node) : undefined
     default: return undefined

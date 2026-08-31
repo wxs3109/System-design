@@ -11,6 +11,7 @@ export const componentTypeSchema = z.enum([
   'scheduler',
   'network',
   'load-balancer',
+  'realtime-gateway',
   'service',
   'queue',
   'cache',
@@ -82,6 +83,30 @@ export const loadBalancerConfigSchema = z.object({
   maxQueueSize: z.number().int().min(0).max(1_000_000).default(10_000),
   failureThreshold: positiveIntegerSchema.max(1_000).default(1),
   recoveryTimeMs: nonNegativeSchema.max(3_600_000).default(5_000),
+})
+
+export const realtimeGatewayConfigSchema = z.object({
+  maxConnections: positiveIntegerSchema.max(100_000_000).default(100_000),
+  connectionDurationMs: positiveSchema.max(31_536_000_000).default(60_000),
+  maxChannelsPerConnection: positiveIntegerSchema.max(10_000).default(10),
+  defaultChannelCount: positiveIntegerSchema.max(1_000_000).default(100),
+  maxConcurrentMessages: positiveIntegerSchema.max(1_000_000).default(1_000),
+  handshakeTimeMs: positiveSchema.default(2),
+  broadcastBaseTimeMs: positiveSchema.default(1),
+  fanOutTimePerConnectionMs: nonNegativeSchema.default(0.01),
+  defaultMessageBytes: positiveIntegerSchema.max(1_000_000_000).default(1_024),
+  outboundBandwidthMbps: positiveSchema.default(10),
+  slowConnectionFraction: probabilitySchema.default(0),
+  slowConnectionBandwidthMbps: positiveSchema.default(0.1),
+  maxPendingBytesPerConnection: positiveIntegerSchema.max(1_000_000_000_000).default(1_048_576),
+  overflowPolicy: z.enum(['drop-message', 'disconnect']).default('drop-message'),
+  jitterMs: nonNegativeSchema.default(0.5),
+  errorRate: probabilitySchema.default(0),
+  maxQueueSize: z.number().int().min(0).max(10_000_000).default(100_000),
+}).superRefine((config, context) => {
+  if (config.slowConnectionBandwidthMbps > config.outboundBandwidthMbps) {
+    context.addIssue({ code: 'custom', path: ['slowConnectionBandwidthMbps'], message: 'Slow-connection bandwidth cannot exceed normal outbound bandwidth.' })
+  }
 })
 
 export const queueConfigSchema = z.object({
@@ -234,6 +259,11 @@ export const componentNodeSchema = z.discriminatedUnion('type', [
     ...commonNodeFields,
     type: z.literal('load-balancer'),
     config: loadBalancerConfigSchema,
+  }),
+  z.object({
+    ...commonNodeFields,
+    type: z.literal('realtime-gateway'),
+    config: realtimeGatewayConfigSchema,
   }),
   z.object({
     ...commonNodeFields,

@@ -18,6 +18,7 @@ export interface CompiledOperationAction {
   data?: CompiledDataAccess
   cache?: { operation: 'get' | 'put' | 'delete'; keyId: string; estimatedValueBytes: number; ttlSeconds?: number }
   event?: { operation: 'publish' | 'consume'; eventId: string; estimatedPayloadBytes: number; delivery: 'at-most-once' | 'at-least-once'; ordering: 'none' | 'partition-key' }
+  realtime?: { operation: 'connect' | 'broadcast' | 'disconnect'; connectionPattern: string; channelPattern: string; messageBytes?: number }
   descriptiveFields: string[]
 }
 
@@ -184,7 +185,7 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
           : inferredCaller!
       const nodeId = action.kind === 'api-call' || action.kind === 'service-call' ? action.targetNodeId
         : action.kind === 'data-access' || action.kind === 'cache-access' ? action.nodeId
-          : action.kind === 'event-publish' ? action.brokerNodeId : action.consumerNodeId
+          : action.kind === 'event-publish' ? action.brokerNodeId : action.kind === 'event-consume' ? action.consumerNodeId : action.nodeId
       const executionContextNodeId = action.kind === 'api-call' || action.kind === 'service-call' ? action.targetNodeId
         : action.kind === 'event-publish' ? action.producerNodeId : action.kind === 'event-consume' ? action.consumerNodeId : inferredCaller!
       requireEnabledNode(sourceNodeId, interaction.id, action.id, 'source')
@@ -234,6 +235,8 @@ export const compileOperationPlans = (project: ProjectFile, edges: readonly Comp
           const duplicate = [...actionById.values()].find((candidate) => candidate.event?.operation === 'consume' && candidate.sourceNodeId === action.brokerNodeId && candidate.edgeIds[0] === targetEdge!.id)
           if (duplicate) throw new Error(`Interaction ${interaction.id} maps Topic consumer actions ${duplicate.id} and ${action.id} to the same subscription edge ${targetEdge!.id}.`)
         }
+      } else if (action.kind === 'realtime') {
+        compiled.realtime = { operation: action.operation, connectionPattern: action.connectionPattern, channelPattern: action.channelPattern, ...(action.messageBytes === undefined ? {} : { messageBytes: action.messageBytes }) }
       }
       actionById.set(action.id, compiled)
       executionContextByActionId.set(action.id, executionContextNodeId)

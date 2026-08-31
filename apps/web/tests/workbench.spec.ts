@@ -281,6 +281,101 @@ test('loads incident fan-out and exposes independent Topic retention expiry', as
   await expect(row.getByText(/expired [1-9]/)).toBeVisible()
 })
 
+test('creates and configures a Realtime Gateway from the shared palette', async ({ page }) => {
+  await page.goto('/')
+  await openComponentCategory(page, 'Gateway & Routing')
+  await page.getByRole('button', { name: /Realtime Gateway Maintains long-lived channel memberships/ }).click()
+
+  await expect(page.getByText('1 components')).toBeVisible()
+  const gateway = page.locator('.react-flow__node').filter({ hasText: 'Realtime Gateway' })
+  await expect(gateway).toBeVisible()
+  await gateway.dispatchEvent('click')
+  await page.getByLabel('Maximum connections').fill('25000')
+  await page.getByLabel('Connection lifetime (ms)').fill('45000')
+  await page.getByLabel('Slow connection fraction').fill('0.2')
+  await page.getByLabel('Pending bytes / connection').fill('8192')
+  await page.getByLabel('Overflow policy').selectOption('disconnect')
+  await expect(gateway).toContainText('25000 connections')
+  await expect(gateway).toContainText('disconnect')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const stream = await (await downloadPromise).createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.topology.nodes[0]).toMatchObject({
+    type: 'realtime-gateway',
+    componentVersion: 1,
+    config: {
+      maxConnections: 25000, connectionDurationMs: 45000, slowConnectionFraction: 0.2,
+      maxPendingBytesPerConnection: 8192, overflowPolicy: 'disconnect',
+    },
+  })
+})
+
+test('edits typed Realtime Gateway actions in the interaction editor', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Realtime chat/ }).click()
+  await page.getByRole('button', { name: 'Definitions' }).click()
+
+  const explorer = page.getByRole('navigation', { name: 'Project definitions' })
+  await explorer.getByRole('button', { name: /Connect and broadcast a chat message/ }).click()
+  const editor = page.getByLabel('Definition editor')
+  const connectAction = editor.locator('details.definition-card').nth(1)
+  const broadcastAction = editor.locator('details.definition-card').nth(2)
+  await expect(connectAction.getByLabel('Realtime gateway')).toHaveValue('chat-realtime-gateway')
+  await expect(connectAction.getByLabel('Realtime operation')).toHaveValue('connect')
+  await expect(connectAction.getByLabel('Connection pattern')).toHaveValue('chat-client:{request}')
+  await expect(connectAction.getByLabel('Channel pattern')).toHaveValue('room:shared')
+  await expect(broadcastAction.getByLabel('Realtime operation')).toHaveValue('broadcast')
+  await expect(broadcastAction.getByLabel('Message bytes')).toHaveValue('512')
+  await broadcastAction.getByLabel('Message bytes').fill('2048')
+  await expect(editor.getByText('Saved to project · undo available')).toBeVisible()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const stream = await (await downloadPromise).createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  const exported = JSON.parse(Buffer.concat(chunks).toString())
+  expect(exported.definitions.interactions[0].actions[2]).toMatchObject({
+    kind: 'realtime', operation: 'broadcast', nodeId: 'chat-realtime-gateway',
+    connectionPattern: 'chat-client:{request}', channelPattern: 'room:shared', messageBytes: 2048,
+  })
+})
+
+test('runs Realtime Gateway examples and exposes broadcast and backpressure evidence', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Realtime chat/ }).click()
+  await expect(page.getByText('3 components')).toBeVisible()
+  await page.getByTestId('rf__node-chat-realtime-gateway').dispatchEvent('click')
+  await expect(page.getByLabel('Overflow policy')).toHaveValue('drop-message')
+  await expect(page.getByLabel('Slow connection fraction')).toHaveValue('0.1')
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+  const chatRow = page.getByRole('row').filter({ hasText: 'Chat realtime gateway' })
+  await expect(chatRow.getByText(/active connections/)).toBeVisible()
+  await expect(chatRow.getByText(/broadcast copies/)).toBeVisible()
+  await expect(chatRow.getByText(/dropped copies [1-9]/)).toBeVisible()
+  const chatActions = page.getByRole('table', { name: 'Action metrics' })
+  const broadcastRow = chatActions.getByRole('row').filter({ hasText: 'broadcast-chat-message' })
+  await expect(broadcastRow.getByText('realtime', { exact: true })).toBeVisible()
+  await expect(broadcastRow.getByText(/connection fan-out · room:shared/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Load example' }).click()
+  await page.getByRole('button', { name: /Collaborative editing/ }).click()
+  await page.getByTestId('rf__node-editing-realtime-gateway').dispatchEvent('click')
+  await expect(page.getByLabel('Overflow policy')).toHaveValue('disconnect')
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+  const editingActions = page.getByRole('table', { name: 'Action metrics' })
+  await expect(editingActions.getByRole('row').filter({ hasText: 'broadcast-document-operation' }).getByText(/connection fan-out · document:shared/)).toBeVisible()
+})
+
 test('shows Scheduler timing instead of editable arrival phases for a scheduled operation workload', async ({ page }) => {
   await page.goto('/')
   await page.locator('input[type=file]').setInputFiles({

@@ -27,6 +27,10 @@ export const componentCatalog = {
     type: 'load-balancer', label: 'Load Balancer', description: 'Routes requests across weighted, round-robin or healthy targets.',
     category: 'gateway', color: '#ec4899', acceptsInput: true, emitsOutput: true,
   },
+  'realtime-gateway': {
+    type: 'realtime-gateway', label: 'Realtime Gateway', description: 'Maintains long-lived channel memberships and broadcasts with per-connection backpressure.',
+    category: 'gateway', color: '#db2777', acceptsInput: true, emitsOutput: true,
+  },
   service: {
     type: 'service', label: 'Service', description: 'A replicated concurrent request processor.',
     category: 'service', color: '#3b82f6', acceptsInput: true, emitsOutput: true,
@@ -72,6 +76,7 @@ export const createNode = (type: ComponentType, id: string, position: Position, 
     case 'scheduler': return { id, name, position, type, config: { scheduleMode: 'periodic', intervalMs: 1_000, startAtMs: 0, batchSize: 1, jitterMs: 0, missedRunPolicy: 'skip', concurrencyLimit: 1, maxPendingRuns: 1_000, requestBytes: 1_024 } }
     case 'network': return { id, name, position, type, config: { latencyMs: 20, jitterMs: 2, bandwidthMbps: 100, parallelism: 1_000, packetLossRate: 0, maxQueueSize: 10_000 } }
     case 'load-balancer': return { id, name, position, type, config: { algorithm: 'weighted', capacity: 1_000, routingTimeMs: 0.2, maxQueueSize: 10_000, failureThreshold: 1, recoveryTimeMs: 5_000 } }
+    case 'realtime-gateway': return { id, name, position, type, config: { maxConnections: 100_000, connectionDurationMs: 60_000, maxChannelsPerConnection: 10, defaultChannelCount: 100, maxConcurrentMessages: 1_000, handshakeTimeMs: 2, broadcastBaseTimeMs: 1, fanOutTimePerConnectionMs: 0.01, defaultMessageBytes: 1_024, outboundBandwidthMbps: 10, slowConnectionFraction: 0, slowConnectionBandwidthMbps: 0.1, maxPendingBytesPerConnection: 1_048_576, overflowPolicy: 'drop-message', jitterMs: 0.5, errorRate: 0, maxQueueSize: 100_000 } }
     case 'service': return { id, name, position, type, config: { replicas: 2, concurrencyPerReplica: 10, serviceTimeMs: 30, jitterMs: 5, errorRate: 0, maxQueueSize: 1_000 } }
     case 'queue': return { id, name, position, type, config: { consumers: 4, deliveryTimeMs: 10, jitterMs: 2, maxDepth: 10_000, errorRate: 0 } }
     case 'cache': return { id, name, position, type, config: { capacityEntries: 10_000, ttlMs: 60_000, evictionPolicy: 'lru', keySpaceSize: 100_000, hotKeyProbability: 0, maxConcurrentRequests: 1_000, operationTimeMs: 1, jitterMs: 0.2, errorRate: 0, maxQueueSize: 10_000 } }

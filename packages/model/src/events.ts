@@ -12,6 +12,8 @@ export const runtimeEventTypeSchema = z.enum([
   'search-index-write-accepted', 'search-document-indexed', 'search-index-refreshed', 'search-replica-refreshed', 'search-query-fan-out', 'search-query-completed',
   'message-acknowledged', 'message-dead-lettered', 'stream-record-appended', 'stream-record-consumed',
   'topic-message-published', 'topic-message-delivered', 'topic-message-acknowledged', 'topic-message-expired',
+  'realtime-connection-opened', 'realtime-connection-rejected', 'realtime-channel-joined', 'realtime-channel-rejected',
+  'realtime-broadcast', 'realtime-backpressure', 'realtime-delivery-drained', 'realtime-connection-closed', 'realtime-operation-failed',
   'object-read', 'object-written', 'database-read', 'database-written',
   'scheduler-tick', 'scheduler-run-released', 'scheduler-run-queued', 'scheduler-run-skipped', 'scheduler-run-settled',
   'operation-started', 'operation-completed', 'action-started', 'action-completed', 'action-skipped',
@@ -23,7 +25,7 @@ export const reasonCodeSchema = z.enum([
   'none', 'timeout', 'queue_full', 'node_down', 'rate_limited', 'circuit_open', 'packet_loss',
   'intrinsic_error', 'hop_limit', 'missing_node', 'simulation_ended',
   'backpressure', 'dead_lettered', 'no_healthy_target',
-  'scheduler_missed',
+  'scheduler_missed', 'connection_capacity', 'channel_capacity',
   'latency_spike', 'region_outage', 'capacity_reduced', 'bandwidth_reduced', 'traffic_spike', 'hot_key',
 ])
 export const eventAttributeValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean()])

@@ -20,9 +20,9 @@ Project contracts are not component variants. Defining an Orders table once and 
 
 ## Shipped executable behaviors
 
-Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants. Phase 2 has added four reusable behaviors under the same registry contract:
+Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants. Phase 2 has added five reusable behaviors under the same registry contract:
 
-Phase 2 behavior expansion has also shipped Scheduler, CDN, Search Index, and Topic. Search Index is reused by the Product Search and streaming Log Search acceptance projects and consumes the same Document Model and interaction contracts as the generic editor. Topic is likewise reused by the Order event fan-out and Incident fan-out projects, using ordinary Event/Interaction contracts and topology edges to prove independent subscriber state and expiry. Neither behavior is a named preset or a case-specific page.
+Phase 2 behavior expansion has also shipped Scheduler, CDN, Search Index, Topic, and Realtime Gateway. Search Index is reused by the Product Search and streaming Log Search acceptance projects and consumes the same Document Model and interaction contracts as the generic editor. Topic is likewise reused by the Order event fan-out and Incident fan-out projects to prove independent subscriber state and expiry. Realtime Gateway is reused by Realtime chat and Collaborative editing to prove connection lifecycle, shared-channel fan-out, and slow-client backpressure. None is a named preset or a case-specific page.
 
 | Category | Behavior | Modeled boundary |
 |---|---|---|
@@ -30,6 +30,7 @@ Phase 2 behavior expansion has also shipped Scheduler, CDN, Search Index, and To
 | Traffic | Traffic Generator | Constant or Poisson request arrivals, size, duration, and generation cap |
 | Network | Network Link | Latency, jitter, byte transfer, concurrency, queueing, and packet loss |
 | Gateway & Routing | Load Balancer | Weighted, round-robin, or health-aware target selection |
+| Gateway & Routing | Realtime Gateway | Long-lived connection capacity, channel membership, broadcast fan-out, independent outbound queues, and slow-client backpressure |
 | Service | Service | Replicas, concurrency, service time, queueing, and intrinsic errors |
 | Messaging | Queue | Bounded buffering and consumer delivery |
 | Messaging | Stream | Partitions, consumer groups, batches, acknowledgement, and lag |
@@ -49,7 +50,7 @@ Database v1 remains readable for compatibility; Database v2 is the current palet
 | Acceptance probe | Covered with shipped behaviors | Important unsupported semantics | Classification of the gap |
 |---|---|---|---|
 | URL shortener | API/data contracts, request path, load balancing, cache, indexed database access, hotspots, and failures | Unique-ID allocation, conditional writes, and transaction/consistency enforcement | Existing project contracts; later consistency/transaction policy where justified |
-| Realtime chat | Service capacity, Event contracts, Topic/Stream delivery, partitions, storage, and backpressure | Long-lived connections, presence, rooms/channels, and connection broadcast fan-out | A **Realtime Gateway** behavior variant |
+| Realtime chat | Service capacity, Realtime Gateway connections/rooms/broadcast, Topic/Stream delivery, partitions, storage, and backpressure | Presence, reconnect/resume, multi-gateway channel coordination, and protocol/delivery guarantees | Existing **Realtime Gateway** boundary; deeper session/distributed semantics require later variants or policies |
 | Video delivery | Upload/transcode contracts, object storage, CDN POP/cache/origin behavior, scheduled work, bandwidth, and failures | Multipart/range transfer, adaptive bitrate sessions, shared-link contention, and DRM | Existing composition; transfer details remain explicit non-goals |
 | Search | API/Document/query contracts, indexing delay, refresh/replica visibility, shard query fan-out, merge cost, cache, and read load | Analyzer/tokenizer, query DSL, relevance ranking, segments/compaction, and distributed failover | Existing **Search Index** boundary; deeper text/distributed semantics require later variants |
 | Notifications | Producer service, Event contracts, independent Topic subscriptions, per-subscription backlog/ACK, retention, scheduled releases, and backpressure | Subscription filters, retry schedules, delivery calendars/rules, and provider quotas | Existing **Topic** and **Scheduler** variants plus later contracts/policies; provider is a Service variant |
@@ -71,7 +72,7 @@ The shipped layer provides:
 4. Workload mixes that target concrete operation IDs and preserve key/payload distributions.
 5. Runtime request context, events, traces, and metrics that consume and expose those bindings.
 
-The acceptance gate is behavioral: indexed lookup versus scan, small versus large payload, uniform versus hot keys, and different operation mixes yield deterministic and explainable differences. Topic extends that gate to independent subscriptions: adding a subscriber multiplies fan-out copies, a failed or offline subscriber does not advance another subscriber, and retention changes expiry evidence.
+The acceptance gate is behavioral: indexed lookup versus scan, small versus large payload, uniform versus hot keys, and different operation mixes yield deterministic and explainable differences. Topic extends that gate to independent subscriptions: adding a subscriber multiplies fan-out copies, a failed or offline subscriber does not advance another subscriber, and retention changes expiry evidence. Realtime Gateway extends it to long-lived client state: channel membership determines fan-out, per-connection bandwidth determines drain and backlog, and the selected overflow policy determines whether a slow recipient drops a message or is disconnected.
 
 ## Prioritized additions
 
@@ -82,7 +83,7 @@ The order is based on how many acceptance probes each primitive unlocks and whet
 3. **CDN** — shipped; edge cache capacity/TTL, POP selection, origin fetch, bandwidth, and hit/miss metrics.
 4. **Search Index** — shipped; indexing delay, refresh visibility, shard/replica query fan-out, and merge latency.
 5. **Topic** — shipped; independent subscriptions, per-subscription backlog/acknowledgement, retention, and fan-out.
-6. **Realtime Gateway** — connections, rooms/channels, broadcast amplification, and connection backpressure.
+6. **Realtime Gateway** — shipped; long-lived connections, rooms/channels, broadcast amplification, per-connection outbound drain, and `drop-message` / `disconnect` backpressure.
 7. **Workflow** — durable step state, idempotency, bounded retry, timeout, and compensation.
 8. **Global Router** — geo/weighted/health routing, cached decisions, TTL, and failover delay.
 
