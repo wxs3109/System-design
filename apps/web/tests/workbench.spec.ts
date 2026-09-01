@@ -741,6 +741,24 @@ test('labels connections and focuses the exact path for a selected interaction',
   await expect(page.getByTestId('rf__edge-orders-to-db')).toContainText('3. point read orders')
 })
 
+test('shows region and zone boundaries and applies an undoable automatic layout', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Multi-region failover/ }).click()
+
+  const groups = page.getByLabel('Topology groups')
+  await expect(groups.locator('[data-group-id=region-primary]')).toContainText('Primary region')
+  await expect(groups.locator('[data-group-id=region-standby]')).toContainText('Standby region')
+  await expect(groups.locator('[data-group-id=primary-service-zone]')).toContainText('Primary service zone')
+  const before = await page.getByTestId('rf__node-primary-api').getAttribute('style')
+
+  await page.getByRole('button', { name: 'Auto layout' }).click()
+  await expect(page.getByRole('button', { name: 'Auto layout' })).toBeEnabled()
+  await expect.poll(() => page.getByTestId('rf__node-primary-api').getAttribute('style')).not.toBe(before)
+  await page.getByRole('button', { name: 'Undo project change' }).click()
+  await expect(page.getByTestId('rf__node-primary-api')).toHaveAttribute('style', before!)
+})
+
 test('edits business definitions in one ProjectFile with inline validation, undo and reload persistence', async ({ page }) => {
   await page.goto('/')
   const fixture = createOrderSystemContractFixture()

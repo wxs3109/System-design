@@ -40,6 +40,7 @@ interface WorkbenchState {
   updateRegion: (groupId: string, updates: Partial<Pick<TopologyGroup, 'name' | 'kind' | 'nodeIds'>>) => void
   deleteRegion: (groupId: string) => void
   updateSelectedNode: (updates: { name?: string; config?: Record<string, number | string> }) => void
+  applyNodeLayout: (positions: Record<string, { x: number; y: number }>) => void
   updateSelectedEdge: (updates: Partial<Pick<ProjectConnection, 'name' | 'routingMode' | 'weight'>>) => void
   attachPolicy: (target: PolicyAttachment['target'], type: string, version: number) => void
   updatePolicy: (policyId: string, updates: { enabled?: boolean; config?: Record<string, number | string> }) => void
@@ -306,6 +307,10 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
   updateSelectedNode: (updates) => set((state) => ({
     project: { ...state.project, topology: { ...state.project.topology, nodes: state.project.topology.nodes.map((node) => node.id === state.selectedNodeId ? { ...node, ...(updates.name === undefined ? {} : { name: updates.name }), config: { ...node.config, ...updates.config } } as ProjectNode : node) } },
     result: null, error: null,
+  })),
+  applyNodeLayout: (positions) => set((state) => ({
+    project: { ...state.project, topology: { ...state.project.topology, nodes: state.project.topology.nodes.map((node) => { const position = positions[node.id]; return position ? { ...node, position } : node }) } },
+    error: null,
   })),
   updateSelectedEdge: (updates) => set((state) => {
     const selected = state.project.topology.edges.find((edge) => edge.id === state.selectedEdgeId)

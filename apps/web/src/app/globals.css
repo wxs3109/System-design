@@ -167,6 +167,15 @@ button { color: inherit; }
 .canvas-stage .react-flow__controls-button:hover { background: #172235; }
 .canvas-stage .react-flow__controls-button svg { fill: currentColor; }
 .canvas-stage .react-flow__minimap { width: 120px; height: 78px; background: rgba(12, 18, 29, .88); border: 1px solid var(--border); border-radius: 7px; }
+.topology-group-overlay { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.topology-group-boundary { position: absolute; box-sizing: border-box; border: 1px dashed color-mix(in srgb, var(--cyan) 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--cyan) 3%, transparent); }
+.topology-group-boundary > header { height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 9px; color: var(--muted-bright); white-space: nowrap; }
+.topology-group-boundary > header span { color: var(--cyan-deep); font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.topology-group-boundary > header strong { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
+.topology-group-boundary > header small { min-width: 16px; padding: 1px 4px; color: var(--muted); background: var(--panel-translucent); border-radius: 4px; font-size: 7px; text-align: center; }
+.topology-group-boundary--zone { border-color: color-mix(in srgb, #f59e0b 52%, var(--border)); background: color-mix(in srgb, #f59e0b 3%, transparent); }
+.topology-group-boundary--zone > header span { color: #f59e0b; }
+.topology-group-boundary--group { border-color: var(--border-bright); background: color-mix(in srgb, var(--muted) 3%, transparent); }
 .canvas-stage .react-flow__edge-path { stroke: #4d647c; stroke-width: 1.4; }
 .canvas-stage .react-flow__edge-text { fill: var(--muted-bright); font-size: 8px; font-weight: 600; }
 .canvas-stage .react-flow__edge-textbg { fill: var(--panel-raised); fill-opacity: .94; stroke: var(--border); stroke-width: .5px; }
@@ -200,6 +209,7 @@ button { color: inherit; }
 .canvas-toolbar { display: flex; gap: 6px; }
 .canvas-toolbar button { display: flex; align-items: center; gap: 6px; height: 29px; padding: 0 9px; background: rgba(13, 21, 33, .94); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 10px; }
 .canvas-toolbar button:hover { background: #162235; }
+.canvas-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
 .example-picker { position: relative; }
 .example-menu { position: absolute; z-index: 20; top: 35px; left: 0; width: 240px; display: flex; flex-direction: column; padding: 5px; background: #101824; border: 1px solid var(--border-bright); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }
 .example-menu button { height: auto; display: flex; align-items: flex-start; flex-direction: column; gap: 3px; padding: 9px; background: transparent; border: 0; }

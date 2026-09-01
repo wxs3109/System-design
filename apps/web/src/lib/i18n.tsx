@@ -44,6 +44,8 @@ const zhCN: Record<string, string> = {
   'Executable building blocks': '可执行构建块',
   'Choose a category, then an implemented behavior variant. Templates only provide starting values.': '先选择类别，再选择已实现的运行行为。模板只提供初始配置。',
   'Clear canvas': '清空画布',
+  'Auto layout': '自动布局',
+  'Laying out…': '正在布局…',
   'Load example': '加载示例',
   'Start with an empty canvas': '从空白画布开始',
   'Drag any component here, connect it, configure load, then run the model.': '把组件拖到这里，连接并配置负载，然后运行模型。',

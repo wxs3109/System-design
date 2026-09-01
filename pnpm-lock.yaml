@@ -31,6 +31,9 @@ importers:
       echarts:
         specifier: ^6.0.0
         version: 6.1.0
+      elkjs:
+        specifier: 0.12.0
+        version: 0.12.0
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.8)
@@ -1302,6 +1305,9 @@ packages:
 
   electron-to-chromium@1.5.412:
     resolution: {integrity: sha1-ebk7qNlq2lye8NkW6gZj8B6hVJg=}
+
+  elkjs@0.12.0:
+    resolution: {integrity: sha1-fcG8cauPQC0bZWTi+lCcocruJ2w=}
 
   emoji-regex@9.2.2:
     resolution: {integrity: sha1-hAyIA7DYBH9P8M+WMXazLU7z7XI=}
@@ -3835,6 +3841,8 @@ snapshots:
       zrender: 6.1.0
 
   electron-to-chromium@1.5.412: {}
+
+  elkjs@0.12.0: {}
 
   emoji-regex@9.2.2: {}
 

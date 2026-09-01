@@ -160,6 +160,19 @@ describe('validated project undo and redo', () => {
     expect(() => projectFileV3Schema.parse(updated)).not.toThrow()
   })
 
+  it('applies a complete node layout as one undoable edit without clearing results', () => {
+    const project = createOrderSystemContractFixture()
+    useWorkbenchStore.getState().restoreProject(project)
+    useWorkbenchStore.getState().setResult(emptyResult)
+    const positions = Object.fromEntries(project.topology.nodes.map((node, index) => [node.id, { x: index * 250, y: index * 100 }]))
+    useWorkbenchStore.getState().applyNodeLayout(positions)
+
+    expect(useWorkbenchStore.getState().project.topology.nodes.map((node) => node.position)).toEqual(Object.values(positions))
+    expect(useWorkbenchStore.getState().result).toEqual(emptyResult)
+    undoProject()
+    expect(useWorkbenchStore.getState().project.topology.nodes.map((node) => node.position)).toEqual(project.topology.nodes.map((node) => node.position))
+  })
+
   it('creates an independent workload when pasting a traffic component', () => {
     useWorkbenchStore.getState().addRolePreset('client', 1, { x: 0, y: 0 })
     const source = useWorkbenchStore.getState().project.topology.nodes[0]!

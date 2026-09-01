@@ -1,12 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type OnConnect } from '@xyflow/react'
+import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, type OnConnect } from '@xyflow/react'
 import { builtInComponentTypes, componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry, type BehaviorVariantManifest, type ComponentCategoryManifest, type ComponentPresetManifest, type ConfigField } from '@system-design/components'
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ComponentNode, componentIcons } from './component-node'
@@ -20,10 +20,12 @@ import { WorkbenchShell } from './workbench-shell'
 import { DefinitionEditor, DefinitionsExplorer, useSelectedDefinitionBindings } from './definition-editor'
 import type { DefinitionSelection } from './definition-editor-model'
 import { FormatDialog } from './format-dialog'
+import { TopologyGroupOverlay } from './topology-group-overlay'
 import { createAsyncExample, createCollaborativeEditingExample, createDataPlatformExample, createDirectExample, createGlobalStorefrontExample, createIncidentFanOutExample, createJobSchedulerExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createOrderSystemExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
+import { layoutTopology } from '@/lib/canvas-layout'
 
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
@@ -368,7 +370,7 @@ function WorkbenchInner() {
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setProject, restoreProject, addCatalogComponent, pasteComponent, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, deleteSelectedNode, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const { setProject, restoreProject, addCatalogComponent, pasteComponent, applyNodeLayout, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, deleteSelectedNode, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
   const canUndo = useCanUndo()
   const canRedo = useCanRedo()
   const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
@@ -392,6 +394,7 @@ function WorkbenchInner() {
   const [selectedDefinition, setSelectedDefinition] = useState<DefinitionSelection | null>(null)
   const [formatDialog, setFormatDialog] = useState<'openapi' | 'dbml' | null>(null)
   const [themeReady, setThemeReady] = useState(false)
+  const [layoutBusy, setLayoutBusy] = useState(false)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
@@ -477,6 +480,19 @@ function WorkbenchInner() {
     const position = rect ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: (400 - viewport.x) / viewport.zoom, y: (240 - viewport.y) / viewport.zoom }
     addCatalogComponent(selection.categoryId, selection.type, position, selection.preset)
   }, [addCatalogComponent, reactFlow])
+
+  const autoLayout = useCallback(async () => {
+    if (project.topology.nodes.length === 0 || layoutBusy) return
+    setLayoutBusy(true)
+    try {
+      applyNodeLayout(await layoutTopology(project))
+      window.requestAnimationFrame(() => void reactFlow.fitView({ duration: 350, padding: 0.15 }))
+    } catch (cause) {
+      setError(cause instanceof Error ? `Automatic layout failed: ${cause.message}` : 'Automatic layout failed.')
+    } finally {
+      setLayoutBusy(false)
+    }
+  }, [applyNodeLayout, layoutBusy, project, reactFlow, setError])
 
   const onConnect: OnConnect = useCallback((connection) => connect(connection), [connect])
   const onDrop = useCallback((event: React.DragEvent) => {
@@ -637,6 +653,7 @@ function WorkbenchInner() {
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
+          <ViewportPortal><TopologyGroupOverlay project={project} /></ViewportPortal>
           <Controls position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} aria-label={t('Canvas controls')}>
             <ControlButton onClick={() => reactFlow.zoomIn()} aria-label={t('Zoom in')} title={t('Zoom in')}><Plus size={14} /></ControlButton>
             <ControlButton onClick={() => reactFlow.zoomOut()} aria-label={t('Zoom out')} title={t('Zoom out')}><Minus size={14} /></ControlButton>
@@ -647,6 +664,7 @@ function WorkbenchInner() {
           {workspaceView === 'definitions' ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>{t('Showing bindings for')} <strong>{definitionBindings.resource.name}</strong></> : t('Select a definition to show topology bindings')}</span></div></Panel> : null}
           <Panel position="top-left"><div className="canvas-toolbar">
             <button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> {t('Clear canvas')}</button>
+            <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} aria-busy={layoutBusy} onClick={() => void autoLayout()}><LayoutDashboard size={14} /> {t(layoutBusy ? 'Laying out…' : 'Auto layout')}</button>
             <div className="example-picker">
               <button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> {t('Load example')} <ChevronDown size={13} /></button>
               {exampleOpen ? <div className="example-menu">{examples.map(([name, description, createProject]) => <button type="button" key={name} onClick={() => { setProject(createProject()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>{t(`example.${name}`, {}, name)}</strong><span>{t(`example-description.${name}`, {}, description)}</span></button>)}</div> : null}
