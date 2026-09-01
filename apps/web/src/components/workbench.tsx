@@ -107,6 +107,31 @@ function CategoryItem({ category, expanded, onToggle, onAdd }: { category: Compo
   const { t } = useI18n()
   const variants = componentCatalog.listVariants(category.id)
   const Icon = componentIcons[category.iconToken]!
+  if (variants.length === 1) {
+    const variant = variants[0]!
+    const presets = componentCatalog.listPresets(variant.type, variant.version)
+    const VariantIcon = componentIcons[variant.iconToken] ?? Icon
+    const variantLabel = t(`component.${variant.type}`, {}, variant.label)
+    const description = t(`description.${variant.type}`, {}, variant.description)
+    const setDragData = (event: React.DragEvent, preset?: ComponentPresetManifest) => {
+      event.dataTransfer.setData('application/system-design-catalog', JSON.stringify({ categoryId: category.id, type: variant.type, ...(preset ? { preset: { id: preset.id, version: preset.version } } : {}) }))
+      event.dataTransfer.effectAllowed = 'move'
+    }
+    return (
+      <section className="palette-category" style={{ '--node-color': category.color } as React.CSSProperties}>
+        <button type="button" className="category-toggle category-toggle--single" draggable aria-label={`${variantLabel} ${description}`} title={description}
+          onClick={() => onAdd({ categoryId: category.id, type: variant.type as ComponentType })} onDragStart={setDragData}>
+          <span><VariantIcon size={17} aria-hidden="true" /></span><span><strong>{t(`category.${category.id}`, {}, category.label)}</strong><small>{t('{count} variant', { count: 1 })}</small></span><Plus size={15} aria-hidden="true" />
+        </button>
+        {presets.length > 0 ? <div className="variant-presets variant-presets--single" aria-label={t('{name} presets', { name: variantLabel })}>
+          <span>{t('Templates')}</span>
+          {presets.map((preset) => <button key={preset.id + '@' + preset.version} type="button" draggable title={t(`preset-description.${preset.id}`, {}, preset.description)}
+            onClick={() => onAdd({ categoryId: category.id, type: variant.type as ComponentType, preset: { id: preset.id, version: preset.version } })}
+            onDragStart={(event) => setDragData(event, preset)}>{t(`preset.${preset.label}`, {}, preset.label)}</button>)}
+        </div> : null}
+      </section>
+    )
+  }
   return (
     <section className="palette-category" style={{ '--node-color': category.color } as React.CSSProperties}>
       <button type="button" className="category-toggle" aria-expanded={expanded} aria-controls={'category-' + category.id} onClick={onToggle}>
@@ -359,7 +384,7 @@ function WorkbenchInner() {
   const [revisions, setRevisions] = useState<ProjectRevisionRecord[]>([])
   const [runs, setRuns] = useState<SimulationRunRecord[]>([])
   const [historyReady, setHistoryReady] = useState(false)
-  const [expandedCategory, setExpandedCategory] = useState<string | null>('service')
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
   const [workspaceView, setWorkspaceView] = useState<'topology' | 'definitions'>('topology')

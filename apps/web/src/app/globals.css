@@ -136,10 +136,13 @@ button { color: inherit; }
 .category-toggle small { color: var(--muted); font-size: 8px; }
 .category-toggle > svg { color: var(--muted); transition: transform .15s ease; }
 .category-toggle[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.category-toggle--single { cursor: grab; }
+.category-toggle--single > svg { transition: none; }
 .category-variants { display: flex; flex-direction: column; gap: 6px; padding: 0 7px 7px; border-top: 1px solid var(--border); }
 .variant-choice { padding-top: 7px; }
 .palette-item--variant { min-height: 52px; background: var(--panel-raised); }
 .variant-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 6px 4px 0; }
+.variant-presets--single { padding: 7px 9px; border-top: 1px solid var(--border); }
 .variant-presets > span { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
 .variant-presets button { padding: 3px 7px; color: var(--muted-bright); font-size: 8px; cursor: grab; background: var(--control); border: 1px dashed var(--border-bright); border-radius: 99px; }
 .variant-presets button:hover { color: var(--text); border-color: var(--node-color); }

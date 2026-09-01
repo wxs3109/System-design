@@ -5,7 +5,9 @@ import { createJobSchedulerExample } from '../src/lib/examples'
 async function openComponentCategory(page: Page, name: string) {
   const category = page.locator('.category-toggle').filter({ hasText: name })
   await expect(category).toBeVisible()
-  if (await category.getAttribute('aria-expanded') !== 'true') await category.click()
+  const expanded = await category.getAttribute('aria-expanded')
+  if (expanded === null) return
+  if (expanded !== 'true') await category.click()
   await expect(category).toHaveAttribute('aria-expanded', 'true')
 }
 
@@ -966,6 +968,9 @@ test('builds and configures Phase 1 data components from the shared palette', as
 test('drags an executable variant from its category onto the canvas', async ({ page }) => {
   await page.goto('/')
   await openComponentCategory(page, 'Network')
+  const networkCategory = page.locator('.category-toggle').filter({ hasText: 'Network' })
+  expect(await networkCategory.getAttribute('aria-expanded')).toBeNull()
+  await expect(networkCategory.locator('.lucide-chevron-down')).toHaveCount(0)
   await page.getByRole('button', { name: /Network Link Adds transfer time/ }).dragTo(page.locator('.canvas-stage'), { targetPosition: { x: 500, y: 240 } })
   await expect(page.getByText('1 components')).toBeVisible()
   await expect(page.locator('.react-flow__node').filter({ hasText: 'Network Link' })).toBeVisible()
@@ -984,7 +989,7 @@ test('creates a nested preset through its component category and exports the res
   await expect(page.locator('#category-database')).toContainText('Database')
   await expect(page.locator('#category-database .variant-presets button')).toHaveCount(0)
   const serviceCategory = page.locator('.category-toggle').filter({ hasText: 'Service' })
-  if (await serviceCategory.getAttribute('aria-expanded') !== 'true') await serviceCategory.click()
+  expect(await serviceCategory.getAttribute('aria-expanded')).toBeNull()
   await expect(page.getByLabel('Service presets')).toContainText('Worker')
   await page.getByRole('button', { name: 'Worker', exact: true }).click()
 
