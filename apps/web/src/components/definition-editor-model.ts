@@ -303,6 +303,18 @@ const bindInteraction = (project: ProjectFile, interaction: InteractionDefinitio
   const nodeIds = new Set<string>()
   const edgeIds = new Set<string>()
   const labels = new Map<string, string[]>()
+  const addPath = (source: string, target: string, label: string, asynchronous = false) => {
+    nodeIds.add(source)
+    nodeIds.add(target)
+    shortestTopologyPath(project, source, target, asynchronous).forEach((edge) => {
+      edgeIds.add(edge.id)
+      const edgeLabels = labels.get(edge.id) ?? []
+      if (!edgeLabels.includes(label)) edgeLabels.push(label)
+      labels.set(edge.id, edgeLabels)
+      nodeIds.add(edge.source)
+      nodeIds.add(edge.target)
+    })
+  }
   const apiOwner = project.definitions.apis.find((api) => api.id === interaction.entryOperation.apiId && api.version === interaction.entryOperation.apiVersion)?.ownerNodeId
   const executionContextByActionId = new Map<string, string>()
   interaction.actions.forEach((action, index) => {
@@ -321,15 +333,15 @@ const bindInteraction = (project: ProjectFile, interaction: InteractionDefinitio
         : action.kind === 'event-consume' ? action.consumerNodeId : inferredCaller
     if (source) nodeIds.add(source)
     nodeIds.add(target)
-    if (source) {
-      const stepLabel = `${index + 1}. ${interactionActionLabel(project, action)}`
-      shortestTopologyPath(project, source, target, action.kind === 'event-publish' || action.kind === 'event-consume').forEach((edge) => {
-        edgeIds.add(edge.id)
-        const edgeLabels = labels.get(edge.id) ?? []
-        if (!edgeLabels.includes(stepLabel)) edgeLabels.push(stepLabel)
-        labels.set(edge.id, edgeLabels)
-        nodeIds.add(edge.source)
-        nodeIds.add(edge.target)
+    if (source) addPath(source, target, `${index + 1}. ${interactionActionLabel(project, action)}`, action.kind === 'event-publish' || action.kind === 'event-consume')
+    if (action.kind === 'workflow') {
+      const workflow = project.definitions.workflows.find((candidate) => candidate.id === action.workflow.workflowId && candidate.version === action.workflow.workflowVersion)
+      workflow?.steps.forEach((step, stepIndex) => {
+        addPath(action.nodeId, step.targetNodeId, `${index + 1}.${stepIndex + 1} ${step.name ?? step.id}`)
+        if (step.compensation) {
+          const targetName = project.topology.nodes.find((node) => node.id === step.compensation?.targetNodeId)?.name ?? step.compensation.targetNodeId
+          addPath(action.nodeId, step.compensation.targetNodeId, `${index + 1}.${stepIndex + 1}C Compensate ${targetName}`)
+        }
       })
     }
     if (executionContext) executionContextByActionId.set(action.id, executionContext)

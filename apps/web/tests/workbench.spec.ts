@@ -741,6 +741,22 @@ test('labels connections and focuses the exact path for a selected interaction',
   await expect(page.getByTestId('rf__edge-orders-to-db')).toContainText('3. point read orders')
 })
 
+test('focuses Workflow steps and compensation paths for a selected interaction', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Payment checkout/ }).click()
+  await page.getByRole('button', { name: 'Definitions' }).click()
+  await page.getByRole('navigation', { name: 'Project definitions' }).getByRole('button', { name: /Durable checkout/ }).click()
+
+  for (const nodeId of ['checkout-coordinator', 'inventory-service', 'payment-service', 'confirmation-service']) {
+    await expect(page.getByTestId(`rf__node-${nodeId}`)).toHaveClass(/is-definition-binding/)
+  }
+  await expect(page.getByTestId('rf__edge-checkout-workflow-inventory')).toContainText('2.1 Reserve inventory')
+  await expect(page.getByTestId('rf__edge-checkout-workflow-inventory')).toContainText('2.1C Compensate Inventory service')
+  await expect(page.getByTestId('rf__edge-checkout-workflow-payment')).toHaveClass(/is-definition-binding/)
+  await expect(page.getByTestId('rf__edge-checkout-workflow-confirmation')).toHaveClass(/is-definition-binding/)
+})
+
 test('shows region and zone boundaries and applies an undoable automatic layout', async ({ page }) => {
   await page.goto('/')
   await openExamplePicker(page)

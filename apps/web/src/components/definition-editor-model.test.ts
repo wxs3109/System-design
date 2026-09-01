@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { performance } from 'node:perf_hooks'
 import { createEmptyProject, createOrderSystemContractFixture, projectFileV3Schema } from '@system-design/model'
+import { createPaymentCheckoutWorkflowExample } from '../lib/examples'
 import {
   addDefinitionResource,
   buildDefinitionTopologyBinding,
@@ -37,6 +38,16 @@ describe('definition editor project transforms', () => {
     const modelBinding = buildDefinitionTopologyBinding(project, { kind: 'dataModels', id: 'orders-model', version: 1 })!
     expect(modelBinding.nodeIds).toEqual(new Set(['orders-db']))
     expect(modelBinding.edgeIds).toEqual(new Set())
+  })
+
+  it('expands Workflow actions into forward and compensation service paths', () => {
+    const project = createPaymentCheckoutWorkflowExample()
+    const binding = buildDefinitionTopologyBinding(project, { kind: 'interactions', id: 'checkout-flow', version: 1 })!
+    expect(binding.nodeIds).toEqual(new Set(['checkout-clients', 'checkout-api', 'checkout-coordinator', 'inventory-service', 'payment-service', 'confirmation-service']))
+    expect(binding.edgeIds).toEqual(new Set(['checkout-clients-api', 'checkout-api-workflow', 'checkout-workflow-inventory', 'checkout-workflow-payment', 'checkout-workflow-confirmation']))
+    expect(binding.edgeLabels.get('checkout-workflow-inventory')).toBe('2.1 Reserve inventory / 2.1C Compensate Inventory service')
+    expect(binding.edgeLabels.get('checkout-workflow-payment')).toBe('2.2 Capture payment / 2.2C Compensate Payment service')
+    expect(binding.edgeLabels.get('checkout-workflow-confirmation')).toBe('2.3 Send confirmation')
   })
 
   it('creates resources with safe references and switches a capacity project to business-aware', () => {

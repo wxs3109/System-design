@@ -113,3 +113,26 @@ Boundaries:
 - redundancy checks cover configured Service and Database copies only and do not model correlated failure, quorum, failover promotion, or data durability;
 - cross-Region findings require unambiguous Region membership on both endpoints and intentionally exclude Global Router route edges;
 - the first rule set is deterministic and local. It has no vendor-specific best practices, cost model, or external policy service.
+
+## Follow-up 1 - Complete Workflow path focus
+
+Status: complete (2026-08-31)
+
+Delivered:
+
+- selected Interactions now expand Workflow actions into every declared forward Service activity;
+- declared compensation activities are included on the same topology paths with explicit `C` step labels;
+- Workflow step targets and every intermediate synchronous topology node are included in the focused node set.
+
+Verification:
+
+- `pnpm --filter @system-design/web test -- src/components/definition-editor-model.test.ts` - 6 tests passed;
+- `pnpm --filter @system-design/web test:e2e -- tests/workbench.spec.ts -g "focuses Workflow steps"` - 1 test passed;
+- `pnpm --filter @system-design/web typecheck` - passed;
+- `pnpm --filter @system-design/web lint` - passed.
+
+Boundaries:
+
+- the projection shows declared Workflow structure, not the runtime branch outcome for a particular request;
+- compensation paths are visible whenever declared even though compensation executes only after an exhausted forward failure;
+- activity paths use the same shortest synchronous-path rule as the current Workflow compiler.
