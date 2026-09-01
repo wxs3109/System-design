@@ -237,6 +237,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
     return (
       <div className="properties-form">
         <div className="section-heading"><div><span>{t('Selected connection')}</span><strong>{edge.sourceSemantic} → {edge.targetSemantic}</strong></div><button type="button" className="icon-button danger" onClick={deleteEdge} aria-label={t('Delete selected connection')}><Trash2 size={16} /></button></div>
+        <label className="field"><span>{t('Connection name')}</span><input value={edge.name ?? ''} placeholder={t('Optional canvas label')} onChange={(event) => updateEdge({ name: event.target.value.trim() ? event.target.value : undefined })} /></label>
         <label className="field"><span>{t('Routing mode')}</span><select value={edge.routingMode} disabled={asynchronous} onChange={(event) => updateEdge({ routingMode: event.target.value as 'weighted-one' | 'fan-out' })}>{asynchronous ? <option value="async-publish">{t('Async publish')}</option> : <><option value="weighted-one">{t('Weighted one-of')}</option><option value="fan-out">{t('Fan-out')}</option></>}</select></label>
         {edge.routingMode === 'weighted-one' ? <Field label={t('Routing weight')} value={edge.weight} min={0.001} step={0.1} onChange={(weight) => updateEdge({ weight })} /> : null}
         <p className="property-help">{t('Routing is applied to every connection from the same output port.')}</p>
@@ -398,16 +399,17 @@ function WorkbenchInner() {
   const resultsPanelRef = useRef<ImperativePanelHandle>(null)
   const [panelVisibility, setPanelVisibility] = useState(defaultPanelVisibility)
   const definitionBindings = useSelectedDefinitionBindings(workspaceView === 'definitions' ? selectedDefinition : null)
+  const hasDefinitionPath = definitionBindings.edgeIds.size > 0
   const topologyNodes = project.topology.nodes
   const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => {
-    const classes = [affected.nodes.has(node.id) ? 'is-fault-target' : '', definitionBindings.nodeIds.has(node.id) ? 'is-definition-binding' : ''].filter(Boolean).join(' ')
+    const classes = [affected.nodes.has(node.id) ? 'is-fault-target' : '', definitionBindings.nodeIds.has(node.id) ? 'is-definition-binding' : '', hasDefinitionPath && !definitionBindings.nodeIds.has(node.id) ? 'is-definition-dimmed' : ''].filter(Boolean).join(' ')
     return { ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(classes ? { className: classes } : {}) }
-  }), [affected.nodes, definitionBindings.nodeIds, topologyNodes, selectedNodeId])
-  const edges = useMemo(() => projectToEdges(project).map((edge) => {
-    const definitionEdge = definitionBindings.nodeIds.has(edge.source) && definitionBindings.nodeIds.has(edge.target)
-    const classes = [affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : ''].filter(Boolean).join(' ')
+  }), [affected.nodes, definitionBindings.nodeIds, hasDefinitionPath, topologyNodes, selectedNodeId])
+  const edges = useMemo(() => projectToEdges(project, definitionBindings.edgeLabels).map((edge) => {
+    const definitionEdge = definitionBindings.edgeIds.has(edge.id)
+    const classes = [affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : '', hasDefinitionPath && !definitionEdge ? 'is-definition-dimmed' : ''].filter(Boolean).join(' ')
     return { ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(classes ? { className: classes } : {}) }
-  }), [affected.edges, definitionBindings.nodeIds, project, selectedEdgeId])
+  }), [affected.edges, definitionBindings.edgeIds, definitionBindings.edgeLabels, hasDefinitionPath, project, selectedEdgeId])
 
   const refreshHistory = useCallback(async (projectId: string) => {
     const repository = getLocalHistoryRepository()

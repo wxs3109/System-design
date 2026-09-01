@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createEmptyProject, createOrderSystemContractFixture, projectFileV3Schema, type SimulationResult } from '@system-design/model'
 import { createRegisteredNode } from '@system-design/components'
-import { redoProject, undoProject, useWorkbenchStore } from './store'
+import { projectToEdges, redoProject, undoProject, useWorkbenchStore } from './store'
 
 const emptyResult: SimulationResult = {
   runId: 'run', scenarioId: 'history-project', seed: 'seed', simulatedDurationMs: 1, wallClockDurationMs: 1,
@@ -146,6 +146,18 @@ describe('validated project undo and redo', () => {
     expect(useWorkbenchStore.getState().project.topology.edges).toEqual([])
     expect(useWorkbenchStore.getState().selectedNodeId).toBe(pasted.id)
     expect(() => projectFileV3Schema.parse(useWorkbenchStore.getState().project)).not.toThrow()
+  })
+
+  it('edits and renders an optional connection name alongside its routing semantics', () => {
+    const project = createOrderSystemContractFixture()
+    useWorkbenchStore.getState().restoreProject(project)
+    useWorkbenchStore.getState().selectEdge('client-to-orders')
+    useWorkbenchStore.getState().updateSelectedEdge({ name: 'Submit order' })
+
+    const updated = useWorkbenchStore.getState().project
+    expect(updated.topology.edges.find((edge) => edge.id === 'client-to-orders')?.name).toBe('Submit order')
+    expect(projectToEdges(updated).find((edge) => edge.id === 'client-to-orders')?.label).toBe('Submit order · sync')
+    expect(() => projectFileV3Schema.parse(updated)).not.toThrow()
   })
 
   it('creates an independent workload when pasting a traffic component', () => {

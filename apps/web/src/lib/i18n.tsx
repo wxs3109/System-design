@@ -91,6 +91,8 @@ const zhCN: Record<string, string> = {
   'No saved runs yet.': '尚无保存的运行。',
   'Selected component': '已选组件',
   'Selected connection': '已选连线',
+  'Connection name': '连线名称',
+  'Optional canvas label': '可选画布标签',
   'Select a component to configure': '选择一个组件进行配置',
   'Select a component on the canvas to edit its executable behavior.': '在画布上选择一个组件以编辑其可执行行为。',
   'Select a component to configure its runtime behavior.': '选择一个组件以配置其运行行为。',

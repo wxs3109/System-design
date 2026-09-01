@@ -40,7 +40,7 @@ interface WorkbenchState {
   updateRegion: (groupId: string, updates: Partial<Pick<TopologyGroup, 'name' | 'kind' | 'nodeIds'>>) => void
   deleteRegion: (groupId: string) => void
   updateSelectedNode: (updates: { name?: string; config?: Record<string, number | string> }) => void
-  updateSelectedEdge: (updates: Partial<Pick<ProjectConnection, 'routingMode' | 'weight'>>) => void
+  updateSelectedEdge: (updates: Partial<Pick<ProjectConnection, 'name' | 'routingMode' | 'weight'>>) => void
   attachPolicy: (target: PolicyAttachment['target'], type: string, version: number) => void
   updatePolicy: (policyId: string, updates: { enabled?: boolean; config?: Record<string, number | string> }) => void
   movePolicy: (policyId: string, direction: -1 | 1) => void
@@ -76,15 +76,17 @@ const projectToNodes = (nodes: ProjectFile['topology']['nodes']): WorkbenchNode[
   initialWidth: 198,
   initialHeight: 76,
 }))
-const projectToEdges = (project: ProjectFile): Edge[] => project.topology.edges.map((edge) => {
-  const routingLabel = edge.routingMode === 'weighted-one' ? undefined : edge.routingMode === 'fan-out' ? 'fan-out' : 'async'
+const projectToEdges = (project: ProjectFile, businessLabels: ReadonlyMap<string, string> = new Map()): Edge[] => project.topology.edges.map((edge) => {
+  const routingLabel = edge.sourceSemantic === 'hit' || edge.sourceSemantic === 'miss'
+    ? edge.sourceSemantic
+    : edge.routingMode === 'fan-out' ? 'fan-out' : edge.routingMode === 'async-publish' ? 'async' : 'sync'
   const policyLabels = project.topology.policies
     .filter((policy) => policy.target.kind === 'edge' && policy.target.id === edge.id)
     .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
     .map((policy) => `${policyRegistry.get(policy.type, policy.version).label}${policy.enabled ? '' : ' (off)'}`)
   return {
     id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: edge.targetPort, type: 'smoothstep', animated: true,
-    label: [routingLabel, ...policyLabels].filter(Boolean).join(' · ') || undefined,
+    label: [businessLabels.get(edge.id), edge.name, routingLabel, ...policyLabels].filter(Boolean).join(' · '),
   }
 })
 const syncNodes = (project: ProjectFile, nodes: WorkbenchNode[]): ProjectFile => ({ ...project, topology: { ...project.topology, nodes: nodes.map((flowNode) => ({ ...flowNode.data, position: flowNode.position })) } })
@@ -96,7 +98,7 @@ const syncEdges = (project: ProjectFile, edges: Edge[]): ProjectFile => ({
       const existing = project.topology.edges.find((candidate) => candidate.id === edge.id)
       return {
         id: edge.id, source: edge.source, target: edge.target, sourcePort: edge.sourceHandle ?? 'out', targetPort: edge.targetHandle ?? 'in',
-        weight: existing?.weight ?? 1, sourceSemantic: existing?.sourceSemantic ?? 'request', targetSemantic: existing?.targetSemantic ?? 'request', routingMode: existing?.routingMode ?? 'weighted-one',
+        ...(existing?.name ? { name: existing.name } : {}), weight: existing?.weight ?? 1, sourceSemantic: existing?.sourceSemantic ?? 'request', targetSemantic: existing?.targetSemantic ?? 'request', routingMode: existing?.routingMode ?? 'weighted-one',
       }
     }),
   },

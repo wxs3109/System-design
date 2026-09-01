@@ -235,3 +235,122 @@ export const referencedNodeIds = (resource: DefinitionResource): string[] => {
   })
   return [...new Set(ids)]
 }
+
+export interface DefinitionTopologyBinding {
+  resource: DefinitionResource
+  nodeIds: Set<string>
+  edgeIds: Set<string>
+  edgeLabels: Map<string, string>
+}
+
+const shortestTopologyPath = (project: ProjectFile, source: string, target: string, asynchronous: boolean) => {
+  if (source === target) return []
+  const outgoing = new Map<string, ProjectFile['topology']['edges']>()
+  project.topology.edges.forEach((edge) => {
+    const allowed = asynchronous ? edge.routingMode === 'async-publish' : edge.routingMode !== 'async-publish'
+    if (allowed) outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge])
+  })
+  const queue = [source]
+  const visited = new Set(queue)
+  const previous = new Map<string, { nodeId: string; edge: ProjectFile['topology']['edges'][number] }>()
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const edge of outgoing.get(current) ?? []) {
+      if (visited.has(edge.target)) continue
+      visited.add(edge.target)
+      previous.set(edge.target, { nodeId: current, edge })
+      if (edge.target === target) {
+        const path: ProjectFile['topology']['edges'] = []
+        let cursor = target
+        while (cursor !== source) {
+          const step = previous.get(cursor)!
+          path.unshift(step.edge)
+          cursor = step.nodeId
+        }
+        return path
+      }
+      queue.push(edge.target)
+    }
+  }
+  return []
+}
+
+const interactionActionLabel = (project: ProjectFile, action: InteractionDefinition['actions'][number]) => {
+  if (action.name) return action.name
+  const operationName = 'operation' in action && action.operation && typeof action.operation === 'object'
+    ? project.definitions.apis.flatMap((api) => api.operations).find((operation) => operation.id === action.operation?.operationId)?.name
+    : undefined
+  if (operationName) return operationName
+  if (action.kind === 'service-call') return `Call ${project.topology.nodes.find((node) => node.id === action.targetNodeId)?.name ?? action.targetNodeId}`
+  if (action.kind === 'data-access') {
+    const model = project.definitions.dataModels.find((candidate) => candidate.id === action.model.modelId && candidate.version === action.model.modelVersion)
+    const object = model?.kind === 'relational' ? model.tables.find((candidate) => candidate.id === action.objectId)
+      : model?.kind === 'document' ? model.collections.find((candidate) => candidate.id === action.objectId)
+        : model?.kind === 'key-value' ? model.namespaces.find((candidate) => candidate.id === action.objectId) : undefined
+    return `${action.operation.replaceAll('-', ' ')} ${object?.name ?? action.objectId}`
+  }
+  if (action.kind === 'cache-access') return `${action.operation} ${project.definitions.cacheKeys.find((key) => key.id === action.key.cacheKeyId)?.name ?? 'cache'}`
+  if (action.kind === 'event-publish' || action.kind === 'event-consume') {
+    const event = project.definitions.events.find((candidate) => candidate.id === action.event.eventId && candidate.version === action.event.eventVersion)
+    return `${action.kind === 'event-publish' ? 'Publish' : 'Consume'} ${event?.name ?? action.event.eventId}`
+  }
+  if (action.kind === 'realtime') return `${action.operation} realtime channel`
+  if (action.kind === 'workflow') return `Run ${project.definitions.workflows.find((workflow) => workflow.id === action.workflow.workflowId)?.name ?? action.workflow.workflowId}`
+  return action.id
+}
+
+const bindInteraction = (project: ProjectFile, interaction: InteractionDefinition) => {
+  const nodeIds = new Set<string>()
+  const edgeIds = new Set<string>()
+  const labels = new Map<string, string[]>()
+  const apiOwner = project.definitions.apis.find((api) => api.id === interaction.entryOperation.apiId && api.version === interaction.entryOperation.apiVersion)?.ownerNodeId
+  const executionContextByActionId = new Map<string, string>()
+  interaction.actions.forEach((action, index) => {
+    const predecessors = [...action.dependsOn, ...(action.condition ? [action.condition.actionId] : [])]
+    const predecessorContexts = new Set(predecessors.map((id) => executionContextByActionId.get(id)).filter((id): id is string => id !== undefined))
+    const inferredCaller = predecessorContexts.size === 0 ? apiOwner : predecessorContexts.size === 1 ? [...predecessorContexts][0] : undefined
+    const source = action.kind === 'api-call' || action.kind === 'service-call' ? action.sourceNodeId
+      : action.kind === 'event-publish' ? action.producerNodeId
+        : action.kind === 'event-consume' ? action.brokerNodeId : inferredCaller
+    const target = action.kind === 'api-call' || action.kind === 'service-call' ? action.targetNodeId
+      : action.kind === 'data-access' || action.kind === 'cache-access' ? action.nodeId
+        : action.kind === 'event-publish' ? action.brokerNodeId
+          : action.kind === 'event-consume' ? action.consumerNodeId : action.nodeId
+    const executionContext = action.kind === 'api-call' || action.kind === 'service-call' ? action.targetNodeId
+      : action.kind === 'event-publish' ? action.producerNodeId
+        : action.kind === 'event-consume' ? action.consumerNodeId : inferredCaller
+    if (source) nodeIds.add(source)
+    nodeIds.add(target)
+    if (source) {
+      const stepLabel = `${index + 1}. ${interactionActionLabel(project, action)}`
+      shortestTopologyPath(project, source, target, action.kind === 'event-publish' || action.kind === 'event-consume').forEach((edge) => {
+        edgeIds.add(edge.id)
+        const edgeLabels = labels.get(edge.id) ?? []
+        if (!edgeLabels.includes(stepLabel)) edgeLabels.push(stepLabel)
+        labels.set(edge.id, edgeLabels)
+        nodeIds.add(edge.source)
+        nodeIds.add(edge.target)
+      })
+    }
+    if (executionContext) executionContextByActionId.set(action.id, executionContext)
+  })
+  return { nodeIds, edgeIds, edgeLabels: new Map([...labels].map(([edgeId, values]) => [edgeId, values.join(' / ')])) }
+}
+
+export const buildDefinitionTopologyBinding = (project: ProjectFile, selection: DefinitionSelection): DefinitionTopologyBinding | undefined => {
+  const resource = findDefinitionResource(project, selection)
+  if (!resource) return undefined
+  const nodeIds = new Set(referencedNodeIds(resource))
+  const edgeIds = new Set<string>()
+  const edgeLabels = new Map<string, string>()
+  const interactions = 'actions' in resource ? [resource]
+    : 'operationMix' in resource ? resource.operationMix.flatMap((mix) => project.definitions.interactions.filter((interaction) => interaction.id === mix.interaction.interactionId && interaction.version === mix.interaction.interactionVersion))
+      : []
+  interactions.forEach((interaction) => {
+    const binding = bindInteraction(project, interaction)
+    binding.nodeIds.forEach((id) => nodeIds.add(id))
+    binding.edgeIds.forEach((id) => edgeIds.add(id))
+    binding.edgeLabels.forEach((label, edgeId) => edgeLabels.set(edgeId, edgeLabels.has(edgeId) ? `${edgeLabels.get(edgeId)} / ${label}` : label))
+  })
+  return { resource, nodeIds, edgeIds, edgeLabels }
+}

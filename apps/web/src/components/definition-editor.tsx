@@ -7,7 +7,7 @@ import type {
 } from '@system-design/model'
 import { useWorkbenchStore, type ProjectEditIssue } from '@/lib/store'
 import {
-  addDefinitionResource, createDefinitionResource, definitionGroups, findDefinitionResource, listDefinitionResources, removeDefinitionResource,
+  addDefinitionResource, buildDefinitionTopologyBinding, createDefinitionResource, definitionGroups, findDefinitionResource, listDefinitionResources, removeDefinitionResource,
   replaceDefinitionResource, selectionKey, type DataModelKind, type DefinitionKind, type DefinitionResource, type DefinitionSelection,
 } from './definition-editor-model'
 import { ApiEditor, CacheKeyEditor, EventEditor, JsonSchemaEditor, OperationWorkloadEditor, WorkflowEditor } from './definition-resource-editors'
@@ -177,23 +177,6 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
 
 export const useSelectedDefinitionBindings = (selection: DefinitionSelection | null) => {
   const project = useWorkbenchStore((state) => state.project)
-  return useMemo(() => {
-    if (!selection) return { resource: undefined, nodeIds: new Set<string>() }
-    const selected = findDefinitionResource(project, selection)
-    if (!selected) return { resource: undefined, nodeIds: new Set<string>() }
-    const nodeIds = new Set<string>()
-    if ('ownerNodeId' in selected) nodeIds.add(selected.ownerNodeId)
-    if ('producerNodeId' in selected) { nodeIds.add(selected.producerNodeId); selected.consumerNodeIds.forEach((id) => nodeIds.add(id)) }
-    if ('sourceNodeId' in selected && !('actions' in selected)) nodeIds.add(selected.sourceNodeId)
-    if ('steps' in selected) selected.steps.forEach((step) => { nodeIds.add(step.targetNodeId); if (step.compensation) nodeIds.add(step.compensation.targetNodeId) })
-    if ('actions' in selected) selected.actions.forEach((action) => {
-      if ('sourceNodeId' in action) nodeIds.add(action.sourceNodeId)
-      if ('targetNodeId' in action) nodeIds.add(action.targetNodeId)
-      if ('nodeId' in action) nodeIds.add(action.nodeId)
-      if ('producerNodeId' in action) nodeIds.add(action.producerNodeId)
-      if ('consumerNodeId' in action) nodeIds.add(action.consumerNodeId)
-      if ('brokerNodeId' in action) nodeIds.add(action.brokerNodeId)
-    })
-    return { resource: selected, nodeIds }
-  }, [project, selection])
+  return useMemo(() => selection ? buildDefinitionTopologyBinding(project, selection) ?? { resource: undefined, nodeIds: new Set<string>(), edgeIds: new Set<string>(), edgeLabels: new Map<string, string>() }
+    : { resource: undefined, nodeIds: new Set<string>(), edgeIds: new Set<string>(), edgeLabels: new Map<string, string>() }, [project, selection])
 }

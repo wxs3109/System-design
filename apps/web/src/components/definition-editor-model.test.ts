@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks'
 import { createEmptyProject, createOrderSystemContractFixture, projectFileV3Schema } from '@system-design/model'
 import {
   addDefinitionResource,
+  buildDefinitionTopologyBinding,
   createDefinitionResource,
   findDefinitionResource,
   listDefinitionResources,
@@ -20,6 +21,22 @@ describe('definition editor project transforms', () => {
     ])
     expect(listDefinitionResources(project, 'operationWorkloads')).toEqual([expect.objectContaining({ id: 'order-operations', kind: 'operationWorkloads' })])
     expect(findDefinitionResource(project, { kind: 'events', id: 'order-created', version: 1 })).toMatchObject({ name: 'OrderCreated' })
+  })
+
+  it('projects an interaction onto exact executable topology paths with step labels', () => {
+    const project = createOrderSystemContractFixture()
+    const binding = buildDefinitionTopologyBinding(project, { kind: 'interactions', id: 'create-order-flow', version: 1 })!
+    expect(binding.nodeIds).toEqual(new Set(['client-traffic', 'orders-service', 'orders-db', 'orders-cache', 'orders-stream', 'fulfillment-worker']))
+    expect(binding.edgeIds).toEqual(new Set(['client-to-orders', 'orders-to-db', 'orders-to-cache', 'orders-to-stream', 'stream-to-worker']))
+    expect(binding.edgeLabels.get('client-to-orders')).toBe('1. Create order')
+    expect(binding.edgeLabels.get('orders-to-db')).toContain('2. insert orders')
+    expect(binding.edgeLabels.get('orders-to-db')).toContain('3. insert order_items')
+    expect(binding.edgeLabels.get('orders-to-stream')).toBe('5. Publish OrderCreated')
+    expect(binding.edgeLabels.get('stream-to-worker')).toBe('6. Consume OrderCreated')
+
+    const modelBinding = buildDefinitionTopologyBinding(project, { kind: 'dataModels', id: 'orders-model', version: 1 })!
+    expect(modelBinding.nodeIds).toEqual(new Set(['orders-db']))
+    expect(modelBinding.edgeIds).toEqual(new Set())
   })
 
   it('creates resources with safe references and switches a capacity project to business-aware', () => {

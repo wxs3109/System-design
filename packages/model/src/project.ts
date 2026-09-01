@@ -22,6 +22,7 @@ export const portSemanticSchema = z.enum(['request', 'response', 'publish', 'con
 export const routingModeSchema = z.enum(['weighted-one', 'fan-out', 'async-publish'])
 
 export const projectConnectionSchema = connectionSchema.omit({ sourcePort: true, targetPort: true }).extend({
+  name: z.string().trim().min(1).max(120).optional(),
   sourcePort: projectIdSchema.default('out'),
   targetPort: projectIdSchema.default('in'),
   sourceSemantic: portSemanticSchema.default('request'),
@@ -535,7 +536,7 @@ export const projectToScenario = (input: AnyProjectFile, experimentId = input.ac
         ? { ...versioned, type: 'traffic' as const, config: { workloadId: experiment.workloads.find((workload) => workload.sourceNodeId === node.id)?.id ?? `${node.id}-workload` } }
         : versioned
     }),
-    edges: project.topology.edges.map(({ sourceSemantic: _sourceSemantic, targetSemantic: _targetSemantic, routingMode: _routingMode, ...edge }) => ({ ...edge, sourcePort: 'out' as const, targetPort: 'in' as const })),
+    edges: project.topology.edges.map(({ name: _name, sourceSemantic: _sourceSemantic, targetSemantic: _targetSemantic, routingMode: _routingMode, ...edge }) => ({ ...edge, sourcePort: 'out' as const, targetPort: 'in' as const })),
     workloads: experiment.workloads,
     faults: expandedFaults.filter((fault) => !operationFaults.includes(fault)),
     simulation: experiment.simulation,

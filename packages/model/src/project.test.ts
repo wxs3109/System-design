@@ -75,6 +75,14 @@ describe('ProjectFile v2', () => {
     expect(projectFileV2Schema.parse(JSON.parse(JSON.stringify(project))).topology.edges[0]!.routingMode).toBe(routingMode)
   })
 
+  it('round-trips an optional canvas connection name without leaking it into runtime edges', () => {
+    const project = migrateProjectV2ToProjectV3(migrateScenarioV1ToProjectV2(scenarioV1()))
+    project.topology.edges[0]!.name = 'Submit request'
+    const parsed = parseProjectFile(JSON.parse(JSON.stringify(project)))
+    expect(parsed.topology.edges[0]?.name).toBe('Submit request')
+    expect(projectToScenario(parsed).edges[0]).not.toHaveProperty('name')
+  })
+
   it('rejects asynchronous routing without publish and consume semantics', () => {
     const project = migrateScenarioV1ToProjectV2(scenarioV1())
     project.topology.edges[0]!.routingMode = 'async-publish'
