@@ -136,3 +136,25 @@ Boundaries:
 - the projection shows declared Workflow structure, not the runtime branch outcome for a particular request;
 - compensation paths are visible whenever declared even though compensation executes only after an exhausted forward failure;
 - activity paths use the same shortest synchronous-path rule as the current Workflow compiler.
+
+## Follow-up 2 - Restore Definitions path de-emphasis
+
+Status: complete (2026-08-31)
+
+Delivered:
+
+- corrected the CSS scope to match `is-definitions-mode` on the React Flow root;
+- unrelated nodes now render at 22% opacity and unrelated connections at 14% while an exact business path is selected;
+- browser coverage verifies computed styles rather than class names alone.
+
+Verification:
+
+- `pnpm --filter @system-design/web test:e2e -- tests/workbench.spec.ts -g "labels connections and focuses"` - 1 test passed;
+- `pnpm --filter @system-design/web typecheck` - passed;
+- `pnpm --filter @system-design/web lint` - passed.
+
+Boundaries:
+
+- de-emphasis activates only when the selected definition resolves at least one exact topology edge;
+- resource-only bindings such as an API or data model continue to highlight their directly bound nodes without dimming the rest of the topology;
+- fault-target styling remains independent and can coexist with Definitions mode.

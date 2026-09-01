@@ -736,6 +736,8 @@ test('labels connections and focuses the exact path for a selected interaction',
   await expect(page.getByTestId('rf__edge-orders-to-db')).toHaveClass(/is-definition-binding/)
   await expect(page.getByTestId('rf__edge-orders-to-stream')).toHaveClass(/is-definition-dimmed/)
   await expect(page.getByTestId('rf__node-fulfillment-worker')).toHaveClass(/is-definition-dimmed/)
+  await expect(page.getByTestId('rf__edge-orders-to-stream')).toHaveCSS('opacity', '0.14')
+  await expect(page.getByTestId('rf__node-fulfillment-worker')).toHaveCSS('opacity', '0.22')
   await expect(page.getByTestId('rf__edge-client-to-orders')).toContainText('1. Get order')
   await expect(page.getByTestId('rf__edge-orders-to-cache')).toContainText('2. get Order cache key')
   await expect(page.getByTestId('rf__edge-orders-to-db')).toContainText('3. point read orders')

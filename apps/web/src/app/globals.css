@@ -194,9 +194,9 @@ button { color: inherit; }
 .canvas-stage .react-flow__edge.selected .react-flow__edge-path { stroke: var(--cyan); }
 .canvas-stage .react-flow__edge.is-definition-binding .react-flow__edge-path { stroke: var(--cyan); stroke-width: 2; }
 .canvas-stage .react-flow__node.is-definition-binding .component-node { border-color: var(--cyan); box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan) 18%, transparent), 0 10px 32px var(--shadow); }
-.canvas-stage.is-definitions-mode .react-flow__node.is-definition-dimmed { opacity: .22; }
-.canvas-stage.is-definitions-mode .react-flow__edge.is-definition-dimmed { opacity: .14; }
-.canvas-stage.is-definitions-mode .react-flow__node, .canvas-stage.is-definitions-mode .react-flow__edge { transition: opacity .15s ease; }
+.canvas-stage .react-flow.is-definitions-mode .react-flow__node.is-definition-dimmed { opacity: .22; }
+.canvas-stage .react-flow.is-definitions-mode .react-flow__edge.is-definition-dimmed { opacity: .14; }
+.canvas-stage .react-flow.is-definitions-mode .react-flow__node, .canvas-stage .react-flow.is-definitions-mode .react-flow__edge { transition: opacity .15s ease; }
 .definition-overlay-legend { max-width: 260px; display: flex; align-items: center; gap: 7px; padding: 7px 9px; color: var(--muted-bright); background: var(--panel-translucent); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 18px var(--shadow); font-size: 8px; }
 .definition-overlay-legend svg { flex: 0 0 auto; color: var(--cyan); }
 .definition-overlay-legend strong { color: var(--text); }
