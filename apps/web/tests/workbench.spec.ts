@@ -759,6 +759,29 @@ test('shows region and zone boundaries and applies an undoable automatic layout'
   await expect(page.getByTestId('rf__node-primary-api')).toHaveAttribute('style', before!)
 })
 
+test('projects simulation metrics onto nodes and observed connection events', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Direct service/ }).click()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+
+  const overlay = page.getByLabel('Simulation metrics overlay')
+  await expect(overlay.locator('[data-node-metric-id=service-direct]')).toContainText(/util./)
+  await expect(overlay.locator('[data-node-metric-id=service-direct]')).toContainText(/processed/)
+  await expect(page.getByTestId('rf__node-service-direct')).toHaveClass(/is-simulation-/)
+  await expect(page.getByTestId('rf__edge-edge-direct-2')).toContainText(/observed [1-9]/)
+  await expect(page.getByTestId('rf__edge-edge-direct-2')).toHaveClass(/is-simulation-active/)
+
+  const toggle = page.getByRole('button', { name: 'Canvas metrics' })
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await toggle.click()
+  await expect(overlay).toHaveCount(0)
+  await expect(page.getByTestId('rf__edge-edge-direct-2')).not.toContainText(/observed/)
+  await toggle.click()
+  await expect(page.getByLabel('Simulation metrics overlay')).toBeVisible()
+})
+
 test('edits business definitions in one ProjectFile with inline validation, undo and reload persistence', async ({ page }) => {
   await page.goto('/')
   const fixture = createOrderSystemContractFixture()

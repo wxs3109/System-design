@@ -6,7 +6,7 @@ import { builtInComponentTypes, componentCatalog, componentPresetRegistry, compo
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ComponentNode, componentIcons } from './component-node'
@@ -21,11 +21,13 @@ import { DefinitionEditor, DefinitionsExplorer, useSelectedDefinitionBindings } 
 import type { DefinitionSelection } from './definition-editor-model'
 import { FormatDialog } from './format-dialog'
 import { TopologyGroupOverlay } from './topology-group-overlay'
+import { SimulationCanvasOverlay } from './simulation-canvas-overlay'
 import { createAsyncExample, createCollaborativeEditingExample, createDataPlatformExample, createDirectExample, createGlobalStorefrontExample, createIncidentFanOutExample, createJobSchedulerExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createOrderSystemExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology } from '@/lib/canvas-layout'
+import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount } from '@/lib/canvas-metrics'
 
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
@@ -395,6 +397,7 @@ function WorkbenchInner() {
   const [formatDialog, setFormatDialog] = useState<'openapi' | 'dbml' | null>(null)
   const [themeReady, setThemeReady] = useState(false)
   const [layoutBusy, setLayoutBusy] = useState(false)
+  const [canvasMetricsVisible, setCanvasMetricsVisible] = useState(true)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
@@ -403,16 +406,28 @@ function WorkbenchInner() {
   const [panelVisibility, setPanelVisibility] = useState(defaultPanelVisibility)
   const definitionBindings = useSelectedDefinitionBindings(workspaceView === 'definitions' ? selectedDefinition : null)
   const hasDefinitionPath = definitionBindings.edgeIds.size > 0
+  const canvasMetrics = useMemo(() => result ? buildCanvasMetricProjection(result) : null, [result])
+  const showCanvasMetrics = workspaceView === 'topology' && canvasMetricsVisible && canvasMetrics !== null
   const topologyNodes = project.topology.nodes
   const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => {
-    const classes = [affected.nodes.has(node.id) ? 'is-fault-target' : '', definitionBindings.nodeIds.has(node.id) ? 'is-definition-binding' : '', hasDefinitionPath && !definitionBindings.nodeIds.has(node.id) ? 'is-definition-dimmed' : ''].filter(Boolean).join(' ')
+    const metric = showCanvasMetrics ? canvasMetrics.nodes.get(node.id) : undefined
+    const classes = [affected.nodes.has(node.id) ? 'is-fault-target' : '', definitionBindings.nodeIds.has(node.id) ? 'is-definition-binding' : '', hasDefinitionPath && !definitionBindings.nodeIds.has(node.id) ? 'is-definition-dimmed' : '', metric ? `is-simulation-${metric.severity}` : ''].filter(Boolean).join(' ')
     return { ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(classes ? { className: classes } : {}) }
-  }), [affected.nodes, definitionBindings.nodeIds, hasDefinitionPath, topologyNodes, selectedNodeId])
-  const edges = useMemo(() => projectToEdges(project, definitionBindings.edgeLabels).map((edge) => {
+  }), [affected.nodes, canvasMetrics, definitionBindings.nodeIds, hasDefinitionPath, showCanvasMetrics, topologyNodes, selectedNodeId])
+  const edgeProjectionLabels = useMemo(() => {
+    const labels = new Map(definitionBindings.edgeLabels)
+    if (showCanvasMetrics) canvasMetrics.edges.forEach((metric, edgeId) => {
+      const observed = `${t('observed')} ${formatCanvasCount(metric.observedCalls)}${metric.observedFailures > 0 ? ` · ${t('failed')} ${formatCanvasCount(metric.observedFailures)}` : ''}${metric.observedBytes > 0 ? ` · ${formatCanvasBytes(metric.observedBytes)}` : ''}`
+      labels.set(edgeId, labels.has(edgeId) ? `${labels.get(edgeId)} / ${observed}` : observed)
+    })
+    return labels
+  }, [canvasMetrics, definitionBindings.edgeLabels, showCanvasMetrics, t])
+  const edges = useMemo(() => projectToEdges(project, edgeProjectionLabels).map((edge) => {
     const definitionEdge = definitionBindings.edgeIds.has(edge.id)
-    const classes = [affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : '', hasDefinitionPath && !definitionEdge ? 'is-definition-dimmed' : ''].filter(Boolean).join(' ')
+    const metric = showCanvasMetrics ? canvasMetrics.edges.get(edge.id) : undefined
+    const classes = [affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : '', hasDefinitionPath && !definitionEdge ? 'is-definition-dimmed' : '', metric ? `is-simulation-${metric.severity}` : ''].filter(Boolean).join(' ')
     return { ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(classes ? { className: classes } : {}) }
-  }), [affected.edges, definitionBindings.edgeIds, definitionBindings.edgeLabels, hasDefinitionPath, project, selectedEdgeId])
+  }), [affected.edges, canvasMetrics, definitionBindings.edgeIds, edgeProjectionLabels, hasDefinitionPath, project, selectedEdgeId, showCanvasMetrics])
 
   const refreshHistory = useCallback(async (projectId: string) => {
     const repository = getLocalHistoryRepository()
@@ -654,6 +669,7 @@ function WorkbenchInner() {
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
           <ViewportPortal><TopologyGroupOverlay project={project} /></ViewportPortal>
+          {showCanvasMetrics ? <ViewportPortal><SimulationCanvasOverlay project={project} metrics={canvasMetrics} t={t} /></ViewportPortal> : null}
           <Controls position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} aria-label={t('Canvas controls')}>
             <ControlButton onClick={() => reactFlow.zoomIn()} aria-label={t('Zoom in')} title={t('Zoom in')}><Plus size={14} /></ControlButton>
             <ControlButton onClick={() => reactFlow.zoomOut()} aria-label={t('Zoom out')} title={t('Zoom out')}><Minus size={14} /></ControlButton>
@@ -665,6 +681,7 @@ function WorkbenchInner() {
           <Panel position="top-left"><div className="canvas-toolbar">
             <button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> {t('Clear canvas')}</button>
             <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} aria-busy={layoutBusy} onClick={() => void autoLayout()}><LayoutDashboard size={14} /> {t(layoutBusy ? 'Laying out…' : 'Auto layout')}</button>
+            {result ? <button type="button" aria-pressed={canvasMetricsVisible} onClick={() => setCanvasMetricsVisible((visible) => !visible)}><Activity size={14} /> {t('Canvas metrics')}</button> : null}
             <div className="example-picker">
               <button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> {t('Load example')} <ChevronDown size={13} /></button>
               {exampleOpen ? <div className="example-menu">{examples.map(([name, description, createProject]) => <button type="button" key={name} onClick={() => { setProject(createProject()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>{t(`example.${name}`, {}, name)}</strong><span>{t(`example-description.${name}`, {}, description)}</span></button>)}</div> : null}
