@@ -348,28 +348,131 @@ export const createJobSchedulerExample = (): ProjectFile => {
 export const createVideoDeliveryExample = (): ProjectFile => {
   const project = createEmptyProject('video-delivery')
   project.name = 'Video delivery'
-  const viewers = createRegisteredNode('traffic', 'video-viewers', { x: 60, y: 180 }, 'video-views')
-  const cdn = createRegisteredNode('cdn', 'video-cdn', { x: 360, y: 180 })
-  const cachedResponse = createRegisteredNode('service', 'edge-response', { x: 680, y: 60 })
-  const origin = createRegisteredNode('object-storage', 'video-origin', { x: 680, y: 300 })
+  project.modelingMode = 'business-aware'
+  const uploadStreams = createRegisteredNode('traffic', 'video-upload-streams', { x: 20, y: 125 }, 'video-upload-chunks')
+  const creators = createRegisteredNode('traffic', 'video-creators', { x: 20, y: 230 }, 'upload-compatibility-load')
+  const rawUploads = createRegisteredNode('object-storage', 'raw-video-storage', { x: 250, y: 20 })
+  const uploadApi = createRegisteredNode('service', 'video-upload-api', { x: 480, y: 20 })
+  const transcodeQueue = createRegisteredNode('queue', 'transcode-queue', { x: 710, y: 20 })
+  const transcoders = createRegisteredNode('service', 'transcoder-workers', { x: 940, y: 20 })
+  const renditions = createRegisteredNode('object-storage', 'video-rendition-storage', { x: 940, y: 250 })
+  const metadata = createRegisteredNode('database', 'video-metadata-db', { x: 710, y: 250 })
+  const viewers = createRegisteredNode('traffic', 'video-viewers', { x: 20, y: 335 }, 'playback-compatibility-load')
+  const playbackApi = createRegisteredNode('service', 'playback-api', { x: 250, y: 250 })
+  const metadataCache = createRegisteredNode('cache', 'video-metadata-cache', { x: 480, y: 250 })
+  const segmentStreams = createRegisteredNode('traffic', 'segment-streams', { x: 20, y: 500 }, 'video-segment-requests')
+  const cdn = createRegisteredNode('cdn', 'video-cdn', { x: 360, y: 480 })
+  const edgeResponse = createRegisteredNode('service', 'edge-stream-response', { x: 710, y: 480 })
+  uploadStreams.name = 'Multipart uploader'
+  creators.name = 'Creator Studio'
+  rawUploads.name = 'Raw upload storage'
+  uploadApi.name = 'Video upload API'
+  transcodeQueue.name = 'Transcode queue'
+  transcoders.name = 'Transcoder workers'
+  renditions.name = 'Encoded renditions'
+  metadata.name = 'Video metadata DB'
   viewers.name = 'Video viewers'
-  cdn.name = 'Edge CDN'
-  cachedResponse.name = 'Cached response'
-  origin.name = 'Video origin'
-  cdn.config = { ...cdn.config, popCount: 4, popSelection: 'consistent-hash', capacityEntriesPerPop: 16, ttlMs: 60_000, keySpaceSize: 8, hotKeyProbability: 0.4, maxConcurrentRequests: 1_000, lookupTimeMs: 0.1, edgeLatencyMs: 8, edgeBandwidthMbps: 1_000, originRoundTripMs: 80, originBandwidthMbps: 200, defaultObjectSizeBytes: 1_048_576, jitterMs: 0, errorRate: 0, maxQueueSize: 10_000 }
-  cachedResponse.config = { ...cachedResponse.config, serviceTimeMs: 0.1, jitterMs: 0, errorRate: 0 }
-  origin.config = { ...origin.config, defaultObjectSizeBytes: 1_048_576, baseLatencyMs: 10, jitterMs: 0, readThroughputMbps: 500, errorRate: 0 }
-  project.topology.nodes = [viewers, cdn, cachedResponse, origin]
+  playbackApi.name = 'Playback API'
+  metadataCache.name = 'Metadata cache'
+  segmentStreams.name = 'Adaptive streaming sessions'
+  cdn.name = 'Video CDN'
+  edgeResponse.name = 'Edge segment response'
+  rawUploads.config = { ...rawUploads.config, maxConcurrentRequests: 200, defaultObjectSizeBytes: 67_108_864, readRatio: 0.1, baseLatencyMs: 20, jitterMs: 2, readThroughputMbps: 2_000, writeThroughputMbps: 1_000, errorRate: 0, maxQueueSize: 2_000 }
+  uploadApi.config = { ...uploadApi.config, replicas: 4, concurrencyPerReplica: 25, serviceTimeMs: 8, jitterMs: 1, errorRate: 0, maxQueueSize: 2_000 }
+  transcodeQueue.config = { ...transcodeQueue.config, consumers: 24, deliveryTimeMs: 5, jitterMs: 1, maxDepth: 20_000, errorRate: 0 }
+  transcoders.config = { ...transcoders.config, replicas: 24, concurrencyPerReplica: 2, serviceTimeMs: 450, jitterMs: 25, errorRate: 0, maxQueueSize: 5_000 }
+  renditions.config = { ...renditions.config, maxConcurrentRequests: 2_000, defaultObjectSizeBytes: 2_097_152, readRatio: 0.98, baseLatencyMs: 8, jitterMs: 1, readThroughputMbps: 10_000, writeThroughputMbps: 2_000, errorRate: 0, maxQueueSize: 20_000 }
+  metadata.config = { ...metadata.config, maxConnections: 300, queryTimeMs: 4, jitterMs: 1, errorRate: 0, maxQueueSize: 5_000, shardCount: 8, replicasPerShard: 2, readPreference: 'replica-preferred', replicationDelayMs: 50, writeRatio: 0.15, keySpaceSize: 10_000_000, hotKeyProbability: 0.15 }
+  playbackApi.config = { ...playbackApi.config, replicas: 8, concurrencyPerReplica: 100, serviceTimeMs: 3, jitterMs: 0.5, errorRate: 0, maxQueueSize: 10_000 }
+  metadataCache.config = { ...metadataCache.config, capacityEntries: 1_000_000, ttlMs: 300_000, keySpaceSize: 10_000_000, hotKeyProbability: 0.7, maxConcurrentRequests: 5_000, operationTimeMs: 0.4, jitterMs: 0.1, errorRate: 0, maxQueueSize: 20_000 }
+  cdn.config = { ...cdn.config, popCount: 12, popSelection: 'consistent-hash', capacityEntriesPerPop: 50_000, ttlMs: 300_000, keySpaceSize: 50_000, hotKeyProbability: 0.7, maxConcurrentRequests: 20_000, lookupTimeMs: 0.2, edgeLatencyMs: 8, edgeBandwidthMbps: 10_000, originRoundTripMs: 75, originBandwidthMbps: 2_000, defaultObjectSizeBytes: 2_097_152, jitterMs: 0.5, errorRate: 0, maxQueueSize: 100_000 }
+  edgeResponse.config = { ...edgeResponse.config, replicas: 20, concurrencyPerReplica: 200, serviceTimeMs: 0.5, jitterMs: 0.1, errorRate: 0, maxQueueSize: 50_000 }
+  project.topology.nodes = [uploadStreams, creators, rawUploads, uploadApi, transcodeQueue, transcoders, renditions, metadata, viewers, playbackApi, metadataCache, segmentStreams, cdn, edgeResponse]
   project.topology.edges = [
-    connection('viewer-to-cdn', 'video-viewers', 'video-cdn'),
-    { ...connection('cdn-cache-hit', 'video-cdn', 'edge-response'), sourcePort: 'hit', sourceSemantic: 'hit' },
-    { ...connection('cdn-origin-fetch', 'video-cdn', 'video-origin'), sourcePort: 'miss', sourceSemantic: 'miss' },
+    connection('upload-streams-to-raw-storage', 'video-upload-streams', 'raw-video-storage'),
+    connection('creator-to-upload-api', 'video-creators', 'video-upload-api'),
+    connection('upload-api-to-metadata', 'video-upload-api', 'video-metadata-db'),
+    asyncConnection('upload-api-to-transcode-queue', 'video-upload-api', 'transcode-queue'),
+    asyncConnection('queue-to-transcoders', 'transcode-queue', 'transcoder-workers'),
+    connection('transcoders-to-renditions', 'transcoder-workers', 'video-rendition-storage'),
+    connection('renditions-to-metadata', 'video-rendition-storage', 'video-metadata-db'),
+    connection('viewers-to-playback-api', 'video-viewers', 'playback-api'),
+    connection('playback-api-to-cache', 'playback-api', 'video-metadata-cache'),
+    { ...connection('metadata-cache-miss', 'video-metadata-cache', 'video-metadata-db'), sourcePort: 'miss', sourceSemantic: 'miss' },
+    connection('segments-to-cdn', 'segment-streams', 'video-cdn'),
+    { ...connection('cdn-cache-hit', 'video-cdn', 'edge-stream-response'), sourcePort: 'hit', sourceSemantic: 'hit' },
+    { ...connection('cdn-origin-fetch', 'video-cdn', 'video-rendition-storage'), sourcePort: 'miss', sourceSemantic: 'miss' },
   ]
+  project.definitions = {
+    schemaVersion: 1,
+    jsonSchemas: [
+      { id: 'schema.VideoUpload', version: 1, name: 'Video upload completion', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['videoId', 'creatorId', 'title', 'sourceObjectKey'], properties: { videoId: { type: 'string', format: 'uuid' }, creatorId: { type: 'string', format: 'uuid' }, title: { type: 'string' }, sourceObjectKey: { type: 'string' } } } },
+      { id: 'schema.PlaybackManifest', version: 1, name: 'Adaptive playback manifest', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['videoId', 'manifestUrl', 'profiles'], properties: { videoId: { type: 'string', format: 'uuid' }, manifestUrl: { type: 'string', format: 'uri' }, profiles: { type: 'array', items: { type: 'string', enum: ['360p', '720p', '1080p', '4k'] } } } } },
+      { id: 'schema.TranscodeRequested', version: 1, name: 'Transcode requested event', dialect: 'https://json-schema.org/draft/2020-12/schema', schema: { type: 'object', required: ['videoId', 'sourceObjectKey'], properties: { videoId: { type: 'string', format: 'uuid' }, sourceObjectKey: { type: 'string' }, profiles: { type: 'array', items: { type: 'string' } } } } },
+    ],
+    apis: [
+      { id: 'video-upload-contract', version: 1, name: 'Video upload API', ownerNodeId: 'video-upload-api', operations: [{ id: 'complete-video-upload', name: 'Complete direct video upload', method: 'POST', path: '/videos/{videoId}/uploads/complete', request: { schema: { schemaId: 'schema.VideoUpload', schemaVersion: 1 }, estimatedBytes: 2_048 }, responses: [{ statusCode: '202' }], handlerTimeMs: 8, slo: { latencyP95Ms: 250, availability: 0.999 } }] },
+      { id: 'playback-contract', version: 1, name: 'Playback API', ownerNodeId: 'playback-api', operations: [{ id: 'get-playback-manifest', name: 'Get adaptive playback manifest', method: 'GET', path: '/videos/{videoId}/playback', responses: [{ statusCode: '200', body: { schema: { schemaId: 'schema.PlaybackManifest', schemaVersion: 1 }, estimatedBytes: 4_096 } }], handlerTimeMs: 3, slo: { latencyP95Ms: 100, availability: 0.9999 } }] },
+    ],
+    dataModels: [{
+      id: 'video-metadata-model', version: 1, name: 'Video metadata', ownerNodeId: 'video-metadata-db', kind: 'relational', tables: [{
+        id: 'videos', name: 'videos',
+        columns: [
+          { id: 'id', name: 'id', type: { kind: 'uuid' }, nullable: false },
+          { id: 'creator-id', name: 'creator_id', type: { kind: 'uuid' }, nullable: false },
+          { id: 'title', name: 'title', type: { kind: 'string', maxLength: 200 }, nullable: false },
+          { id: 'status', name: 'status', type: { kind: 'string', maxLength: 24 }, nullable: false },
+          { id: 'source-key', name: 'source_object_key', type: { kind: 'string', maxLength: 500 }, nullable: false },
+          { id: 'manifest-key', name: 'manifest_object_key', type: { kind: 'string', maxLength: 500 }, nullable: true },
+          { id: 'duration-seconds', name: 'duration_seconds', type: { kind: 'integer', bits: 32 }, nullable: true },
+          { id: 'published-at', name: 'published_at', type: { kind: 'datetime' }, nullable: true },
+        ],
+        primaryKey: { id: 'pk-videos', name: 'videos_pk', columnIds: ['id'] },
+        uniqueKeys: [], foreignKeys: [],
+        indexes: [
+          { id: 'ix-videos-creator', name: 'videos_creator_idx', columnIds: ['creator-id'], kind: 'btree', unique: false, includedColumnIds: ['title', 'status'] },
+          { id: 'ix-videos-status', name: 'videos_status_idx', columnIds: ['status'], kind: 'btree', unique: false, includedColumnIds: ['published-at'] },
+        ],
+        estimatedRows: 10_000_000, estimatedRowBytes: 1_024,
+      }],
+    }],
+    events: [{ id: 'transcode-requested', version: 1, name: 'Transcode requested', payloadSchema: { schemaId: 'schema.TranscodeRequested', schemaVersion: 1 }, estimatedPayloadBytes: 1_024, partitionKey: '/videoId', ordering: 'partition-key', delivery: 'at-least-once', producerNodeId: 'video-upload-api', consumerNodeIds: ['transcoder-workers'] }],
+    cacheKeys: [{ id: 'playback-metadata-key', version: 1, name: 'Playback metadata by video', pattern: 'playback:{videoId}', valueSchema: { schemaId: 'schema.PlaybackManifest', schemaVersion: 1 }, estimatedValueBytes: 4_096, ttlSeconds: 300 }],
+    workflows: [],
+    interactions: [
+      {
+        id: 'video-upload-flow', version: 1, name: 'Upload, transcode and publish video', entryOperation: { apiId: 'video-upload-contract', apiVersion: 1, operationId: 'complete-video-upload' }, actions: [
+          { id: 'complete-upload', kind: 'api-call', dependsOn: [], sourceNodeId: 'video-creators', targetNodeId: 'video-upload-api', operation: { apiId: 'video-upload-contract', apiVersion: 1, operationId: 'complete-video-upload' } },
+          { id: 'insert-processing-metadata', kind: 'data-access', dependsOn: ['complete-upload'], nodeId: 'video-metadata-db', model: { modelId: 'video-metadata-model', modelVersion: 1 }, objectId: 'videos', operation: 'insert', estimatedRows: 1 },
+          { id: 'publish-transcode-job', kind: 'event-publish', dependsOn: ['insert-processing-metadata'], producerNodeId: 'video-upload-api', brokerNodeId: 'transcode-queue', event: { eventId: 'transcode-requested', eventVersion: 1 } },
+          { id: 'consume-transcode-job', kind: 'event-consume', dependsOn: ['publish-transcode-job'], consumerNodeId: 'transcoder-workers', brokerNodeId: 'transcode-queue', event: { eventId: 'transcode-requested', eventVersion: 1 } },
+          { id: 'write-renditions-and-publish-metadata', kind: 'data-access', dependsOn: ['consume-transcode-job'], nodeId: 'video-metadata-db', model: { modelId: 'video-metadata-model', modelVersion: 1 }, objectId: 'videos', operation: 'update', estimatedRows: 1 },
+        ],
+      },
+      {
+        id: 'video-playback-flow', version: 1, name: 'Resolve metadata for online playback', entryOperation: { apiId: 'playback-contract', apiVersion: 1, operationId: 'get-playback-manifest' }, actions: [
+          { id: 'request-playback', kind: 'api-call', dependsOn: [], sourceNodeId: 'video-viewers', targetNodeId: 'playback-api', operation: { apiId: 'playback-contract', apiVersion: 1, operationId: 'get-playback-manifest' } },
+          { id: 'get-cached-playback-metadata', kind: 'cache-access', dependsOn: ['request-playback'], nodeId: 'video-metadata-cache', operation: 'get', key: { cacheKeyId: 'playback-metadata-key', cacheKeyVersion: 1 } },
+          { id: 'read-video-metadata-on-miss', kind: 'data-access', dependsOn: ['get-cached-playback-metadata'], condition: { actionId: 'get-cached-playback-metadata', outcome: 'cache-miss' }, nodeId: 'video-metadata-db', model: { modelId: 'video-metadata-model', modelVersion: 1 }, objectId: 'videos', operation: 'point-read', estimatedRows: 1 },
+          { id: 'cache-playback-metadata', kind: 'cache-access', dependsOn: ['read-video-metadata-on-miss'], nodeId: 'video-metadata-cache', operation: 'put', key: { cacheKeyId: 'playback-metadata-key', cacheKeyVersion: 1 } },
+        ],
+      },
+    ],
+  }
   const experiment = project.experiments[0]!
   experiment.seed = 'video-delivery'
-  experiment.simulation = { durationSeconds: 5, sampleIntervalMs: 500, maxRequests: 1_000, traceLimit: 100, maxHops: 10 }
-  experiment.workloads = [{ id: 'video-views', name: 'Video requests', sourceNodeId: 'video-viewers', requestsPerSecond: 30, startAtSeconds: 0, durationSeconds: 4, pattern: 'constant', requestBytes: 256 }]
-  return project
+  experiment.simulation = { durationSeconds: 6, sampleIntervalMs: 250, maxRequests: 5_000, traceLimit: 200, maxHops: 20 }
+  experiment.workloads = [
+    { id: 'upload-compatibility-load', name: 'Multipart upload chunks', sourceNodeId: 'video-creators', requestsPerSecond: 1, startAtSeconds: 5, durationSeconds: 1, pattern: 'constant', requestBytes: 67_108_864 },
+    { id: 'playback-compatibility-load', name: 'Playback compatibility load', sourceNodeId: 'video-viewers', requestsPerSecond: 1, startAtSeconds: 5, durationSeconds: 1, pattern: 'constant', requestBytes: 512 },
+    { id: 'video-upload-chunks', name: 'Direct multipart uploads', sourceNodeId: 'video-upload-streams', requestsPerSecond: 2, startAtSeconds: 0, durationSeconds: 5, pattern: 'poisson', requestBytes: 67_108_864 },
+    { id: 'video-segment-requests', name: 'Adaptive bitrate segment requests', sourceNodeId: 'segment-streams', requestsPerSecond: 180, startAtSeconds: 0, durationSeconds: 5, pattern: 'poisson', requestBytes: 512 },
+  ]
+  experiment.operationWorkloads = [
+    { id: 'video-upload-operations', name: 'Creator multipart video uploads', sourceNodeId: 'video-creators', phases: [{ id: 'upload-steady', startAtSeconds: 0, durationSeconds: 5, requestsPerSecond: 2, pattern: 'poisson' }], operationMix: [{ operation: { apiId: 'video-upload-contract', apiVersion: 1, operationId: 'complete-video-upload' }, interaction: { interactionId: 'video-upload-flow', interactionVersion: 1 }, weight: 1, requestBytes: 67_108_864, responseBytes: 256, keyDistribution: { kind: 'uniform', keySpaceSize: 10_000_000 }, valueSizeDistribution: { kind: 'uniform', minBytes: 33_554_432, maxBytes: 134_217_728 } }] },
+    { id: 'video-playback-operations', name: 'Online playback starts', sourceNodeId: 'video-viewers', phases: [{ id: 'playback-steady', startAtSeconds: 0, durationSeconds: 5, requestsPerSecond: 80, pattern: 'poisson' }], operationMix: [{ operation: { apiId: 'playback-contract', apiVersion: 1, operationId: 'get-playback-manifest' }, interaction: { interactionId: 'video-playback-flow', interactionVersion: 1 }, weight: 1, requestBytes: 512, responseBytes: 4_096, keyDistribution: { kind: 'hotspot', keySpaceSize: 50_000, hotKeyCount: 100, hotTrafficFraction: 0.75 }, valueSizeDistribution: { kind: 'fixed', bytes: 4_096 } }] },
+  ]
+  return projectFileV3Schema.parse(project)
 }
 
 export const createCloudDriveDeliveryExample = (): ProjectFile => {

@@ -51,8 +51,35 @@ describe('Job Scheduler example', () => {
 })
 
 describe('CDN examples', () => {
+  it('models upload, transcoding, metadata and adaptive streaming as executable video paths', async () => {
+    const project = createVideoDeliveryExample()
+    expect(project.modelingMode).toBe('business-aware')
+    expect(project.topology.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'video-upload-streams', type: 'traffic' }),
+      expect.objectContaining({ id: 'raw-video-storage', type: 'object-storage' }),
+      expect.objectContaining({ id: 'transcode-queue', type: 'queue' }),
+      expect.objectContaining({ id: 'transcoder-workers', type: 'service' }),
+      expect.objectContaining({ id: 'video-rendition-storage', type: 'object-storage' }),
+      expect.objectContaining({ id: 'video-metadata-db', type: 'database' }),
+      expect.objectContaining({ id: 'video-cdn', type: 'cdn' }),
+    ]))
+    expect(project.definitions.dataModels).toEqual([expect.objectContaining({ id: 'video-metadata-model', ownerNodeId: 'video-metadata-db' })])
+    expect(project.definitions.events).toEqual([expect.objectContaining({ id: 'transcode-requested', producerNodeId: 'video-upload-api', consumerNodeIds: ['transcoder-workers'] })])
+    expect(project.definitions.interactions.map((interaction) => interaction.id)).toEqual(['video-upload-flow', 'video-playback-flow'])
+    expect(project.experiments[0]?.operationWorkloads.map((workload) => workload.sourceNodeId)).toEqual(['video-creators', 'video-viewers'])
+
+    const result = await runSimulation(project, 'youtube-style-video-example')
+    expect(result.nodes.find((node) => node.nodeId === 'raw-video-storage')?.processedRequests).toBeGreaterThan(0)
+    expect(result.nodes.find((node) => node.nodeId === 'transcode-queue')?.processedRequests).toBeGreaterThan(0)
+    expect(result.nodes.find((node) => node.nodeId === 'transcoder-workers')?.processedRequests).toBeGreaterThan(0)
+    expect(result.nodes.find((node) => node.nodeId === 'video-rendition-storage')?.processedRequests).toBeGreaterThan(0)
+    expect(result.nodes.find((node) => node.nodeId === 'video-metadata-db')?.processedRequests).toBeGreaterThan(0)
+    expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'complete-video-upload')).toBe(true)
+    expect(result.events.some((event) => event.type === 'operation-completed' && event.operationId === 'get-playback-manifest')).toBe(true)
+  })
+
   it.each([
-    ['video delivery', createVideoDeliveryExample, 'video-cdn', 'video-origin'],
+    ['video delivery', createVideoDeliveryExample, 'video-cdn', 'video-rendition-storage'],
     ['cloud drive delivery', createCloudDriveDeliveryExample, 'download-cdn', 'drive-origin'],
   ] as const)('provides a valid, executable %s project', async (_name, createExample, cdnId, originId) => {
     const project = createExample()

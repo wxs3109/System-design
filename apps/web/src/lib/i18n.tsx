@@ -359,7 +359,7 @@ const zhCN: Record<string, string> = {
   'example.Data platform': '数据平台',
   'example-description.Job scheduler': '定时 / 周期 / 立即运行 → 到期扫描 → 队列 → 工作节点',
   'example-description.Order system': 'API → 缓存 → 关系数据 → 事件',
-  'example-description.Video delivery': '观看者 → CDN POP → 边缘缓存 / 源站',
+  'example-description.Video delivery': '上传 → 转码 → 元数据 · 播放 → CDN 流式分发',
   'example-description.Product search': '查询 + 商品更新 → 分片搜索索引',
   'example-description.Log search': '流式写入 + 调查查询 → 搜索索引',
   'example-description.Order event fan-out': '订单 → 主题 → 独立履约 / 邮件订阅',

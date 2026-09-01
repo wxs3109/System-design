@@ -34,7 +34,7 @@ const defaultPanelVisibility: PanelVisibility = { faults: true, inspector: true,
 const examples = [
   ['Order system', 'APIs → Cache → Relational data → Events', createOrderSystemExample],
   ['Job scheduler', 'Schedule / recur / run now → due scan → Queue → Workers', createJobSchedulerExample],
-  ['Video delivery', 'Viewers → CDN POPs → Edge cache / Origin', createVideoDeliveryExample],
+  ['Video delivery', 'Upload → Transcode → Metadata · Playback → CDN streaming', createVideoDeliveryExample],
   ['Product search', 'Queries + catalog updates → sharded Search Index', createProductSearchExample],
   ['Log search', 'Streaming ingest + investigations → Search Index', createLogSearchExample],
   ['Order event fan-out', 'Orders → Topic → independent fulfillment / email subscriptions', createOrderEventFanOutExample],
