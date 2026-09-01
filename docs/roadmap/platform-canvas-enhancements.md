@@ -84,3 +84,32 @@ Boundaries:
 - connection observations must not be interpreted as total throughput, total bytes, or a latency percentile;
 - warning means any failure, at least 70% utilization, or a non-zero maximum queue; critical means at least 5% failures or at least 90% utilization; these are presentation thresholds, not architectural findings;
 - overlays represent the latest loaded or completed run and are not persisted into ProjectFile.
+
+## Stage 4 - Static architecture review
+
+Status: complete (2026-08-31)
+
+Delivered:
+
+- a continuously updated Review count and an on-Canvas architecture review panel;
+- clickable findings that select and center the affected node or connection;
+- structural rules for isolated and unreachable components, brokers without downstream consumers, caches without a miss handler, CDNs without an origin, single-replica Services, databases without replicas, routers with zero or one target, Retry without Timeout, and explicit cross-Region dependencies;
+- business-aware cache-miss recognition and Global Router cross-Region routing exclusions to reduce false positives;
+- an audit asserting that no valid built-in example produces an error-level static finding.
+
+Verification:
+
+- `pnpm --filter @system-design/web test -- src/lib/architecture-review.test.ts` - 4 tests passed, including all built-in examples;
+- `pnpm --filter @system-design/web test:e2e -- tests/workbench.spec.ts -g "reviews structural architecture risks"` - 1 test passed;
+- `pnpm --filter @system-design/web typecheck` - passed;
+- `pnpm --filter @system-design/web lint` - passed;
+- `pnpm --filter @system-design/web build` - passed.
+
+Boundaries:
+
+- Review findings are advisory and never block editing or simulation; compiler validation remains the authority for executable errors;
+- rules inspect declared topology, configuration, policies, active workloads, Regions, and Interaction cache-miss handlers; they do not infer production deployment health;
+- a warning describes a visible structural risk, not proof that the architecture is incorrect; single replicas and single routing targets can be intentional;
+- redundancy checks cover configured Service and Database copies only and do not model correlated failure, quorum, failover promotion, or data durability;
+- cross-Region findings require unambiguous Region membership on both endpoints and intentionally exclude Global Router route edges;
+- the first rule set is deterministic and local. It has no vendor-specific best practices, cost model, or external policy service.

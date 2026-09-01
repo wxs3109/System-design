@@ -782,6 +782,24 @@ test('projects simulation metrics onto nodes and observed connection events', as
   await expect(page.getByLabel('Simulation metrics overlay')).toBeVisible()
 })
 
+test('reviews structural architecture risks and locates the affected topology element', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Direct service/ }).click()
+
+  const reviewButton = page.getByRole('button', { name: /Review/ })
+  await expect(reviewButton).toContainText('1')
+  await reviewButton.click()
+  const review = page.getByRole('dialog', { name: 'Architecture review' })
+  await expect(review).toContainText('Database has no replicas')
+  await expect(review).toContainText('Database has zero replicas per shard.')
+  await review.getByRole('button', { name: /Database has no replicas/ }).click()
+  await expect(page.getByTestId('rf__node-database-direct')).toHaveClass(/selected/)
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Database')
+  await review.getByRole('button', { name: 'Close architecture review' }).click()
+  await expect(review).toHaveCount(0)
+})
+
 test('edits business definitions in one ProjectFile with inline validation, undo and reload persistence', async ({ page }) => {
   await page.goto('/')
   const fixture = createOrderSystemContractFixture()

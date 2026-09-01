@@ -6,7 +6,7 @@ import { builtInComponentTypes, componentCatalog, componentPresetRegistry, compo
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { Activity, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, ListChecks, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ComponentNode, componentIcons } from './component-node'
@@ -22,12 +22,14 @@ import type { DefinitionSelection } from './definition-editor-model'
 import { FormatDialog } from './format-dialog'
 import { TopologyGroupOverlay } from './topology-group-overlay'
 import { SimulationCanvasOverlay } from './simulation-canvas-overlay'
+import { ArchitectureReviewPanel } from './architecture-review-panel'
 import { createAsyncExample, createCollaborativeEditingExample, createDataPlatformExample, createDirectExample, createGlobalStorefrontExample, createIncidentFanOutExample, createJobSchedulerExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createOrderSystemExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology } from '@/lib/canvas-layout'
 import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount } from '@/lib/canvas-metrics'
+import { reviewArchitecture, type ArchitectureFinding } from '@/lib/architecture-review'
 
 const nodeTypes = { component: ComponentNode }
 const orderedTypes = builtInComponentTypes
@@ -398,6 +400,7 @@ function WorkbenchInner() {
   const [themeReady, setThemeReady] = useState(false)
   const [layoutBusy, setLayoutBusy] = useState(false)
   const [canvasMetricsVisible, setCanvasMetricsVisible] = useState(true)
+  const [architectureReviewOpen, setArchitectureReviewOpen] = useState(false)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
@@ -407,6 +410,7 @@ function WorkbenchInner() {
   const definitionBindings = useSelectedDefinitionBindings(workspaceView === 'definitions' ? selectedDefinition : null)
   const hasDefinitionPath = definitionBindings.edgeIds.size > 0
   const canvasMetrics = useMemo(() => result ? buildCanvasMetricProjection(result) : null, [result])
+  const architectureFindings = useMemo(() => reviewArchitecture(project), [project])
   const showCanvasMetrics = workspaceView === 'topology' && canvasMetricsVisible && canvasMetrics !== null
   const topologyNodes = project.topology.nodes
   const nodes = useMemo(() => projectToNodes(topologyNodes).map((node) => {
@@ -527,6 +531,22 @@ function WorkbenchInner() {
     selectNode(nodeId)
     reactFlow.setCenter(node.position.x + 99, node.position.y + 38, { zoom: 1.25, duration: 350 })
   }, [project.topology.nodes, reactFlow, selectNode])
+
+  const showArchitectureFinding = useCallback((finding: ArchitectureFinding) => {
+    if (finding.target.kind === 'node') {
+      const node = project.topology.nodes.find((candidate) => candidate.id === finding.target.id)
+      if (!node) return
+      selectNode(node.id)
+      reactFlow.setCenter(node.position.x + 99, node.position.y + 38, { zoom: 1.25, duration: 350 })
+      return
+    }
+    const edge = project.topology.edges.find((candidate) => candidate.id === finding.target.id)
+    if (!edge) return
+    const source = project.topology.nodes.find((node) => node.id === edge.source)
+    const target = project.topology.nodes.find((node) => node.id === edge.target)
+    selectEdge(edge.id)
+    if (source && target) reactFlow.setCenter((source.position.x + target.position.x) / 2 + 99, (source.position.y + target.position.y) / 2 + 38, { zoom: 1.1, duration: 350 })
+  }, [project.topology.edges, project.topology.nodes, reactFlow, selectEdge, selectNode])
 
   const run = async () => {
     setRunning(true); setError(null); setResult(null); setProgress(null)
@@ -677,16 +697,18 @@ function WorkbenchInner() {
           </Controls>
           <MiniMap ariaLabel={t('Topology mini map')} pannable zoomable position="bottom-right" nodeColor={(node) => componentRegistry.get((node.data as ProjectNode).type, (node.data as ProjectNode).componentVersion).color} />
           {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>{t('Start with an empty canvas')}</strong><p>{t('Drag any component here, connect it, configure load, then run the model.')}</p></div></Panel> : null}
-          {workspaceView === 'definitions' ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>{t('Showing bindings for')} <strong>{definitionBindings.resource.name}</strong></> : t('Select a definition to show topology bindings')}</span></div></Panel> : null}
+          {workspaceView === 'definitions' && !architectureReviewOpen ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>{t('Showing bindings for')} <strong>{definitionBindings.resource.name}</strong></> : t('Select a definition to show topology bindings')}</span></div></Panel> : null}
           <Panel position="top-left"><div className="canvas-toolbar">
             <button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> {t('Clear canvas')}</button>
             <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} aria-busy={layoutBusy} onClick={() => void autoLayout()}><LayoutDashboard size={14} /> {t(layoutBusy ? 'Laying out…' : 'Auto layout')}</button>
             {result ? <button type="button" aria-pressed={canvasMetricsVisible} onClick={() => setCanvasMetricsVisible((visible) => !visible)}><Activity size={14} /> {t('Canvas metrics')}</button> : null}
+            <button type="button" aria-expanded={architectureReviewOpen} onClick={() => setArchitectureReviewOpen((open) => !open)}><ListChecks size={14} /> {t('Review')}<span className={architectureFindings.some((finding) => finding.severity === 'error') ? 'review-count is-error' : 'review-count'}>{architectureFindings.length}</span></button>
             <div className="example-picker">
               <button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> {t('Load example')} <ChevronDown size={13} /></button>
               {exampleOpen ? <div className="example-menu">{examples.map(([name, description, createProject]) => <button type="button" key={name} onClick={() => { setProject(createProject()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>{t(`example.${name}`, {}, name)}</strong><span>{t(`example-description.${name}`, {}, description)}</span></button>)}</div> : null}
             </div>
           </div></Panel>
+          {architectureReviewOpen ? <Panel position="top-right"><ArchitectureReviewPanel findings={architectureFindings} t={t} onSelect={showArchitectureFinding} onClose={() => setArchitectureReviewOpen(false)} /></Panel> : null}
         </ReactFlow>
         {contextMenu ? <div className="canvas-context-menu" role="menu" aria-label={t(contextMenu.kind === 'node' ? 'Component actions' : 'Canvas actions')} style={{ left: contextMenu.x, top: contextMenu.y }} onContextMenu={(event) => event.preventDefault()}>
           {contextMenu.kind === 'node' ? <>

@@ -222,6 +222,33 @@ button { color: inherit; }
 .canvas-toolbar button { display: flex; align-items: center; gap: 6px; height: 29px; padding: 0 9px; background: rgba(13, 21, 33, .94); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 10px; }
 .canvas-toolbar button:hover { background: #162235; }
 .canvas-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+.canvas-toolbar .review-count { min-width: 16px; height: 16px; display: grid; place-items: center; margin-left: 1px; padding: 0 4px; color: var(--muted-bright); background: var(--control); border-radius: 4px; font-size: 7px; }
+.canvas-toolbar .review-count.is-error { color: #fecdd3; background: color-mix(in srgb, var(--danger) 18%, var(--control)); }
+.architecture-review-panel { width: min(360px, calc(100vw - 42px)); max-height: min(520px, calc(100vh - 140px)); display: flex; flex-direction: column; color: var(--text); background: color-mix(in srgb, var(--panel) 96%, transparent); border: 1px solid var(--border-bright); border-radius: 8px; box-shadow: 0 18px 50px var(--shadow); overflow: hidden; }
+.architecture-review-panel > header { min-height: 45px; display: flex; align-items: center; justify-content: space-between; padding: 8px 9px 8px 12px; border-bottom: 1px solid var(--border); }
+.architecture-review-panel > header > div { display: flex; align-items: center; gap: 8px; }
+.architecture-review-panel > header > div > svg { color: var(--cyan); }
+.architecture-review-panel > header span { display: flex; flex-direction: column; gap: 2px; }
+.architecture-review-panel > header strong { font-size: 10px; }
+.architecture-review-panel > header small { color: var(--muted); font-size: 7px; }
+.architecture-review-panel > header button { width: 27px; height: 27px; display: grid; place-items: center; color: var(--muted); background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
+.architecture-review-panel > header button:hover { color: var(--text); background: var(--control-hover); }
+.architecture-review-summary { display: flex; gap: 10px; padding: 7px 11px; color: var(--muted); border-bottom: 1px solid var(--border); font-size: 8px; }
+.architecture-review-summary .is-error { color: var(--danger); }
+.architecture-review-summary .is-warning { color: #f59e0b; }
+.architecture-review-list { display: flex; flex-direction: column; gap: 2px; padding: 5px; overflow-y: auto; }
+.architecture-review-finding { width: 100%; min-height: 48px; display: grid; grid-template-columns: 22px 1fr; align-items: flex-start; gap: 5px; padding: 8px; color: var(--text); text-align: left; background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.architecture-review-finding:hover { background: var(--control-hover); border-color: var(--border); }
+.architecture-review-finding > svg { margin-top: 2px; color: var(--muted); }
+.architecture-review-finding.is-error > svg { color: var(--danger); }
+.architecture-review-finding.is-warning > svg { color: #f59e0b; }
+.architecture-review-finding.is-info > svg { color: var(--cyan-deep); }
+.architecture-review-finding > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.architecture-review-finding strong { font-size: 9px; }
+.architecture-review-finding small { color: var(--muted); font-size: 8px; line-height: 1.4; }
+.architecture-review-empty { min-height: 130px; display: grid; place-items: center; align-content: center; gap: 7px; color: var(--muted); text-align: center; }
+.architecture-review-empty strong { color: var(--text); font-size: 10px; }
+.architecture-review-empty span { font-size: 8px; }
 .example-picker { position: relative; }
 .example-menu { position: absolute; z-index: 20; top: 35px; left: 0; width: 240px; display: flex; flex-direction: column; padding: 5px; background: #101824; border: 1px solid var(--border-bright); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }
 .example-menu button { height: auto; display: flex; align-items: flex-start; flex-direction: column; gap: 3px; padding: 9px; background: transparent; border: 0; }
