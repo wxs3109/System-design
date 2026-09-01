@@ -8,6 +8,10 @@ import type { DefinitionSelection } from './definition-editor-model'
 import { useI18n } from '@/lib/i18n'
 
 type FormatKind = 'openapi' | 'dbml'
+const formatPlaceholders: Record<FormatKind, string> = {
+  openapi: '{\n  "openapi": "3.1.0",\n  "info": { "title": "Orders API", "version": "1.0.0" },\n  "paths": {}\n}',
+  dbml: 'Table users {\n  id uuid [pk, not null]\n  email varchar(255) [not null, unique]\n}',
+}
 const downloadText = (text: string, name: string, type: string) => {
   const link = document.createElement('a')
   link.href = URL.createObjectURL(new Blob([text], { type }))
@@ -38,6 +42,12 @@ export function FormatDialog({ kind, selection, onClose, onSelectionChange }: { 
   const selectedApi = selection?.kind === 'apis' ? project.definitions.apis.find((api) => api.id === selection.id && api.version === selection.version) : project.definitions.apis[0]
   const selectedModel = selection?.kind === 'dataModels' ? project.definitions.dataModels.find((model) => model.id === selection.id && model.version === selection.version) : project.definitions.dataModels.find((model) => model.kind === 'relational')
   const dialogTitle = t(kind === 'openapi' ? 'OpenAPI 3.1 adapter' : 'DBML adapter')
+  const importRequirement = kind === 'openapi'
+    ? serviceId ? null : t('Add a Service component before importing OpenAPI.')
+    : databaseId ? null : t('Add a Database component before importing DBML.')
+  const exportRequirement = kind === 'openapi'
+    ? selectedApi ? null : t('Select or create an API before exporting OpenAPI.')
+    : selectedModel?.kind === 'relational' ? null : t('Select a relational data model before exporting DBML.')
 
   useEffect(() => {
     previouslyFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -97,5 +107,7 @@ export function FormatDialog({ kind, selection, onClose, onSelectionChange }: { 
     } catch (cause) { setError(cause instanceof Error ? t(cause.message) : t('Format conversion failed.')) } finally { setBusy(false) }
   }
 
-  return <div className="format-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section ref={dialogRef} className="format-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}><header><div><strong id={titleId}>{dialogTitle}</strong><span id={descriptionId}>{t('Mature parser · validated project mapping')}</span></div><button type="button" aria-label={t('Close format dialog')} onClick={onClose}><X size={15} /></button></header><div className="format-dialog-tabs" role="tablist" aria-label={t('Adapter action')}><button type="button" role="tab" aria-selected={mode === 'import'} tabIndex={mode === 'import' ? 0 : -1} onClick={() => setMode('import')}><Upload size={13} /> {t('Import')}</button><button type="button" role="tab" aria-selected={mode === 'export'} tabIndex={mode === 'export' ? 0 : -1} onClick={() => setMode('export')}><Download size={13} /> {t('Export')}</button></div>{mode === 'import' ? <label className="definition-field definition-field--code"><span>{t('Paste {format}', { format: kind === 'openapi' ? 'OpenAPI JSON' : 'DBML' })}</span><textarea autoFocus rows={17} spellCheck={false} value={source} onChange={(event) => setSource(event.target.value)} /></label> : <p className="format-dialog-summary">{kind === 'openapi' ? selectedApi ? t('Export {name} and referenced JSON Schemas.', { name: selectedApi.name }) : t('No API is available.') : selectedModel?.kind === 'relational' ? t('Export {name}.', { name: selectedModel.name }) : t('No relational model is selected.')}</p>}{error ? <p className="format-dialog-error" role="alert">{error}</p> : null}<footer><button type="button" className="button subtle" onClick={onClose}>{t('Cancel')}</button><button type="button" className="button run" disabled={busy} onClick={() => void convert()}>{t(busy ? 'Converting…' : mode === 'import' ? 'Validate and import' : 'Export file')}</button></footer></section></div>
+  const unavailableReason = mode === 'import' ? importRequirement : exportRequirement
+
+  return <div className="format-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section ref={dialogRef} className="format-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}><header><div><strong id={titleId}>{dialogTitle}</strong><span id={descriptionId}>{t('Mature parser · validated project mapping')}</span></div><button type="button" aria-label={t('Close format dialog')} onClick={onClose}><X size={15} /></button></header><div className="format-dialog-tabs" role="tablist" aria-label={t('Adapter action')}><button type="button" role="tab" aria-selected={mode === 'import'} tabIndex={mode === 'import' ? 0 : -1} onClick={() => { setMode('import'); setError(null) }}><Upload size={13} /> {t('Import')}</button><button type="button" role="tab" aria-selected={mode === 'export'} tabIndex={mode === 'export' ? 0 : -1} onClick={() => { setMode('export'); setError(null) }}><Download size={13} /> {t('Export')}</button></div>{mode === 'import' ? <><label className="definition-field definition-field--code"><span>{t('Paste {format}', { format: kind === 'openapi' ? 'OpenAPI JSON' : 'DBML' })}</span><textarea autoFocus rows={17} spellCheck={false} placeholder={formatPlaceholders[kind]} value={source} onChange={(event) => setSource(event.target.value)} /></label>{importRequirement ? <p className="format-dialog-notice" role="status">{importRequirement}</p> : null}</> : <p className="format-dialog-summary">{kind === 'openapi' ? selectedApi ? t('Export {name} and referenced JSON Schemas.', { name: selectedApi.name }) : t('No API is available.') : selectedModel?.kind === 'relational' ? t('Export {name}.', { name: selectedModel.name }) : t('No relational model is selected.')}</p>}{error ? <p className="format-dialog-error" role="alert">{error}</p> : null}<footer><button type="button" className="button subtle" onClick={onClose}>{t('Cancel')}</button><button type="button" className="button run" disabled={busy || unavailableReason !== null} onClick={() => void convert()}>{t(busy ? 'Converting…' : mode === 'import' ? 'Validate and import' : 'Export file')}</button></footer></section></div>
 }

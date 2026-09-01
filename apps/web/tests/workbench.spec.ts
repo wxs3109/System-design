@@ -865,6 +865,24 @@ test('imports and exports OpenAPI and DBML through validated server adapters', a
   await expect(page.getByRole('navigation', { name: 'Project definitions' }).getByRole('button', { name: /Imported relational model/ })).toBeVisible()
 })
 
+test('explains empty OpenAPI and DBML import states', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Definitions' }).click()
+
+  await page.getByRole('button', { name: 'OpenAPI' }).click()
+  const openApiDialog = page.getByRole('dialog', { name: 'OpenAPI 3.1 adapter' })
+  await expect(openApiDialog.getByLabel('Paste OpenAPI JSON')).toHaveAttribute('placeholder', /"openapi": "3.1.0"/)
+  await expect(openApiDialog.getByText('Add a Service component before importing OpenAPI.')).toBeVisible()
+  await expect(openApiDialog.getByRole('button', { name: 'Validate and import' })).toBeDisabled()
+  await openApiDialog.getByRole('button', { name: 'Close format dialog' }).click()
+
+  await page.getByRole('button', { name: 'DBML' }).click()
+  const dbmlDialog = page.getByRole('dialog', { name: 'DBML adapter' })
+  await expect(dbmlDialog.getByLabel('Paste DBML')).toHaveAttribute('placeholder', /Table users/)
+  await expect(dbmlDialog.getByText('Add a Database component before importing DBML.')).toBeVisible()
+  await expect(dbmlDialog.getByRole('button', { name: 'Validate and import' })).toBeDisabled()
+})
+
 test('attaches and configures manifest-driven reliability policies', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Load example' }).click()
