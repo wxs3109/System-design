@@ -78,16 +78,15 @@ const projectToNodes = (nodes: ProjectFile['topology']['nodes']): WorkbenchNode[
   initialHeight: 76,
 }))
 const projectToEdges = (project: ProjectFile, businessLabels: ReadonlyMap<string, string> = new Map()): Edge[] => project.topology.edges.map((edge) => {
-  const routingLabel = edge.sourceSemantic === 'hit' || edge.sourceSemantic === 'miss'
-    ? edge.sourceSemantic
-    : edge.routingMode === 'fan-out' ? 'fan-out' : edge.routingMode === 'async-publish' ? 'async' : 'sync'
+  const routingLabel = edge.routingMode === 'fan-out' ? 'fan-out' : edge.routingMode === 'async-publish' ? 'async' : undefined
   const policyLabels = project.topology.policies
     .filter((policy) => policy.target.kind === 'edge' && policy.target.id === edge.id)
     .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
     .map((policy) => `${policyRegistry.get(policy.type, policy.version).label}${policy.enabled ? '' : ' (off)'}`)
   return {
     id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourcePort, targetHandle: edge.targetPort, type: 'smoothstep', animated: true,
-    label: [businessLabels.get(edge.id), edge.name, routingLabel, ...policyLabels].filter(Boolean).join(' · '),
+    ...(edge.sourceSemantic === 'hit' ? { className: 'is-cache-hit' } : edge.sourceSemantic === 'miss' ? { className: 'is-cache-miss' } : {}),
+    ...([businessLabels.get(edge.id), edge.name, routingLabel, ...policyLabels].filter(Boolean).join(' · ') ? { label: [businessLabels.get(edge.id), edge.name, routingLabel, ...policyLabels].filter(Boolean).join(' · ') } : {}),
   }
 })
 const syncNodes = (project: ProjectFile, nodes: WorkbenchNode[]): ProjectFile => ({ ...project, topology: { ...project.topology, nodes: nodes.map((flowNode) => ({ ...flowNode.data, position: flowNode.position })) } })
@@ -232,13 +231,17 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
     return { project, selectedNodeId: state.selectedNodeId && removedIds.has(state.selectedNodeId) ? null : state.selectedNodeId, selectedEdgeId: selectedEdgeExists ? state.selectedEdgeId : null, result: removedIds.size > 0 ? null : state.result }
     })
   },
-  onEdgesChange: (changes) => set((state) => {
-    let project = syncEdges(state.project, applyEdgeChanges(changes, projectToEdges(state.project)))
+  onEdgesChange: (changes) => {
+    const persistentChanges = changes.filter((change) => change.type !== 'select')
+    if (persistentChanges.length === 0) return
+    set((state) => {
+    let project = syncEdges(state.project, applyEdgeChanges(persistentChanges, projectToEdges(state.project)))
     const edgeIds = new Set(project.topology.edges.map((edge) => edge.id))
     const removedEdgeIds = new Set(state.project.topology.edges.filter((edge) => !edgeIds.has(edge.id)).map((edge) => edge.id))
     project = { ...project, topology: { ...project.topology, policies: project.topology.policies.filter((policy) => policy.target.kind !== 'edge' || edgeIds.has(policy.target.id)) }, experiments: project.experiments.map((experiment) => ({ ...experiment, faults: experiment.faults.filter((fault) => !faultTargetsRemovedEdge(fault, removedEdgeIds)) })) }
     return { project, selectedEdgeId: state.selectedEdgeId && project.topology.edges.some((edge) => edge.id === state.selectedEdgeId) ? state.selectedEdgeId : null, result: null }
-  }),
+    })
+  },
   connect: (connection) => set((state) => {
     const source = state.project.topology.nodes.find((node) => node.id === connection.source)
     const target = state.project.topology.nodes.find((node) => node.id === connection.target)

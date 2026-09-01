@@ -777,7 +777,77 @@ test('shows region and zone boundaries and applies an undoable automatic layout'
   await expect(page.getByTestId('rf__node-primary-api')).toHaveAttribute('style', before!)
 })
 
-test('projects simulation metrics onto nodes and observed connection events', async ({ page }) => {
+test('preserves business lanes and toolbar clearance while tidying a layout', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Video delivery/ }).click()
+  await page.getByRole('button', { name: 'Tidy' }).click()
+  await expect(page.getByRole('button', { name: 'Tidy' })).toBeEnabled()
+
+  const geometry = await page.locator('.react-flow').evaluate((flow) => {
+    const bounds = (id: string) => flow.querySelector<HTMLElement>(`[data-id="${id}"]`)!.getBoundingClientRect()
+    const toolbar = flow.querySelector<HTMLElement>('.canvas-toolbar')!.getBoundingClientRect()
+    const nodes = [...flow.querySelectorAll<HTMLElement>('.react-flow__node')].map((node) => node.getBoundingClientRect())
+    const raw = bounds('raw-video-storage')
+    const uploadApi = bounds('video-upload-api')
+    const queue = bounds('transcode-queue')
+    const segments = bounds('segment-streams')
+    const cdn = bounds('video-cdn')
+    return {
+      topClearance: Math.min(...nodes.map((node) => node.top)) - toolbar.bottom,
+      width: Math.max(...nodes.map((node) => node.right)) - Math.min(...nodes.map((node) => node.left)),
+      uploadLaneSpread: Math.max(raw.top, uploadApi.top, queue.top) - Math.min(raw.top, uploadApi.top, queue.top),
+      streamingLaneSpread: Math.abs(segments.top - cdn.top),
+    }
+  })
+  expect(geometry.topClearance).toBeGreaterThanOrEqual(8)
+  expect(geometry.width).toBeLessThan(900)
+  expect(geometry.uploadLaneSpread).toBeLessThan(1)
+  expect(geometry.streamingLaneSpread).toBeLessThan(1)
+})
+
+test('performs a visible ELK re-layout into business entry lanes and graph stages', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Video delivery/ }).click()
+  const before = await page.getByTestId('rf__node-video-upload-api').getAttribute('style')
+  await page.getByRole('button', { name: 'Auto layout' }).click()
+  await expect(page.getByRole('button', { name: 'Auto layout' })).toBeEnabled()
+  await expect.poll(() => page.getByTestId('rf__node-video-upload-api').getAttribute('style')).not.toBe(before)
+
+  const geometry = await page.locator('.react-flow').evaluate((flow) => {
+    const nodes = [...flow.querySelectorAll<HTMLElement>('.react-flow__node')].map((element) => {
+      const bounds = element.getBoundingClientRect()
+      return { id: element.dataset.id!, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }
+    })
+    const byId = new Map(nodes.map((node) => [node.id, node]))
+    const inputs = ['video-upload-streams', 'video-creators', 'video-viewers', 'segment-streams'].map((id) => byId.get(id)!)
+    let overlaps = 0
+    for (let left = 0; left < nodes.length; left += 1) for (let right = left + 1; right < nodes.length; right += 1) {
+      const a = nodes[left]!
+      const b = nodes[right]!
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overlaps += 1
+    }
+    return {
+      inputSpread: Math.max(...inputs.map((node) => node.left)) - Math.min(...inputs.map((node) => node.left)),
+      apiAfterCreator: byId.get('video-upload-api')!.left > byId.get('video-creators')!.left,
+      queueAfterApi: byId.get('transcode-queue')!.left > byId.get('video-upload-api')!.left,
+      workerAfterQueue: byId.get('transcoder-workers')!.left > byId.get('transcode-queue')!.left,
+      renditionAfterWorker: byId.get('video-rendition-storage')!.left > byId.get('transcoder-workers')!.left,
+      renditionLaneSpread: Math.abs(byId.get('video-rendition-storage')!.top - byId.get('transcoder-workers')!.top),
+      overlaps,
+    }
+  })
+  expect(geometry.inputSpread).toBeLessThan(1)
+  expect(geometry.apiAfterCreator).toBe(true)
+  expect(geometry.queueAfterApi).toBe(true)
+  expect(geometry.workerAfterQueue).toBe(true)
+  expect(geometry.renditionAfterWorker).toBe(true)
+  expect(geometry.renditionLaneSpread).toBeLessThan(1)
+  expect(geometry.overlaps).toBe(0)
+})
+
+test('projects simulation metrics without adding long labels to connections', async ({ page }) => {
   await page.goto('/')
   await openExamplePicker(page)
   await page.getByRole('button', { name: /Direct service/ }).click()
@@ -788,16 +858,49 @@ test('projects simulation metrics onto nodes and observed connection events', as
   await expect(overlay.locator('[data-node-metric-id=service-direct]')).toContainText(/util./)
   await expect(overlay.locator('[data-node-metric-id=service-direct]')).toContainText(/processed/)
   await expect(page.getByTestId('rf__node-service-direct')).toHaveClass(/is-simulation-/)
-  await expect(page.getByTestId('rf__edge-edge-direct-2')).toContainText(/observed [1-9]/)
+  await expect(page.getByTestId('rf__edge-edge-direct-2').locator('.react-flow__edge-text')).toHaveCount(0)
   await expect(page.getByTestId('rf__edge-edge-direct-2')).toHaveClass(/is-simulation-active/)
+  await page.getByTestId('rf__edge-edge-direct-2').hover({ force: true })
+  const hoverMetrics = page.locator('.connection-metric-popover')
+  await expect(hoverMetrics).toContainText('Network Link → Service')
+  await expect(hoverMetrics).toContainText('Observed calls')
+  await expect(hoverMetrics).toContainText('Observed bytes')
+  await page.getByTestId('rf__edge-edge-direct-2').locator('.react-flow__edge-interaction').click({ force: true })
+  await expect(page.getByLabel('Observed connection metrics')).toContainText('Observed calls')
 
   const toggle = page.getByRole('button', { name: 'Canvas metrics' })
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await toggle.click()
   await expect(overlay).toHaveCount(0)
-  await expect(page.getByTestId('rf__edge-edge-direct-2')).not.toContainText(/observed/)
+  await expect(page.getByLabel('Observed connection metrics')).toBeVisible()
   await toggle.click()
   await expect(page.getByLabel('Simulation metrics overlay')).toBeVisible()
+})
+
+test('keeps runtime connection labels collision-free on a dense topology', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Video delivery/ }).click()
+  await page.getByRole('button', { name: 'Auto layout' }).click()
+  await expect(page.getByRole('button', { name: 'Auto layout' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 20_000 })
+
+  await expect(page.getByTestId('rf__edge-metadata-cache-miss')).toHaveClass(/is-cache-miss/)
+  await expect(page.getByTestId('rf__edge-cdn-cache-hit')).toHaveClass(/is-cache-hit/)
+  const labels = page.locator('.react-flow__edge-text')
+  await expect(labels).toHaveText(['async', 'async'])
+  const overlapCount = await labels.evaluateAll((elements) => {
+    const boxes = elements.map((element) => element.getBoundingClientRect()).filter((box) => box.width > 0 && box.height > 0)
+    let overlaps = 0
+    for (let left = 0; left < boxes.length; left += 1) for (let right = left + 1; right < boxes.length; right += 1) {
+      const a = boxes[left]!
+      const b = boxes[right]!
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overlaps += 1
+    }
+    return overlaps
+  })
+  expect(overlapCount).toBe(0)
 })
 
 test('keeps metrics, group bounds and automatic layout clear of variable-height nodes', async ({ page }) => {

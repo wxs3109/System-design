@@ -184,3 +184,58 @@ Boundaries:
 - nodes use the established 198 by 76 default until React Flow reports their rendered dimensions;
 - stale measurements for removed node IDs may remain in the local map but are never read without a matching current project node;
 - automatic layout still controls positions only; it does not persist width or height.
+
+## Follow-up 4 - Explicit automatic layout and tidy
+
+Status: complete (2026-08-31)
+
+Delivered:
+
+- Auto layout now performs a visible re-layout using topology entry lanes and graph-distance stages;
+- Traffic Generators, Schedulers, and source components establish lanes, while shared downstream components are assigned using their deepest business path and Region order;
+- ELK Layered orders nodes within each lane; fixed graph stages keep the same dependency depth in aligned columns without allowing feedback or cross-lane edges to stretch the whole diagram;
+- Tidy is a separate command that preserves established vertical lanes and left-to-right ordering while aligning, compacting, and collision-resolving existing rows;
+- viewport fitting reserves a measured toolbar-safe area without excessively shrinking the diagram.
+
+Verification:
+
+- `pnpm --filter @system-design/web test -- src/lib/canvas-layout.test.ts` - 4 tests passed, covering true re-layout, Tidy lane preservation, graph stages, bounded width, and dynamic dimensions;
+- `pnpm --filter @system-design/web test:e2e -- tests/workbench.spec.ts -g "visible ELK re-layout|tidying a layout|shows region and zone boundaries|variable-height nodes"` - 4 tests passed;
+- desktop visual checks covered Video delivery, Order system, and Multi-region failover;
+- `pnpm --filter @system-design/web typecheck` - passed;
+- `pnpm --filter @system-design/web lint` - passed.
+
+Boundaries:
+
+- Auto lanes are inferred from topology sources and shortest-path reachability; ProjectFile does not yet contain named lane metadata;
+- shared downstream components use the deepest reachable stage and a deterministic lane choice; cross-lane edges remain visible but do not control lane placement;
+- ELK optimizes ordering inside each lane rather than treating the complete multi-flow diagram as one long chain;
+- Tidy intentionally favors the author's existing ordering over globally minimizing edge crossings; if positions overlap, Tidy falls back to Auto layout;
+- both commands are undoable position edits and do not change topology or simulation behavior.
+
+## Follow-up 5 - Collision-free runtime connection metrics
+
+Status: complete (2026-08-31)
+
+Delivered:
+
+- runtime observed calls, failures, and bytes no longer expand labels rendered directly on connections;
+- synchronous edges have no default text, while asynchronous and fan-out routing retain short semantic labels;
+- cache/CDN hit and miss paths use green solid and amber dashed edge styling instead of repeated text labels;
+- hovering an observed connection shows a compact Canvas popover with its retained trace sample;
+- selecting a connection keeps the completed result and exposes the same observed sample in Properties.
+
+Verification:
+
+- `pnpm --filter @system-design/web test -- src/lib/store.test.ts src/lib/canvas-layout.test.ts` - 20 tests passed;
+- `pnpm --filter @system-design/web test:e2e -- tests/workbench.spec.ts -g "without adding long labels|collision-free|visible ELK re-layout|tidying a layout"` - 4 tests passed;
+- dense Video delivery layout reports zero intersections between visible connection-label bounds;
+- `pnpm --filter @system-design/web typecheck` - passed;
+- `pnpm --filter @system-design/web lint` - passed.
+
+Boundaries:
+
+- connection metrics remain trace-retention-limited observations rather than full-run edge aggregates;
+- semantic custom names, policy names, business-flow labels in Definitions, `async`, and `fan-out` may still render on a connection because they carry design meaning;
+- hit/miss meaning is available through edge color/style and the selected connection's semantic heading;
+- hovering is an optional quick view; keyboard users can focus/select the edge and use Properties.

@@ -6,7 +6,7 @@ import { builtInComponentTypes, componentCatalog, componentPresetRegistry, compo
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
 import { validateScenarioForSimulation } from '@system-design/simulation'
-import { Activity, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, ListChecks, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { Activity, AlignHorizontalSpaceAround, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, ListChecks, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 import { ComponentNode, componentIcons } from './component-node'
@@ -28,7 +28,7 @@ import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationR
 import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode, type WorkbenchNode } from '@/lib/store'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology, type CanvasNodeDimensions } from '@/lib/canvas-layout'
-import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount } from '@/lib/canvas-metrics'
+import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount, type CanvasEdgeMetric } from '@/lib/canvas-metrics'
 import { reviewArchitecture, type ArchitectureFinding } from '@/lib/architecture-review'
 
 const nodeTypes = { component: ComponentNode }
@@ -230,7 +230,15 @@ function RegionSection() {
   )
 }
 
-function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: ProjectConnection | undefined }) {
+function ConnectionMetricValues({ metric, t }: { metric: CanvasEdgeMetric; t: Translate }) {
+  return <div className="connection-metric-values">
+    <span><small>{t('Observed calls')}</small><strong>{formatCanvasCount(metric.observedCalls)}</strong></span>
+    <span><small>{t('Observed failures')}</small><strong>{formatCanvasCount(metric.observedFailures)}</strong></span>
+    <span><small>{t('Observed bytes')}</small><strong>{formatCanvasBytes(metric.observedBytes)}</strong></span>
+  </div>
+}
+
+function PropertiesPanel({ node, edge, edgeMetric }: { node: ProjectNode | undefined; edge: ProjectConnection | undefined; edgeMetric?: CanvasEdgeMetric }) {
   const { t } = useI18n()
   const updateNode = useWorkbenchStore((state) => state.updateSelectedNode)
   const deleteNode = useWorkbenchStore((state) => state.deleteSelectedNode)
@@ -247,6 +255,7 @@ function PropertiesPanel({ node, edge }: { node: ProjectNode | undefined; edge: 
         <label className="field"><span>{t('Routing mode')}</span><select value={edge.routingMode} disabled={asynchronous} onChange={(event) => updateEdge({ routingMode: event.target.value as 'weighted-one' | 'fan-out' })}>{asynchronous ? <option value="async-publish">{t('Async publish')}</option> : <><option value="weighted-one">{t('Weighted one-of')}</option><option value="fan-out">{t('Fan-out')}</option></>}</select></label>
         {edge.routingMode === 'weighted-one' ? <Field label={t('Routing weight')} value={edge.weight} min={0.001} step={0.1} onChange={(weight) => updateEdge({ weight })} /> : null}
         <p className="property-help">{t('Routing is applied to every connection from the same output port.')}</p>
+        {edgeMetric ? <section className="connection-run-metrics" aria-label={t('Observed connection metrics')}><header><span>{t('Latest run trace sample')}</span><small>{t('Trace-retention limited')}</small></header><ConnectionMetricValues metric={edgeMetric} t={t} /></section> : null}
         <PolicySection key={`edge:${edge.id}`} target={{ kind: 'edge', id: edge.id }} />
       </div>
     )
@@ -401,6 +410,7 @@ function WorkbenchInner() {
   const [layoutBusy, setLayoutBusy] = useState(false)
   const [canvasMetricsVisible, setCanvasMetricsVisible] = useState(true)
   const [architectureReviewOpen, setArchitectureReviewOpen] = useState(false)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
   const [nodeDimensions, setNodeDimensions] = useState<Map<string, CanvasNodeDimensions>>(new Map())
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
@@ -419,20 +429,16 @@ function WorkbenchInner() {
     const classes = [affected.nodes.has(node.id) ? 'is-fault-target' : '', definitionBindings.nodeIds.has(node.id) ? 'is-definition-binding' : '', hasDefinitionPath && !definitionBindings.nodeIds.has(node.id) ? 'is-definition-dimmed' : '', metric ? `is-simulation-${metric.severity}` : ''].filter(Boolean).join(' ')
     return { ...node, selected: node.id === selectedNodeId || affected.nodes.has(node.id), ...(classes ? { className: classes } : {}) }
   }), [affected.nodes, canvasMetrics, definitionBindings.nodeIds, hasDefinitionPath, showCanvasMetrics, topologyNodes, selectedNodeId])
-  const edgeProjectionLabels = useMemo(() => {
-    const labels = new Map(definitionBindings.edgeLabels)
-    if (showCanvasMetrics) canvasMetrics.edges.forEach((metric, edgeId) => {
-      const observed = `${t('observed')} ${formatCanvasCount(metric.observedCalls)}${metric.observedFailures > 0 ? ` · ${t('failed')} ${formatCanvasCount(metric.observedFailures)}` : ''}${metric.observedBytes > 0 ? ` · ${formatCanvasBytes(metric.observedBytes)}` : ''}`
-      labels.set(edgeId, labels.has(edgeId) ? `${labels.get(edgeId)} / ${observed}` : observed)
-    })
-    return labels
-  }, [canvasMetrics, definitionBindings.edgeLabels, showCanvasMetrics, t])
+  const edgeProjectionLabels = definitionBindings.edgeLabels
   const edges = useMemo(() => projectToEdges(project, edgeProjectionLabels).map((edge) => {
     const definitionEdge = definitionBindings.edgeIds.has(edge.id)
     const metric = showCanvasMetrics ? canvasMetrics.edges.get(edge.id) : undefined
-    const classes = [affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : '', hasDefinitionPath && !definitionEdge ? 'is-definition-dimmed' : '', metric ? `is-simulation-${metric.severity}` : ''].filter(Boolean).join(' ')
+    const classes = [edge.className ?? '', affected.edges.has(edge.id) ? 'is-fault-target' : '', definitionEdge ? 'is-definition-binding' : '', hasDefinitionPath && !definitionEdge ? 'is-definition-dimmed' : '', metric ? `is-simulation-${metric.severity}` : ''].filter(Boolean).join(' ')
     return { ...edge, selected: edge.id === selectedEdgeId || affected.edges.has(edge.id), ...(classes ? { className: classes } : {}) }
   }), [affected.edges, canvasMetrics, definitionBindings.edgeIds, edgeProjectionLabels, hasDefinitionPath, project, selectedEdgeId, showCanvasMetrics])
+  const hoveredEdge = hoveredEdgeId ? project.topology.edges.find((edge) => edge.id === hoveredEdgeId) : undefined
+  const hoveredEdgeMetric = showCanvasMetrics && hoveredEdgeId ? canvasMetrics.edges.get(hoveredEdgeId) : undefined
+  const selectedEdgeMetric = selectedEdgeId && canvasMetrics ? canvasMetrics.edges.get(selectedEdgeId) : undefined
 
   const refreshHistory = useCallback(async (projectId: string) => {
     const repository = getLocalHistoryRepository()
@@ -501,12 +507,17 @@ function WorkbenchInner() {
     addCatalogComponent(selection.categoryId, selection.type, position, selection.preset)
   }, [addCatalogComponent, reactFlow])
 
-  const autoLayout = useCallback(async () => {
+  const arrangeCanvas = useCallback(async (mode: 'auto' | 'tidy') => {
     if (project.topology.nodes.length === 0 || layoutBusy) return
     setLayoutBusy(true)
     try {
-      applyNodeLayout(await layoutTopology(project, nodeDimensions))
-      window.requestAnimationFrame(() => void reactFlow.fitView({ duration: 350, padding: 0.15 }))
+      applyNodeLayout(await layoutTopology(project, nodeDimensions, mode))
+      window.requestAnimationFrame(() => {
+        const stage = document.querySelector('.canvas-stage')?.getBoundingClientRect()
+        const toolbar = document.querySelector('.canvas-toolbar')?.getBoundingClientRect()
+        const topPadding = stage && toolbar ? Math.max(20, Math.ceil(toolbar.bottom - stage.top + 10)) : 56
+        void reactFlow.fitView({ duration: 350, padding: { top: `${topPadding}px`, right: '16px', bottom: '16px', left: '16px' } })
+      })
     } catch (cause) {
       setError(cause instanceof Error ? `Automatic layout failed: ${cause.message}` : 'Automatic layout failed.')
     } finally {
@@ -698,7 +709,7 @@ function WorkbenchInner() {
       <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
         <ReactFlow className={workspaceView === 'definitions' ? 'is-definitions-mode' : ''}
           nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={handleNodesChange} onEdgesChange={onEdgesChange}
-          onConnect={onConnect} onNodeClick={(_, node) => { closeContextMenu(); selectNode(node.id) }} onNodeContextMenu={openNodeContextMenu} onEdgeClick={(_, edge) => { closeContextMenu(); selectEdge(edge.id) }} onPaneClick={() => { closeContextMenu(); selectNode(null); selectEdge(null); selectFault(null) }} onPaneContextMenu={openPaneContextMenu} onMoveStart={closeContextMenu}
+          onConnect={onConnect} onNodeClick={(_, node) => { closeContextMenu(); selectNode(node.id) }} onNodeContextMenu={openNodeContextMenu} onEdgeClick={(_, edge) => { closeContextMenu(); selectEdge(edge.id) }} onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)} onEdgeMouseLeave={() => setHoveredEdgeId(null)} onPaneClick={() => { closeContextMenu(); selectNode(null); selectEdge(null); selectFault(null) }} onPaneContextMenu={openPaneContextMenu} onMoveStart={() => { closeContextMenu(); setHoveredEdgeId(null) }}
           deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
@@ -715,7 +726,8 @@ function WorkbenchInner() {
           {workspaceView === 'definitions' && !architectureReviewOpen ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>{t('Showing bindings for')} <strong>{definitionBindings.resource.name}</strong></> : t('Select a definition to show topology bindings')}</span></div></Panel> : null}
           <Panel position="top-left"><div className="canvas-toolbar">
             <button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> {t('Clear canvas')}</button>
-            <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} aria-busy={layoutBusy} onClick={() => void autoLayout()}><LayoutDashboard size={14} /> {t(layoutBusy ? 'Laying out…' : 'Auto layout')}</button>
+            <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} aria-busy={layoutBusy} onClick={() => void arrangeCanvas('auto')}><LayoutDashboard size={14} /> {t(layoutBusy ? 'Laying out…' : 'Auto layout')}</button>
+            <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} onClick={() => void arrangeCanvas('tidy')}><AlignHorizontalSpaceAround size={14} /> {t('Tidy')}</button>
             {result ? <button type="button" aria-pressed={canvasMetricsVisible} onClick={() => setCanvasMetricsVisible((visible) => !visible)}><Activity size={14} /> {t('Canvas metrics')}</button> : null}
             <button type="button" aria-expanded={architectureReviewOpen} onClick={() => setArchitectureReviewOpen((open) => !open)}><ListChecks size={14} /> {t('Review')}<span className={architectureFindings.some((finding) => finding.severity === 'error') ? 'review-count is-error' : 'review-count'}>{architectureFindings.length}</span></button>
             <div className="example-picker">
@@ -724,6 +736,7 @@ function WorkbenchInner() {
             </div>
           </div></Panel>
           {architectureReviewOpen ? <Panel position="top-right"><ArchitectureReviewPanel findings={architectureFindings} t={t} onSelect={showArchitectureFinding} onClose={() => setArchitectureReviewOpen(false)} /></Panel> : null}
+          {hoveredEdge && hoveredEdgeMetric ? <Panel position="bottom-center"><div className="connection-metric-popover" role="status"><strong>{project.topology.nodes.find((node) => node.id === hoveredEdge.source)?.name ?? hoveredEdge.source} → {project.topology.nodes.find((node) => node.id === hoveredEdge.target)?.name ?? hoveredEdge.target}</strong><ConnectionMetricValues metric={hoveredEdgeMetric} t={t} /></div></Panel> : null}
         </ReactFlow>
         {contextMenu ? <div className="canvas-context-menu" role="menu" aria-label={t(contextMenu.kind === 'node' ? 'Component actions' : 'Canvas actions')} style={{ left: contextMenu.x, top: contextMenu.y }} onContextMenu={(event) => event.preventDefault()}>
           {contextMenu.kind === 'node' ? <>
@@ -742,7 +755,7 @@ function WorkbenchInner() {
   const inspectorPanel = (
       <aside className="inspector">
         <div className="inspector-tabs"><span className="active">{t(workspaceView === 'definitions' ? 'Definition editor' : 'Properties')}</span><button type="button" className="panel-close" aria-label={t(workspaceView === 'definitions' ? 'Hide definition editor' : 'Hide properties panel')} title={t(workspaceView === 'definitions' ? 'Hide definition editor' : 'Hide properties panel')} onClick={() => setPanelVisible('inspector', inspectorPanelRef, false)}><X size={13} /></button></div>
-        {workspaceView === 'definitions' ? <DefinitionEditor selection={selectedDefinition} onSelectionChange={setSelectedDefinition} /> : <><PropertiesPanel node={selectedNode} edge={selectedEdge} /><RegionSection /><div className="run-settings"><div className="panel-header"><span>{t('Run settings')}</span><small>{t('Virtual time')}</small></div><Field label={t('Duration (seconds)')} value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>{t('Random seed')}</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div></>}
+        {workspaceView === 'definitions' ? <DefinitionEditor selection={selectedDefinition} onSelectionChange={setSelectedDefinition} /> : <><PropertiesPanel node={selectedNode} edge={selectedEdge} {...(selectedEdgeMetric ? { edgeMetric: selectedEdgeMetric } : {})} /><RegionSection /><div className="run-settings"><div className="panel-header"><span>{t('Run settings')}</span><small>{t('Virtual time')}</small></div><Field label={t('Duration (seconds)')} value={experiment.simulation.durationSeconds} min={1} onChange={(durationSeconds) => updateSimulation({ durationSeconds })} /><label className="field"><span>{t('Random seed')}</span><input value={experiment.seed} onChange={(event) => updateMeta({ seed: event.target.value })} /></label></div></>}
       </aside>
   )
 

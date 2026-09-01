@@ -156,8 +156,17 @@ describe('validated project undo and redo', () => {
 
     const updated = useWorkbenchStore.getState().project
     expect(updated.topology.edges.find((edge) => edge.id === 'client-to-orders')?.name).toBe('Submit order')
-    expect(projectToEdges(updated).find((edge) => edge.id === 'client-to-orders')?.label).toBe('Submit order · sync')
+    expect(projectToEdges(updated).find((edge) => edge.id === 'client-to-orders')?.label).toBe('Submit order')
     expect(() => projectFileV3Schema.parse(updated)).not.toThrow()
+  })
+
+  it('keeps the completed result when React Flow reports an edge selection change', () => {
+    const project = createOrderSystemContractFixture()
+    useWorkbenchStore.getState().restoreProject(project)
+    useWorkbenchStore.getState().setResult(emptyResult)
+    useWorkbenchStore.getState().onEdgesChange([{ id: 'client-to-orders', type: 'select', selected: true }])
+    expect(useWorkbenchStore.getState().result).toEqual(emptyResult)
+    expect(useWorkbenchStore.getState().project).toEqual(project)
   })
 
   it('applies a complete node layout as one undoable edit without clearing results', () => {
