@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, type OnConnect } from '@xyflow/react'
+import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, type NodeChange, type OnConnect } from '@xyflow/react'
 import { builtInComponentTypes, componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry, type BehaviorVariantManifest, type ComponentCategoryManifest, type ComponentPresetManifest, type ConfigField } from '@system-design/components'
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
@@ -25,9 +25,9 @@ import { SimulationCanvasOverlay } from './simulation-canvas-overlay'
 import { ArchitectureReviewPanel } from './architecture-review-panel'
 import { createAsyncExample, createCollaborativeEditingExample, createDataPlatformExample, createDirectExample, createGlobalStorefrontExample, createIncidentFanOutExample, createJobSchedulerExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createOrderSystemExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from '@/lib/examples'
 import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
-import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode } from '@/lib/store'
+import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode, type WorkbenchNode } from '@/lib/store'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
-import { layoutTopology } from '@/lib/canvas-layout'
+import { layoutTopology, type CanvasNodeDimensions } from '@/lib/canvas-layout'
 import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount } from '@/lib/canvas-metrics'
 import { reviewArchitecture, type ArchitectureFinding } from '@/lib/architecture-review'
 
@@ -401,6 +401,7 @@ function WorkbenchInner() {
   const [layoutBusy, setLayoutBusy] = useState(false)
   const [canvasMetricsVisible, setCanvasMetricsVisible] = useState(true)
   const [architectureReviewOpen, setArchitectureReviewOpen] = useState(false)
+  const [nodeDimensions, setNodeDimensions] = useState<Map<string, CanvasNodeDimensions>>(new Map())
   const runTabRef = useRef<HTMLButtonElement>(null)
   const compareTabRef = useRef<HTMLButtonElement>(null)
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
@@ -504,14 +505,28 @@ function WorkbenchInner() {
     if (project.topology.nodes.length === 0 || layoutBusy) return
     setLayoutBusy(true)
     try {
-      applyNodeLayout(await layoutTopology(project))
+      applyNodeLayout(await layoutTopology(project, nodeDimensions))
       window.requestAnimationFrame(() => void reactFlow.fitView({ duration: 350, padding: 0.15 }))
     } catch (cause) {
       setError(cause instanceof Error ? `Automatic layout failed: ${cause.message}` : 'Automatic layout failed.')
     } finally {
       setLayoutBusy(false)
     }
-  }, [applyNodeLayout, layoutBusy, project, reactFlow, setError])
+  }, [applyNodeLayout, layoutBusy, nodeDimensions, project, reactFlow, setError])
+
+  const handleNodesChange = useCallback((changes: NodeChange<WorkbenchNode>[]) => {
+    const measured = changes.flatMap((change) => change.type === 'dimensions' && change.dimensions ? [[change.id, change.dimensions] as const] : [])
+    if (measured.length > 0) setNodeDimensions((current) => {
+      const next = new Map(current)
+      let changed = false
+      measured.forEach(([nodeId, dimensions]) => {
+        const previous = next.get(nodeId)
+        if (previous?.width !== dimensions.width || previous.height !== dimensions.height) { next.set(nodeId, dimensions); changed = true }
+      })
+      return changed ? next : current
+    })
+    onNodesChange(changes)
+  }, [onNodesChange])
 
   const onConnect: OnConnect = useCallback((connection) => connect(connection), [connect])
   const onDrop = useCallback((event: React.DragEvent) => {
@@ -682,14 +697,14 @@ function WorkbenchInner() {
   const canvasPanel = (
       <section className="canvas-stage" onDrop={onDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}>
         <ReactFlow className={workspaceView === 'definitions' ? 'is-definitions-mode' : ''}
-          nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+          nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={handleNodesChange} onEdgesChange={onEdgesChange}
           onConnect={onConnect} onNodeClick={(_, node) => { closeContextMenu(); selectNode(node.id) }} onNodeContextMenu={openNodeContextMenu} onEdgeClick={(_, edge) => { closeContextMenu(); selectEdge(edge.id) }} onPaneClick={() => { closeContextMenu(); selectNode(null); selectEdge(null); selectFault(null) }} onPaneContextMenu={openPaneContextMenu} onMoveStart={closeContextMenu}
           deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
-          <ViewportPortal><TopologyGroupOverlay project={project} /></ViewportPortal>
-          {showCanvasMetrics ? <ViewportPortal><SimulationCanvasOverlay project={project} metrics={canvasMetrics} t={t} /></ViewportPortal> : null}
+          <ViewportPortal><TopologyGroupOverlay project={project} dimensions={nodeDimensions} /></ViewportPortal>
+          {showCanvasMetrics ? <ViewportPortal><SimulationCanvasOverlay project={project} metrics={canvasMetrics} t={t} dimensions={nodeDimensions} /></ViewportPortal> : null}
           <Controls position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} aria-label={t('Canvas controls')}>
             <ControlButton onClick={() => reactFlow.zoomIn()} aria-label={t('Zoom in')} title={t('Zoom in')}><Plus size={14} /></ControlButton>
             <ControlButton onClick={() => reactFlow.zoomOut()} aria-label={t('Zoom out')} title={t('Zoom out')}><Minus size={14} /></ControlButton>

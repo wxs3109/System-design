@@ -800,6 +800,38 @@ test('projects simulation metrics onto nodes and observed connection events', as
   await expect(page.getByLabel('Simulation metrics overlay')).toBeVisible()
 })
 
+test('keeps metrics, group bounds and automatic layout clear of variable-height nodes', async ({ page }) => {
+  await page.goto('/')
+  await openExamplePicker(page)
+  await page.getByRole('button', { name: /Direct service/ }).click()
+  const service = page.getByTestId('rf__node-service-direct')
+  await service.dispatchEvent('click')
+  const policy = page.getByLabel('Policy for selected node')
+  await policy.selectOption({ label: 'Rate Limit' })
+  await page.locator('.policy-add').getByRole('button', { name: 'Add' }).click()
+  await policy.selectOption({ label: 'Backpressure' })
+  await page.locator('.policy-add').getByRole('button', { name: 'Add' }).click()
+  await expect.poll(() => service.evaluate((element) => element.offsetHeight)).toBeGreaterThan(76)
+
+  await page.getByRole('button', { name: 'Run simulation' }).click()
+  await expect(page.getByText('Throughput over virtual time')).toBeVisible({ timeout: 15_000 })
+  const clearsMeasuredNode = () => page.evaluate(() => {
+    const node = document.querySelector('[data-id=service-direct] .component-node')
+    const metric = document.querySelector('[data-node-metric-id=service-direct]')
+    const region = document.querySelector('[data-group-id=region-primary]')
+    if (!node || !metric || !region) return false
+    const nodeBounds = node.getBoundingClientRect()
+    const metricBounds = metric.getBoundingClientRect()
+    const regionBounds = region.getBoundingClientRect()
+    return metricBounds.top >= nodeBounds.bottom && regionBounds.bottom >= nodeBounds.bottom
+  })
+  await expect.poll(clearsMeasuredNode).toBe(true)
+
+  await page.getByRole('button', { name: 'Auto layout' }).click()
+  await expect(page.getByRole('button', { name: 'Auto layout' })).toBeEnabled()
+  await expect.poll(clearsMeasuredNode).toBe(true)
+})
+
 test('reviews structural architecture risks and locates the affected topology element', async ({ page }) => {
   await page.goto('/')
   await openExamplePicker(page)

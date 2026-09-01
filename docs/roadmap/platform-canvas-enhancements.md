@@ -158,3 +158,29 @@ Boundaries:
 - de-emphasis activates only when the selected definition resolves at least one exact topology edge;
 - resource-only bindings such as an API or data model continue to highlight their directly bound nodes without dimming the rest of the topology;
 - fault-target styling remains independent and can coexist with Definitions mode.
+
+## Follow-up 3 - Measured node geometry
+
+Status: complete (2026-08-31)
+
+Delivered:
+
+- React Flow dimension changes are captured as local, non-persisted Canvas measurements;
+- ELK automatic layout now receives each node's measured width and height;
+- Region/Zone bounds use measured member dimensions;
+- simulation metric badges anchor below each node's measured bottom edge and use its measured width.
+
+Verification:
+
+- `pnpm --filter @system-design/web test -- src/lib/canvas-layout.test.ts src/lib/topology-group-layout.test.ts` - 2 tests passed with variable dimensions;
+- `pnpm --filter @system-design/web test:e2e -- tests/workbench.spec.ts -g "variable-height nodes"` - 1 test passed before and after automatic layout;
+- `pnpm --filter @system-design/web typecheck` - passed;
+- `pnpm --filter @system-design/web lint` - passed;
+- `pnpm --filter @system-design/web build` - passed.
+
+Boundaries:
+
+- measurements are UI state and are not added to ProjectFile or simulation input;
+- nodes use the established 198 by 76 default until React Flow reports their rendered dimensions;
+- stale measurements for removed node IDs may remain in the local map but are never read without a matching current project node;
+- automatic layout still controls positions only; it does not persist width or height.
