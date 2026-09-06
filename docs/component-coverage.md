@@ -1,113 +1,75 @@
-# Component coverage audit
+# Component coverage
 
-This audit decides whether a capability belongs to a component category, an executable behavior variant, an optional preset, a reusable project contract, or a policy. The systems below are acceptance probes for the generic platform, not case-specific pages or hard-coded topologies.
+This document maps current component models to System Design learning questions. Components are bounded simulations, not usable infrastructure products. Reuse composition and add only the state/resources needed to explain a design trade-off; S3-like, map, or ride scenarios do not require building those products.
+
+Detailed execution rules, formulas, and omissions have one authority: [Simulation model assumptions](./model-assumptions.md). The tables below summarize current coverage; planned features are identified separately.
 
 ## Classification rule
 
-The platform distinguishes five kinds of reusable definition:
+| Kind | Responsibility |
+|---|---|
+| Component category | Palette-level organization, such as Service, Database, or Messaging; it does not define execution |
+| Behavior variant | A versioned executable model with config schema, ports, state, events, metrics, and supported faults |
+| Preset | Initial config and existing policies for exactly one variant; no new schema, ports, or runtime behavior; selected inside that variant |
+| Project contract | Reusable API/event definitions, data models, keys/indexes, access actions, and workload mixes, referenced by stable IDs |
+| Policy | A cross-cutting modeled behavior attached to supported targets: retry, timeout, circuit breaker, rate limit, or backpressure |
 
-1. **Component category** — the top-level architectural building block shown in the palette, such as Service, Database, Cache, or Messaging. It organizes discovery but does not by itself claim runtime behavior.
-2. **Behavior variant** — a versioned executable form inside exactly one category. It owns configuration validation, ports, state transitions, events, metrics, faults, and deterministic tests. Adding one extends what the simulator can claim to model.
-3. **Preset** — an optional starting configuration for exactly one variant. It may provide a role-specific name, help text, validated defaults, and existing policies, but owns no schema extension, ports, runtime dispatch, events, metrics, or faults. It is chosen inside its variant flow, never listed as a peer top-level component.
-4. **Project contract** — describes what components process and how they interact: API/event operations, payload schemas, tables/collections, typed fields, keys, indexes, relationships, access patterns, and operation-level workload mixes. Contracts use stable project-level IDs and are referenced by compatible nodes and edges.
-5. **Policy** — attaches reusable cross-cutting runtime behavior such as retry, timeout, circuit breaker, rate limit, or backpressure to a compatible node or edge.
+Regions/zones are topology groups; metrics/traces are result views. Each node discloses its resolved variant/version and preset provenance. A new name alone does not create a new behavior. Worker currently uses a Service preset; Relational, Document, and Key-Value data contracts do not imply separate database engines. Unsupported variant semantics must not be advertised as available.
 
-Regions and availability zones remain topology groups. Metrics and traces remain result views. None of these should be duplicated as decorative components merely to increase the palette count.
+Contracts bind operations to component work and carry identity into traces. Supported fields can change costs, routing, or state; descriptive-only fields must be identified as such. An Orders table is a project contract, not a new component category.
 
-Relational, Document, and Key-Value are potential Database behavior variants because their data and query semantics differ. API Service and Worker may be Service variants when their execution semantics differ. Names such as “read-heavy SQL cluster” are presets only when they change defaults rather than semantics. If a category cannot truthfully support a proposed variant, that variant remains unavailable until its generic semantics exist. Every node discloses its category, resolved variant, and optional preset provenance in the UI and exported project.
+## Current executable behaviors
 
-Project contracts are not component variants. Defining an Orders table once and referencing it from Database access steps is different from creating a new Orders Database component. A contract counts as implemented only when changing it produces a deterministic, explainable runtime difference.
+The registry contains these 16 current behavior types. Database v1 remains import-compatible; Database v2 is the current palette version.
 
-## Shipped executable behaviors
-
-Phase 1 ships nine latest-version behaviors. P2.1b organizes them into the category/variant hierarchy without inventing unsupported variants. Phase 2 has added seven reusable behaviors under the same registry contract:
-
-Phase 2 behavior expansion has also shipped Scheduler, CDN, Search Index, Topic, Realtime Gateway, Workflow, and Global Router. Search Index is reused by the Product Search and streaming Log Search acceptance projects and consumes the same Document Model and interaction contracts as the generic editor. Topic is likewise reused by Order event fan-out and Incident fan-out; Realtime Gateway by Realtime chat and Collaborative editing; Workflow by Payment checkout and compensating Order fulfillment; Global Router by Global storefront and Multi-region failover. Workflow Definitions and actions use the same generic Definitions/Interaction/compiler path for both business systems and capacity-only probes, including success, deduplication, timeout/retry, and compensation outcomes. Global Router uses the same explicit Region groups, generic synchronous edges, workloads, faults, events, and result reducers as other projects. None is a named preset or a case-specific page.
-
-| Category | Behavior | Modeled boundary |
+| Category | Behavior | What the model covers |
 |---|---|---|
-| Automation | Scheduler | Periodic/batch release, seeded jitter, missed-run policy, and concurrency limits |
-| Automation | Workflow | In-run durable checkpoints, scoped idempotency, per-step timeout/retry, and reverse compensation |
-| Traffic | Traffic Generator | Constant or Poisson request arrivals, size, duration, and generation cap |
-| Network | Network Link | Latency, jitter, byte transfer, concurrency, queueing, and packet loss |
+| Traffic | Traffic Generator | Constant/Poisson arrivals, payload estimates, phases, generation limits |
+| Network | Network Link | Latency, jitter, per-request byte transfer, concurrency, queues, packet loss |
 | Gateway & Routing | Load Balancer | Weighted, round-robin, or health-aware target selection |
-| Gateway & Routing | Global Router | Explicit-Region geo affinity, weighted/health-aware target selection, cohort decision TTL, and delayed failover |
-| Gateway & Routing | Realtime Gateway | Long-lived connection capacity, channel membership, broadcast fan-out, independent outbound queues, and slow-client backpressure |
-| Service | Service | Replicas, concurrency, service time, queueing, and intrinsic errors |
-| Messaging | Queue | Bounded buffering and consumer delivery |
-| Messaging | Stream | Partitions, consumer groups, batches, acknowledgement, and lag |
-| Messaging | Topic | Publish fan-out, independent subscription backlog/ACK, batching, and time/size retention |
-| Cache | Cache | Key distribution, TTL, capacity, LRU/FIFO eviction, and hit/miss routing |
-| Cache | CDN | Deterministic POP selection, per-POP edge cache, origin fetch, and byte-dependent delivery |
-| Object Storage | Object Storage | Bounded reads/writes and byte-dependent throughput |
-| Database | Database | Connections, shards, primary/replica reads, and replication delay |
-| Database | Search Index | Delayed indexing/refresh visibility, shard-copy query fan-out, and candidate merge |
+| Gateway & Routing | Global Router | Explicit-Region routing, decision cache/TTL, health detection and delayed failover |
+| Gateway & Routing | Realtime Gateway | Connections, channels, broadcast, per-connection outbound queues and slow-client backpressure |
+| Service | Service | Replicas, concurrency, local work time, queueing and intrinsic errors |
+| Messaging | Queue | Bounded request waiting and consumer-slot delivery work |
+| Messaging | Stream | Partitions, offsets, consumer groups, request-triggered batch consumption and lag |
+| Messaging | Topic | Retained messages, independent subscription backlog/ACK, delivery opportunities and expiry |
+| Cache | Cache | Key/TTL/entry-capacity behavior, LRU/FIFO eviction, hit/miss routing |
+| Cache | CDN | Per-POP cache, successful origin fill, byte-dependent delivery costs on supported paths |
+| Object Storage | Object Storage | Read/write work, request capacity, object-size-based transfer costs and byte counters |
+| Database | Database | Connections, sharding, read-copy selection, replication delay; operation-bound access-cost estimates |
+| Database | Search Index | Document visibility delay, shard/copy selection, query fan-out and merge-cost estimates |
+| Automation | Scheduler | Periodic/batch releases, jitter, skip/catch-up policy, active/pending runs |
+| Automation | Workflow | In-run checkpoints, scoped idempotency, ordered steps, timeout/retry and compensation |
 
-Database v1 remains readable for compatibility; Database v2 is the current palette behavior.
+This list does not imply shared bandwidth, independently scheduled broker consumers, real object storage, or durable state across runs. Refer to the model assumptions for the applicable capacity-only versus operation-aware path and behavior version.
 
 ## Representative-system matrix
 
-“Covered” means the platform can already study the listed trade-offs. It does not mean production fidelity.
+These are composition probes, not claims of complete application implementations. Coverage means the listed trade-offs can be studied using current models. Missing semantics require explicit scope before implementation; they are not automatically roadmap commitments.
 
-| Acceptance probe | Covered with shipped behaviors | Important unsupported semantics | Classification of the gap |
-|---|---|---|---|
-| URL shortener | API/data contracts, request path, load balancing, cache, indexed database access, hotspots, and failures | Unique-ID allocation, conditional writes, and transaction/consistency enforcement | Existing project contracts; later consistency/transaction policy where justified |
-| Realtime chat | Service capacity, Realtime Gateway connections/rooms/broadcast, Topic/Stream delivery, partitions, storage, and backpressure | Presence, reconnect/resume, multi-gateway channel coordination, and protocol/delivery guarantees | Existing **Realtime Gateway** boundary; deeper session/distributed semantics require later variants or policies |
-| Video delivery | Upload/transcode contracts, object storage, CDN POP/cache/origin behavior, scheduled work, bandwidth, and failures | Multipart/range transfer, adaptive bitrate sessions, shared-link contention, and DRM | Existing composition; transfer details remain explicit non-goals |
-| Search | API/Document/query contracts, indexing delay, refresh/replica visibility, shard query fan-out, merge cost, cache, and read load | Analyzer/tokenizer, query DSL, relevance ranking, segments/compaction, and distributed failover | Existing **Search Index** boundary; deeper text/distributed semantics require later variants |
-| Notifications | Producer service, Event contracts, independent Topic subscriptions, per-subscription backlog/ACK, retention, scheduled releases, and backpressure | Subscription filters, retry schedules, delivery calendars/rules, and provider quotas | Existing **Topic** and **Scheduler** variants plus later contracts/policies; provider is a Service variant |
-| Cloud drive | File/metadata contracts, metadata database, object storage, upload service, async work, CDN delivery, and bandwidth | Multipart transfer, resumable-session correctness, object versions, and shared-link contention | Existing composition; transfer details remain explicit non-goals |
-| Social feed | API/entity/access contracts, Cache, Topic/Stream fan-out, database, hotspots, and comparison | Durable per-user feed materialization, ranking, and consistency semantics | Existing composition; later contracts/variants only for independently testable gaps |
-| Payments | Payment operation/entity contracts, synchronous services, Workflow idempotency/checkpoints/timeout/retry/compensation, database, queue, and circuit breaker | Transactional outbox, exactly-once side effects, and cross-run recovery | Existing **Workflow** boundary plus later consistency policies |
-| Web crawler | Crawl/Document contracts, Scheduler releases, worker capacity, queues, storage, bandwidth, Search Index, and backpressure | Per-host politeness, URL deduplication, robots semantics, and distributed crawl coordination | Existing composition plus later independently testable policies |
-| Multi-region service | Explicit client/target Regions, Global Router geo/weighted/health-aware routing, cohort decision TTL, thresholded health observations, delayed failover, regional faults, and database replica delay | Real DNS/Anycast/BGP behavior, latency/geolocation discovery, distributed health-check quorum, operation placement, and cross-region replication links | Existing **Global Router** boundary; replication and deeper control-plane semantics remain later models |
+| Design probe | Current study scope | Important missing model semantics |
+|---|---|---|
+| URL shortener | API/cache/database load, access costs, hotspots and failures | ID allocation, conditional writes, transactions and enforced consistency |
+| Realtime chat | Connection/message capacity, channels, delivery and backpressure | Presence, reconnect/resume, cross-gateway coordination and delivery guarantees |
+| Video delivery | Upload/Worker load, object bytes, CDN caching and transfer costs | Sustained/adaptive sessions, shared bandwidth, multipart/range behavior and DRM |
+| Search | Indexing delay, visibility, query fan-out/merge costs and cache load | Text analysis/ranking, query language, segments and distributed failover |
+| Notifications | Producer load, Topic copies/ACK, scheduled releases and backlog | Autonomous subscription consumption, filters, retry calendars and provider quotas |
+| Cloud drive | Metadata and object-path load, asynchronous processing, CDN and bytes | Named object versions, resumable/multipart correctness and shared bandwidth |
+| Social feed | Access patterns, cache, fan-out, partitions and hotspots | Materialized per-user feed state, ranking and enforced consistency |
+| Payments | Service/Workflow attempts, scoped idempotency, compensation and failures | Transactional outbox, exactly-once side effects and restart recovery |
+| Web crawler | Scheduled work, Worker/queue pressure, storage bytes and Search load | Per-host politeness, URL deduplication, robots rules and distributed coordination |
+| Multi-region service | Regional routing, decision TTL, failover timing, faults and replica lag | Real routing protocols, cross-region replication links and operation placement |
+| S3-like storage | API/metadata/byte-path capacity and modeled node-loss effects | Object commit/version state, fragment placement, checksums and repair lifecycle |
+| Maps/navigation | Tile/cache delivery costs, query capacity and location-event load | Spatial queries, road-graph routing, traffic aggregation and dataset-version compatibility |
+| Ride dispatch | Location-event load, message delivery, push and Workflow capacity | Driver/trip state, spatial matching, leases and competing assignment updates |
 
-## Cross-cutting contract layer
+## Planned improvements
 
-Phase 1 behaviors execute real capacity and failure logic, while Phase 2's `ProjectFile v3` adds the business identity that anonymous requests lacked. A Service can own API endpoints and request/response contracts; data models can declare tables or collections, typed fields, keys, and indexes; workloads can target concrete operations; and interactions bind service, cache, data, and event actions into executable paths. This was a platform-wide modeling gap, not ten missing component icons.
-
-The shipped layer provides:
-
-1. API and event contracts with stable operation IDs and payload schemas.
-2. Data models with entities, fields, keys, indexes, relationships, cardinality, and size estimates.
-3. Access patterns binding operations to service calls, cache operations, data queries/writes, and event publication.
-4. Workload mixes that target concrete operation IDs and preserve key/payload distributions.
-5. Runtime request context, events, traces, and metrics that consume and expose those bindings.
-
-The acceptance gate is behavioral: indexed lookup versus scan, small versus large payload, uniform versus hot keys, and different operation mixes yield deterministic and explainable differences. Topic extends that gate to independent subscriptions: adding a subscriber multiplies fan-out copies, a failed or offline subscriber does not advance another subscriber, and retention changes expiry evidence. Realtime Gateway extends it to long-lived client state: channel membership determines fan-out, per-connection bandwidth determines drain and backlog, and the selected overflow policy determines whether a slow recipient drops a message or is disconnected. Workflow extends it again: an idempotency-key replay does not repeat checkpointed work, a slow activity crosses its declared deadline, retry settings change attempts and delay, and terminal failure runs only completed compensatable steps in reverse order. Global Router adds an explicit multi-region gate: Region membership changes geo selection, route weights change deterministic distribution, TTL preserves stale cohort decisions, and health thresholds plus propagation delay change when failover becomes visible.
-
-## Prioritized additions
-
-The order is based on how many acceptance probes each primitive unlocks and whether its semantics can be tested independently.
-
-1. **API/Data/Access contract layer** — shipped; the cross-cutting prerequisite described above.
-2. **Scheduler** — shipped; periodic and batch releases, jitter, missed-run policy, and concurrency limits.
-3. **CDN** — shipped; edge cache capacity/TTL, POP selection, origin fetch, bandwidth, and hit/miss metrics.
-4. **Search Index** — shipped; indexing delay, refresh visibility, shard/replica query fan-out, and merge latency.
-5. **Topic** — shipped; independent subscriptions, per-subscription backlog/acknowledgement, retention, and fan-out.
-6. **Realtime Gateway** — shipped; long-lived connections, rooms/channels, broadcast amplification, per-connection outbound drain, and `drop-message` / `disconnect` backpressure.
-7. **Workflow** — shipped; in-run durable step state, idempotency, bounded retry, timeout, and reverse compensation.
-8. **Global Router** — shipped; explicit-Region geo affinity, seeded weighted/health-aware routing, cohort decision caching, TTL, and observable failover delay.
-
-These are generic behavior variants and project contracts, not vendor products. API Gateway, Worker, Function, SQL Database, NoSQL Database, transcoder, crawler, ranking service, and notification provider are offered only when an owning category has a variant that faithfully covers their documented boundary. A role name alone is at most a preset. Function becomes a distinct behavior variant only when cold starts, scale-to-zero, concurrency allocation, or billing are actually modeled.
+[Demand and Capacity Planning](./roadmap/demand-capacity-planning/README.md) is proposed, not implemented. It owns autonomous Queue/Topic delivery (DP-05/DP-12), shared transfer capacity and sessions (DP-06 through DP-08), storage forecasting/admission (DP-09/DP-10), and broader sizing/validation. These are current gaps with planned work, rather than blanket non-goals. Other omissions remain bounded by the learning-model scope; see [future extensions](./roadmap/future-extensions.md) for separately deferred platform work.
 
 ## Coverage gate
 
-A behavior-variant addition is accepted only when it provides:
-
-- a versioned manifest and validated configuration;
-- deterministic runtime semantics, events, metrics, and fault behavior;
-- unit and property tests for its invariants;
-- at least two acceptance probes that use the same implementation;
-- no case-specific canvas, reducer, or result page.
-
-A preset is accepted only when it provides:
-
-- a stable preset ID/version and exactly one owning variant ID/version;
-- defaults that pass the owning variant schema;
-- discoverability within its variant rather than as a peer top-level palette item;
-- no runtime dispatch, schema, port, metric, or fault implementation of its own;
-- import/export round-trip and visible variant disclosure;
-- a test proving its execution is equivalent to the resolved variant plus declared defaults and policies.
-
-A project-contract addition is accepted only when it provides versioned validation, stable references, referential-integrity diagnostics, import/export round trips, generic editors, compiler/runtime consumption, and differential tests proving semantic changes affect measured results.
+- **Behavior variants** require a concrete learning question, minimal modeled state/resources and omissions, a validated versioned manifest, deterministic events/metrics/fault semantics, and unit/property tests. At least two independent scenarios must reuse the implementation; no example-specific Canvas, compiler, runtime, reducer, or result branches.
+- **Presets** require a stable ID/version referencing exactly one variant/version, schema-valid defaults, discovery inside that variant, visible import/export provenance, and a test proving equivalence to the resolved config/policies. They add no executable semantics.
+- **Project contracts** require versioned schemas, stable references, referential validation, generic editing, import/export round trips, and compiler/runtime consumption. Differential tests prove that supported semantic fields change the modeled result.
+- Update current coverage and model assumptions only when behavior ships. Acceptance demonstrates properties of the declared simulation and chosen experiments, not production correctness.
