@@ -16,10 +16,10 @@ export default function PracticePage() {
     </section>
     <section className={styles.exerciseGrid} aria-label="可用练习">
       {exercises.map((exercise, index) => <Link className={styles.exerciseCard} key={exercise.id} aria-label={exercise.title} href={`/practice/${exercise.id}`}>
-        <div className={styles.cardTop}><span className={styles.cardNumber}>{String(index + 1).padStart(2, '0')}</span><span className={styles.pill}>容量与排队 · 入门</span></div>
+        <div className={styles.cardTop}><span className={styles.cardNumber}>{String(index + 1).padStart(2, '0')}</span><span className={styles.pill}>{exercise.category} · {exercise.difficulty}</span></div>
         <h2>{exercise.title}</h2><p>{exercise.summary}</p>
-        <div className={styles.miniFlow} aria-hidden="true"><span>流量</span><ArrowRight size={16} /><span>API Service</span><ArrowRight size={16} /><span>运行证据</span></div>
-        <div className={styles.cardFooter}><span>约 10 分钟 · 本地保存</span><strong>开始练习 <ArrowRight size={16} /></strong></div>
+        <div className={styles.miniFlow} aria-hidden="true">{exercise.flow.map((step, stepIndex) => <span className={styles.flowStep} key={`${stepIndex}:${step}`}>{stepIndex > 0 ? <ArrowRight size={16} /> : null}<span>{step}</span></span>)}</div>
+        <div className={styles.cardFooter}><span>约 {exercise.estimatedMinutes} 分钟 · 本地保存</span><strong>开始练习 <ArrowRight size={16} /></strong></div>
       </Link>)}
     </section>
     <p className={styles.catalogNote}>组件运行在简化的仿真模型中。无需部署服务；结果用于学习设计取舍。</p>

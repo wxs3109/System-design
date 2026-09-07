@@ -18,8 +18,8 @@
 .pill { border: 1px solid var(--border); border-radius: 30px; padding: 5px 10px; font-size: 10px; color: var(--muted-bright); }
 .exerciseCard h2 { margin: 25px 0 12px; font-size: 23px; letter-spacing: -.025em; }
 .exerciseCard p { color: var(--muted-bright); font-size: 13px; line-height: 1.8; }
-.miniFlow { display: flex; align-items: center; gap: 12px; margin: 25px 0; color: var(--muted); }
-.miniFlow span { border: 1px solid var(--border); background: var(--panel-raised); border-radius: 7px; padding: 10px 13px; color: var(--muted-bright); font-size: 11px; }
+.miniFlow { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 25px 0; color: var(--muted); }
+.miniFlow .flowStep > span { border: 1px solid var(--border); background: var(--panel-raised); border-radius: 7px; padding: 10px 13px; color: var(--muted-bright); font-size: 11px; }
 .cardFooter { border-top: 1px solid var(--border); padding-top: 20px; font-size: 11px; color: var(--muted); }
 .cardFooter strong { display: inline-flex; gap: 8px; align-items: center; color: var(--cyan); font-size: 12px; }
 .catalogNote { color: var(--muted); font-size: 11px; margin-top: 30px; }
@@ -37,28 +37,29 @@
 .sidebar { min-height: 0; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--border); padding: 24px 22px 28px; scrollbar-width: thin; scrollbar-color: var(--border-bright) transparent; }
 .lessonHeading h1 { font-size: 25px; line-height: 1.45; margin: 12px 0; letter-spacing: -.035em; }
 .lessonHeading p { color: var(--muted-bright); font-size: 12px; line-height: 1.8; margin: 0 0 20px; }
-.givens { display: grid; grid-template-columns: repeat(3, 1fr); padding: 15px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.givens { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); padding: 15px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .givens > div { display: flex; flex-direction: column; gap: 6px; padding-left: 13px; border-left: 1px solid var(--border); }
 .givens > div:first-child { padding-left: 0; border-left: 0; }
 .givens strong { font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
 .givens strong span { color: var(--muted); font-size: 11px; font-weight: 400; }
 .givens small { color: var(--muted); font-size: 10px; }
 .taskSection { margin-top: 22px; }
+.promptText { margin: 0; color: var(--muted-bright); font-size: 11px; line-height: 1.8; }
 .sidebar h2 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; margin: 0 0 12px; }
 .taskSection h2 > span { margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 400; }
 .objectives { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .objectives li { display: flex; gap: 8px; align-items: flex-start; color: var(--muted-bright); font-size: 11px; line-height: 1.7; }
 .objectives svg { flex-shrink: 0; margin-top: 4px; color: var(--cyan-deep); }
 .timing, .boundary { color: var(--muted); font-size: 10px; line-height: 1.7; margin: 13px 0 0; }
-.replicaChoices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.replicaChoices button { cursor: pointer; border: 1px solid var(--border-bright); background: var(--field-bg); border-radius: 7px; min-height: 53px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-.replicaChoices strong { font-size: 19px; }
-.replicaChoices small { color: var(--muted); font-size: 9px; }
-.replicaChoices button[aria-pressed="true"] { border-color: var(--cyan-deep); color: var(--cyan); background: color-mix(in srgb, var(--cyan-deep) 12%, var(--panel)); }
-.replicaChoices button:hover { border-color: var(--cyan); }
+.parameterChoices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.parameterChoices button { cursor: pointer; border: 1px solid var(--border-bright); background: var(--field-bg); border-radius: 7px; min-height: 53px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.parameterChoices strong { font-size: 19px; }
+.parameterChoices small { color: var(--muted); font-size: 9px; }
+.parameterChoices button[aria-pressed="true"] { border-color: var(--cyan-deep); color: var(--cyan); background: color-mix(in srgb, var(--cyan-deep) 12%, var(--panel)); }
+.parameterChoices button:hover { border-color: var(--cyan); }
 .runButton { display: flex; justify-content: center; align-items: center; gap: 9px; width: 100%; border: 1px solid var(--cyan-deep); border-radius: 7px; background: color-mix(in srgb, var(--cyan-deep) 24%, var(--panel)); color: var(--cyan); font-size: 12px; font-weight: 650; padding: 13px; margin-top: 12px; cursor: pointer; }
 .runButton:hover { background: color-mix(in srgb, var(--cyan-deep) 34%, var(--panel)); }
-.runButton:disabled, .replicaChoices button:disabled { opacity: .55; cursor: wait; }
+.runButton:disabled, .parameterChoices button:disabled { opacity: .55; cursor: wait; }
 .secondaryActions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
 .secondaryActions button { border: none; background: transparent; color: var(--muted-bright); font-size: 10px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; padding: 0; }
 .secondaryActions > span { color: var(--muted); font-size: 9px; }
@@ -68,7 +69,7 @@
 .feedback > .restoredLabel { margin-top: 8px; color: var(--muted-bright); }
 .feedbackPass { border-color: color-mix(in srgb, #34d399 40%, var(--border)); }
 .feedbackPass h2 { color: #34d399; }
-.evidenceNumbers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 0; margin-top: 8px; border-bottom: 1px solid var(--border); }
+.evidenceNumbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 14px; padding: 16px 0; margin-top: 8px; border-bottom: 1px solid var(--border); }
 .evidenceNumbers > div { display: flex; flex-direction: column; gap: 5px; }
 .evidenceNumbers strong { font-size: 21px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
 .evidenceNumbers span { color: var(--muted); font-size: 9px; }
@@ -88,7 +89,9 @@
 .attempts { margin-top: 23px; border-top: 1px solid var(--border); padding-top: 18px; }
 .attempts ol { list-style: none; padding: 0; margin: 0; }
 .attempts li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.attempts li > div { display: flex; flex-direction: column; gap: 4px; }
+.attempts li > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.attempts li strong { overflow-wrap: anywhere; line-height: 1.6; }
+.attempts li > span:last-child { flex-shrink: 0; max-width: 95px; }
 .attempts strong { font-size: 11px; }
 .attempts small { color: var(--muted); font-size: 9px; }
 .attempts li > span:last-child { margin-left: auto; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -99,4 +102,19 @@
 .error { color: var(--danger); font-size: 11px; line-height: 1.7; }
 .catalog a:focus-visible, .practice a:focus-visible, .sidebar button:focus-visible, .hint summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 @media (max-width: 1100px) { .workspace :global(.workbench-shell) { grid-template-columns: 320px minmax(0, 1fr); } .sidebar { padding: 20px 17px; } .lessonHeading h1 { font-size: 22px; } }
-@media (max-width: 760px) { .catalog { padding: 0 20px 36px; } .hero { padding-top: 42px; } .hero p { font-size: 14px; } .exerciseCard { padding: 20px; } .miniFlow { gap: 7px; } .miniFlow span { padding: 8px; } .practice { height: auto; } .practiceNav { padding: 0 14px; gap: 10px; } .practiceNav > span { display: none; } .workspace :global(.workbench) { display: flex; flex-direction: column; min-height: 1100px; } .workspace :global(.workbench-shell) { display: flex; flex-direction: column; } .sidebar { overflow: visible; border-right: 0; border-bottom: 1px solid var(--border); } }
+@media (max-width: 760px) { .catalog { padding: 0 20px 36px; } .hero { padding-top: 42px; } .hero p { font-size: 14px; } .exerciseCard { padding: 20px; } .miniFlow { gap: 7px; } .miniFlow .flowStep > span { padding: 8px; } .practice { height: auto; } .practiceNav { padding: 0 14px; gap: 10px; } .practiceNav > span { display: none; } .workspace :global(.workbench) { display: flex; flex-direction: column; min-height: 1100px; } .workspace :global(.workbench-shell) { display: flex; flex-direction: column; } .sidebar { overflow: visible; border-right: 0; border-bottom: 1px solid var(--border); } }
+
+.flowStep { display: inline-flex; align-items: center; gap: 12px; }
+.parameterGroup { margin-top: 14px; }
+.parameterGroup h3 { margin: 0 0 8px; font-size: 11px; font-weight: 500; color: var(--muted-bright); }
+.parameterChoices { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); }
+.comparison { margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border); }
+.comparison h3 { font-size: 11px; margin: 0 0 6px; color: var(--muted-bright); }
+.comparison p { font-size: 9px; color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
+.comparison table { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; }
+.comparison th, .comparison td { padding: 6px 3px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.comparison th:first-child { width: 44%; text-align: left; color: var(--muted); font-weight: 400; }
+.comparison thead th { color: var(--muted); font-weight: 400; }
+
+:global([data-theme="light"]) .feedbackPass h2, :global([data-theme="light"]) .checkPass { color: #047857; }
+:global([data-theme="light"]) .successDot { background: #047857; }

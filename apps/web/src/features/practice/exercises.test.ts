@@ -5,7 +5,7 @@ import { exercises, getExercise, serviceQueueExercise } from './exercises'
 
 const projectWithReplicas = (replicas: number) => {
   const project = serviceQueueExercise.createProject('practice-test-attempt')
-  project.topology.nodes.find((node) => node.id === serviceQueueExercise.editableParameter.nodeId)!.config.replicas = replicas
+  project.topology.nodes.find((node) => node.id === serviceQueueExercise.parameters[0]!.nodeId)!.config.replicas = replicas
   return project
 }
 
