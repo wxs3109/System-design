@@ -73,6 +73,9 @@ node .tools/lint-content.mjs
 |---|---|
 | [当前实施规划](docs/roadmap/demand-capacity-planning/README.md) | 容量规划目标、里程碑、依赖和各部分 spec |
 | [容量规划共享合同](docs/roadmap/demand-capacity-planning/shared-contracts.md) | 学习模型边界、公式、运行证据和验收规则 |
+| [学习能力矩阵](docs/roadmap/learning-capability-matrix.md) | 能力、候选练习、前置知识、验收证据、模型缺口与学习路径 |
+| [数据分布与 Hot Key Lab 计划](docs/roadmap/data-distribution-hot-key-labs.md) | 一致性哈希、热点只读实验的分段 spec、交互与验收，尚未开始 |
+| [综合设计练习候选计划](docs/roadmap/practice-design-exercises.md) | 短链接读取路径练习的候选范围与验收条件，尚未开始 |
 | [组件覆盖说明](docs/component-coverage.md) | 组件类别、行为变体、Preset 和能力边界 |
 | [仿真模型说明](docs/model-assumptions.md) | 当前执行语义、假设、指标解释和未支持行为 |
 | [格式适配决策](docs/decisions/adr-001-format-adapters.md) | OpenAPI / DBML 的已选实现与支持范围 |
