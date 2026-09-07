@@ -1,0 +1,102 @@
+.catalog { min-height: 100vh; padding: 0 7vw 52px; background: radial-gradient(ellipse at 70% 5%, color-mix(in srgb, var(--cyan) 8%, transparent), transparent 50%), var(--bg); }
+.catalogNav, .practiceNav { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--border); }
+.catalogNav { height: 76px; }
+.catalogNav a, .practiceNav a { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-bright); text-decoration: none; font-size: 13px; }
+.catalogNav a:hover, .practiceNav a:hover { color: var(--cyan); }
+.catalogNav .wordmark { color: var(--text); font-weight: 700; font-size: 16px; letter-spacing: -.02em; }
+.wordmark svg { color: var(--cyan); }
+.hero { max-width: 800px; padding: 72px 0 44px; }
+.eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--cyan); font-size: 10px; font-weight: 700; letter-spacing: .15em; }
+.hero h1 { margin: 17px 0 15px; font-size: clamp(32px, 4vw, 52px); letter-spacing: -.045em; line-height: 1.2; }
+.hero p { color: var(--muted-bright); line-height: 1.85; font-size: 16px; max-width: 630px; }
+.journey { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 28px; }
+.exerciseGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 560px)); gap: 24px; }
+.exerciseCard { display: block; color: var(--text); text-decoration: none; padding: 28px; background: var(--panel); border: 1px solid var(--border-bright); border-radius: 16px; transition: border-color .15s, transform .15s; }
+.exerciseCard:hover { border-color: var(--cyan-deep); transform: translateY(-2px); }
+.cardTop, .cardFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cardNumber { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pill { border: 1px solid var(--border); border-radius: 30px; padding: 5px 10px; font-size: 10px; color: var(--muted-bright); }
+.exerciseCard h2 { margin: 25px 0 12px; font-size: 23px; letter-spacing: -.025em; }
+.exerciseCard p { color: var(--muted-bright); font-size: 13px; line-height: 1.8; }
+.miniFlow { display: flex; align-items: center; gap: 12px; margin: 25px 0; color: var(--muted); }
+.miniFlow span { border: 1px solid var(--border); background: var(--panel-raised); border-radius: 7px; padding: 10px 13px; color: var(--muted-bright); font-size: 11px; }
+.cardFooter { border-top: 1px solid var(--border); padding-top: 20px; font-size: 11px; color: var(--muted); }
+.cardFooter strong { display: inline-flex; gap: 8px; align-items: center; color: var(--cyan); font-size: 12px; }
+.catalogNote { color: var(--muted); font-size: 11px; margin-top: 30px; }
+.practice { height: 100dvh; min-height: 680px; display: flex; flex-direction: column; }
+.practiceNav { height: 52px; min-height: 52px; padding: 0 22px; background: var(--panel); }
+.practiceNav > span { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted-bright); }
+.practiceNav > span svg { color: var(--cyan); }
+.workspace { flex: 1; min-height: 0; }
+.workspace :global(.workbench) { height: 100%; min-height: 0; grid-template-rows: 48px minmax(0, 1fr); outline: none; }
+.workspace :global(.workbench-shell) { grid-template-columns: 360px minmax(0, 1fr); }
+.workspace :global(.topbar) { gap: 12px; }
+.workspace :global(.brand) { min-width: 0; }
+.workspace :global(.top-actions) { margin-left: auto; }
+.workspace :global(.palette-help) { display: none; }
+.sidebar { min-height: 0; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--border); padding: 24px 22px 28px; scrollbar-width: thin; scrollbar-color: var(--border-bright) transparent; }
+.lessonHeading h1 { font-size: 25px; line-height: 1.45; margin: 12px 0; letter-spacing: -.035em; }
+.lessonHeading p { color: var(--muted-bright); font-size: 12px; line-height: 1.8; margin: 0 0 20px; }
+.givens { display: grid; grid-template-columns: repeat(3, 1fr); padding: 15px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.givens > div { display: flex; flex-direction: column; gap: 6px; padding-left: 13px; border-left: 1px solid var(--border); }
+.givens > div:first-child { padding-left: 0; border-left: 0; }
+.givens strong { font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.givens strong span { color: var(--muted); font-size: 11px; font-weight: 400; }
+.givens small { color: var(--muted); font-size: 10px; }
+.taskSection { margin-top: 22px; }
+.sidebar h2 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; margin: 0 0 12px; }
+.taskSection h2 > span { margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 400; }
+.objectives { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.objectives li { display: flex; gap: 8px; align-items: flex-start; color: var(--muted-bright); font-size: 11px; line-height: 1.7; }
+.objectives svg { flex-shrink: 0; margin-top: 4px; color: var(--cyan-deep); }
+.timing, .boundary { color: var(--muted); font-size: 10px; line-height: 1.7; margin: 13px 0 0; }
+.replicaChoices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.replicaChoices button { cursor: pointer; border: 1px solid var(--border-bright); background: var(--field-bg); border-radius: 7px; min-height: 53px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.replicaChoices strong { font-size: 19px; }
+.replicaChoices small { color: var(--muted); font-size: 9px; }
+.replicaChoices button[aria-pressed="true"] { border-color: var(--cyan-deep); color: var(--cyan); background: color-mix(in srgb, var(--cyan-deep) 12%, var(--panel)); }
+.replicaChoices button:hover { border-color: var(--cyan); }
+.runButton { display: flex; justify-content: center; align-items: center; gap: 9px; width: 100%; border: 1px solid var(--cyan-deep); border-radius: 7px; background: color-mix(in srgb, var(--cyan-deep) 24%, var(--panel)); color: var(--cyan); font-size: 12px; font-weight: 650; padding: 13px; margin-top: 12px; cursor: pointer; }
+.runButton:hover { background: color-mix(in srgb, var(--cyan-deep) 34%, var(--panel)); }
+.runButton:disabled, .replicaChoices button:disabled { opacity: .55; cursor: wait; }
+.secondaryActions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.secondaryActions button { border: none; background: transparent; color: var(--muted-bright); font-size: 10px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; padding: 0; }
+.secondaryActions > span { color: var(--muted); font-size: 9px; }
+.feedback { margin-top: 25px; border: 1px solid var(--border); border-radius: 9px; padding: 15px; background: var(--panel-raised); }
+.feedback h2 { color: var(--muted-bright); margin-bottom: 9px; }
+.feedback > p { color: var(--muted); font-size: 10px; line-height: 1.7; margin: 0; }
+.feedback > .restoredLabel { margin-top: 8px; color: var(--muted-bright); }
+.feedbackPass { border-color: color-mix(in srgb, #34d399 40%, var(--border)); }
+.feedbackPass h2 { color: #34d399; }
+.evidenceNumbers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 0; margin-top: 8px; border-bottom: 1px solid var(--border); }
+.evidenceNumbers > div { display: flex; flex-direction: column; gap: 5px; }
+.evidenceNumbers strong { font-size: 21px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.evidenceNumbers span { color: var(--muted); font-size: 9px; }
+.feedback ul { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.feedback li { display: flex; align-items: flex-start; gap: 7px; }
+.feedback li > svg { flex-shrink: 0; margin-top: 2px; }
+.feedback li > div { display: flex; flex-direction: column; gap: 4px; }
+.feedback li strong { color: var(--muted-bright); font-size: 10px; }
+.feedback li span { color: var(--muted); font-size: 10px; line-height: 1.65; }
+.checkPass { color: #34d399; }
+.checkOther { color: var(--warning); }
+.hint { margin-top: 18px; font-size: 11px; }
+.hint summary { display: flex; align-items: center; gap: 7px; color: var(--muted-bright); cursor: pointer; list-style: none; }
+.hint summary > svg:last-child { margin-left: auto; }
+.hint[open] summary > svg:last-child { transform: rotate(90deg); }
+.hint p { color: var(--muted); font-size: 11px; line-height: 1.8; }
+.attempts { margin-top: 23px; border-top: 1px solid var(--border); padding-top: 18px; }
+.attempts ol { list-style: none; padding: 0; margin: 0; }
+.attempts li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.attempts li > div { display: flex; flex-direction: column; gap: 4px; }
+.attempts strong { font-size: 11px; }
+.attempts small { color: var(--muted); font-size: 9px; }
+.attempts li > span:last-child { margin-left: auto; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.attempts li > span:last-child small { display: block; margin-top: 3px; }
+.attemptDot, .successDot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
+.successDot { background: #34d399; }
+.attempts > p { color: var(--muted); font-size: 10px; line-height: 1.7; }
+.error { color: var(--danger); font-size: 11px; line-height: 1.7; }
+.catalog a:focus-visible, .practice a:focus-visible, .sidebar button:focus-visible, .hint summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+@media (max-width: 1100px) { .workspace :global(.workbench-shell) { grid-template-columns: 320px minmax(0, 1fr); } .sidebar { padding: 20px 17px; } .lessonHeading h1 { font-size: 22px; } }
+@media (max-width: 760px) { .catalog { padding: 0 20px 36px; } .hero { padding-top: 42px; } .hero p { font-size: 14px; } .exerciseCard { padding: 20px; } .miniFlow { gap: 7px; } .miniFlow span { padding: 8px; } .practice { height: auto; } .practiceNav { padding: 0 14px; gap: 10px; } .practiceNav > span { display: none; } .workspace :global(.workbench) { display: flex; flex-direction: column; min-height: 1100px; } .workspace :global(.workbench-shell) { display: flex; flex-direction: column; } .sidebar { overflow: visible; border-right: 0; border-bottom: 1px solid var(--border); } }

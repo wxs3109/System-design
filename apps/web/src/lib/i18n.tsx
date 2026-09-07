@@ -10,6 +10,7 @@ const localeStorageKey = 'system-design-locale'
 
 const zhCN: Record<string, string> = {
   'System Design Simulator': '系统设计模拟器',
+  'Practice': '练习',
   'Build · Run · Break · Measure': '设计 · 运行 · 注入故障 · 度量',
   'Local simulation': '本地模拟',
   'Business-aware': '业务感知',

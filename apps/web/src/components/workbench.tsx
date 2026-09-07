@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, type NodeChange, type OnConnect } from '@xyflow/react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
+import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, ViewportPortal, getNodesBounds, getViewportForBounds, useReactFlow, type NodeChange, type OnConnect } from '@xyflow/react'
 import { builtInComponentTypes, componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry, type BehaviorVariantManifest, type ComponentCategoryManifest, type ComponentPresetManifest, type ConfigField } from '@system-design/components'
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
 import { Activity, AlignHorizontalSpaceAround, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, ListChecks, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
@@ -37,7 +38,6 @@ const orderedTypes = builtInComponentTypes
 type PanelName = 'faults' | 'inspector' | 'results'
 type PanelVisibility = Record<PanelName, boolean>
 const panelVisibilityStorageKey = 'system-design-panel-visibility'
-const defaultPanelVisibility: PanelVisibility = { faults: true, inspector: true, results: true }
 const examples = [
   ['Order system', 'APIs → Cache → Relational data → Events', createOrderSystemExample],
   ['Job scheduler', 'Schedule / recur / run now → due scan → Queue → Workers', createJobSchedulerExample],
@@ -64,12 +64,12 @@ interface CanvasContextMenu {
   nodeId?: string
 }
 
-function loadPanelVisibility(storageKey: string): PanelVisibility {
+function loadPanelVisibility(storageKey: string, defaults: PanelVisibility): PanelVisibility {
   try {
     const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}') as Partial<PanelVisibility>
-    return { faults: saved.faults !== false, inspector: saved.inspector !== false, results: saved.results !== false }
+    return { faults: saved.faults ?? defaults.faults, inspector: saved.inspector ?? defaults.inspector, results: saved.results ?? defaults.results }
   } catch {
-    return defaultPanelVisibility
+    return defaults
   }
 }
 
@@ -377,12 +377,23 @@ export interface WorkbenchProps {
   session?: WorkbenchSession
   onRunCompleted?: (run: CompletedWorkbenchRun) => void
   embedded?: boolean
+  sidebar?: (controls: WorkbenchControls) => ReactNode
+  defaultPanels?: Partial<PanelVisibility>
 }
 
-function WorkbenchInner({ session, onRunCompleted, embedded = false }: WorkbenchProps & { session: WorkbenchSession }) {
+export interface WorkbenchControls {
+  ready: boolean
+  run: () => Promise<void>
+  cancel: () => void
+  reset: () => void
+  runs: SimulationRunRecord[]
+}
+
+function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, defaultPanels }: WorkbenchProps & { session: WorkbenchSession }) {
   const store = useWorkbenchStoreApi()
   const workbenchRef = useRef<HTMLElement>(null)
   const visibilityStorageKey = session.id === 'active' ? panelVisibilityStorageKey : `${panelVisibilityStorageKey}:${session.id}`
+  const fallbackVisibility = useMemo(() => ({ faults: defaultPanels?.faults ?? true, inspector: defaultPanels?.inspector ?? true, results: defaultPanels?.results ?? true }), [defaultPanels?.faults, defaultPanels?.inspector, defaultPanels?.results])
   const { resolvedTheme, setTheme } = useTheme()
   const { locale, setLocale, t } = useI18n()
   const project = useWorkbenchStore((state) => state.project)
@@ -401,6 +412,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
   const selectedFault = experiment.faults.find((fault) => fault.id === selectedFaultId)
   const affected = useMemo(() => affectedTopology(selectedFault, project), [project, selectedFault])
   const reactFlow = useReactFlow<ReturnType<typeof projectToNodes>[number]>()
+  const initialFit = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [exampleOpen, setExampleOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -412,6 +424,28 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
     setResultsView('run')
     onRunCompleted?.(completed)
   })
+  useEffect(() => {
+    const key = `${session.id}:${project.id}`
+    if (!embedded || !historyReady || project.topology.nodes.length === 0 || initialFit.current === key) return
+    const stage = workbenchRef.current?.querySelector('.canvas-stage')
+    if (!stage) return
+    let frame = 0
+    // Use the measured host size; the flow's initial viewport can predate the
+    // resizable shell's layout when a session already contains nodes.
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry || entry.contentRect.width <= 0 || entry.contentRect.height <= 0) return
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        initialFit.current = key
+        const { width, height } = stage.getBoundingClientRect()
+        const bounds = getNodesBounds(projectToNodes(project.topology.nodes))
+        void reactFlow.setViewport(getViewportForBounds(bounds, width, height, 0.2, 1.25, { top: '64px', bottom: '24px', left: '28px', right: '28px' }))
+        observer.disconnect()
+      })
+    })
+    observer.observe(stage)
+    return () => { observer.disconnect(); window.cancelAnimationFrame(frame) }
+  }, [embedded, historyReady, project.id, project.topology.nodes, reactFlow, session.id])
   const [workspaceView, setWorkspaceView] = useState<'topology' | 'definitions'>('topology')
   const [selectedDefinition, setSelectedDefinition] = useState<DefinitionSelection | null>(null)
   const [formatDialog, setFormatDialog] = useState<'openapi' | 'dbml' | null>(null)
@@ -426,7 +460,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
   const faultsPanelRef = useRef<ImperativePanelHandle>(null)
   const inspectorPanelRef = useRef<ImperativePanelHandle>(null)
   const resultsPanelRef = useRef<ImperativePanelHandle>(null)
-  const [panelVisibility, setPanelVisibility] = useState(defaultPanelVisibility)
+  const [panelVisibility, setPanelVisibility] = useState(fallbackVisibility)
   const definitionBindings = useSelectedDefinitionBindings(workspaceView === 'definitions' ? selectedDefinition : null)
   const hasDefinitionPath = definitionBindings.edgeIds.size > 0
   const canvasMetrics = useMemo(() => result ? buildCanvasMetricProjection(result) : null, [result])
@@ -457,13 +491,13 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
 
   // Layout preferences are local UI state, independent from the exported project file.
   useEffect(() => {
-    const visibility = loadPanelVisibility(visibilityStorageKey)
+    const visibility = loadPanelVisibility(visibilityStorageKey, fallbackVisibility)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPanelVisibility(visibility)
     if (!visibility.faults) faultsPanelRef.current?.collapse()
     if (!visibility.inspector) inspectorPanelRef.current?.collapse()
     if (!visibility.results) resultsPanelRef.current?.collapse()
-  }, [visibilityStorageKey])
+  }, [visibilityStorageKey, fallbackVisibility])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -662,7 +696,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
         <div className="palette-help"><strong>{t('Executable building blocks')}</strong><p>{t('Choose a category, then an implemented behavior variant. Templates only provide starting values.')}</p></div>
       </aside>
   )
-  const palettePanel = workspaceView === 'definitions'
+  const palettePanel = sidebar ? sidebar({ ready: historyReady, run, cancel: cancelRun, reset: () => session.reset(), runs }) : workspaceView === 'definitions'
     ? <DefinitionsExplorer project={project} selection={selectedDefinition} onSelect={(selection) => { setSelectedDefinition(selection); if (!panelVisibility.inspector) setPanelVisible('inspector', inspectorPanelRef, true) }} onError={setError} />
     : componentPalette
 
@@ -671,7 +705,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
         <ReactFlow className={workspaceView === 'definitions' ? 'is-definitions-mode' : ''}
           nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={handleNodesChange} onEdgesChange={onEdgesChange}
           onConnect={onConnect} onNodeClick={(_, node) => { closeContextMenu(); selectNode(node.id) }} onNodeContextMenu={openNodeContextMenu} onEdgeClick={(_, edge) => { closeContextMenu(); selectEdge(edge.id) }} onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)} onEdgeMouseLeave={() => setHoveredEdgeId(null)} onPaneClick={() => { closeContextMenu(); selectNode(null); selectEdge(null); selectFault(null) }} onPaneContextMenu={openPaneContextMenu} onMoveStart={() => { closeContextMenu(); setHoveredEdgeId(null) }}
-          deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.2} maxZoom={2}
+          deleteKeyCode={["Backspace", "Delete"]} fitView={!embedded} minZoom={0.2} maxZoom={2}
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
@@ -686,15 +720,15 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
           {project.topology.nodes.length === 0 ? <Panel position="top-center"><div className="canvas-empty"><span><Plus size={20} /></span><strong>{t('Start with an empty canvas')}</strong><p>{t('Drag any component here, connect it, configure load, then run the model.')}</p></div></Panel> : null}
           {workspaceView === 'definitions' && !architectureReviewOpen ? <Panel position="top-right"><div className="definition-overlay-legend"><Blocks size={13} /><span>{definitionBindings.resource ? <>{t('Showing bindings for')} <strong>{definitionBindings.resource.name}</strong></> : t('Select a definition to show topology bindings')}</span></div></Panel> : null}
           <Panel position="top-left"><div className="canvas-toolbar">
-            <button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> {t('Clear canvas')}</button>
+            {!embedded ? <button type="button" onClick={() => { setProject(createEmptyProject()); reactFlow.setCenter(0, 0, { zoom: 1 }) }}><RotateCcw size={14} /> {t('Clear canvas')}</button> : null}
             <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} aria-busy={layoutBusy} onClick={() => void arrangeCanvas('auto')}><LayoutDashboard size={14} /> {t(layoutBusy ? 'Laying out…' : 'Auto layout')}</button>
             <button type="button" disabled={project.topology.nodes.length === 0 || layoutBusy} onClick={() => void arrangeCanvas('tidy')}><AlignHorizontalSpaceAround size={14} /> {t('Tidy')}</button>
             {result ? <button type="button" aria-pressed={canvasMetricsVisible} onClick={() => setCanvasMetricsVisible((visible) => !visible)}><Activity size={14} /> {t('Canvas metrics')}</button> : null}
             <button type="button" aria-expanded={architectureReviewOpen} onClick={() => setArchitectureReviewOpen((open) => !open)}><ListChecks size={14} /> {t('Review')}<span className={architectureFindings.some((finding) => finding.severity === 'error') ? 'review-count is-error' : 'review-count'}>{architectureFindings.length}</span></button>
-            <div className="example-picker">
-              <button type="button" aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> {t('Load example')} <ChevronDown size={13} /></button>
+            {!embedded ? <div className="example-picker">
+              <button type="button" disabled={!historyReady} aria-expanded={exampleOpen} onClick={() => setExampleOpen((open) => !open)}><Save size={14} /> {t('Load example')} <ChevronDown size={13} /></button>
               {exampleOpen ? <div className="example-menu">{examples.map(([name, description, createProject]) => <button type="button" key={name} onClick={() => { setProject(createProject()); setExampleOpen(false); setTimeout(() => reactFlow.fitView(), 0) }}><strong>{t(`example.${name}`, {}, name)}</strong><span>{t(`example-description.${name}`, {}, description)}</span></button>)}</div> : null}
-            </div>
+            </div> : null}
           </div></Panel>
           {architectureReviewOpen ? <Panel position="top-right"><ArchitectureReviewPanel findings={architectureFindings} t={t} onSelect={showArchitectureFinding} onClose={() => setArchitectureReviewOpen(false)} /></Panel> : null}
           {hoveredEdge && hoveredEdgeMetric ? <Panel position="bottom-center"><div className="connection-metric-popover" role="status"><strong>{project.topology.nodes.find((node) => node.id === hoveredEdge.source)?.name ?? hoveredEdge.source} → {project.topology.nodes.find((node) => node.id === hoveredEdge.target)?.name ?? hoveredEdge.target}</strong><ConnectionMetricValues metric={hoveredEdgeMetric} t={t} /></div></Panel> : null}
@@ -731,7 +765,17 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
         if (target instanceof Element && !target.closest('input, textarea, select, button, a, [contenteditable="true"]')) workbenchRef.current?.focus({ preventScroll: true })
       }}>
       <header className="topbar">
-        <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('System Design Simulator')}</strong><span>{t('Build · Run · Break · Measure')}</span></div></div>
+        {embedded ? <>
+          <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('Topology')}</strong><span>{t('Local simulation')}</span></div></div>
+          <div className="top-actions">
+            <button type="button" className="button subtle icon-only" aria-label={t('Undo project change')} disabled={!canUndo || running} onClick={() => undoProject(store)}><Undo2 size={15} /></button>
+            <button type="button" className="button subtle icon-only" aria-label={t('Redo project change')} disabled={!canRedo || running} onClick={() => redoProject(store)}><Redo2 size={15} /></button>
+            <button type="button" className="button subtle" aria-pressed={panelVisibility.inspector} onClick={() => setPanelVisible('inspector', inspectorPanelRef, !panelVisibility.inspector)}><PanelRight size={15} />{t('Properties')}</button>
+            <button type="button" className="button subtle" aria-pressed={panelVisibility.results} onClick={() => setPanelVisible('results', resultsPanelRef, !panelVisibility.results)}><PanelBottom size={15} />{t('Output')}</button>
+            <button type="button" className="button subtle icon-only" aria-label={t(themeReady && resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>{themeReady && resolvedTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button>
+          </div>
+        </> : <>
+        <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('System Design Simulator')}</strong><Link className="practice-entry" href="/practice">{t('Practice')} →</Link></div></div>
         <div className="topbar-center"><span className="status-dot" /> {t('Local simulation')} <span className="separator" /><span className={`modeling-mode modeling-mode--${project.modelingMode}`} aria-label={t('Project modeling mode: {mode}', { mode: t(project.modelingMode === 'business-aware' ? 'Business-aware' : 'Capacity-only') })}>{t(project.modelingMode === 'business-aware' ? 'Business-aware' : 'Capacity-only')}</span><span className="separator" /> {t('{count} components', { count: project.topology.nodes.length })} <span className="separator" /> {t('{count} links', { count: project.topology.edges.length })}</div>
         <div className="top-actions">
           <div className="workspace-switch" role="group" aria-label={t('Workbench view')}><button type="button" aria-pressed={workspaceView === 'topology'} onClick={() => setWorkspaceView('topology')}><Layers3 size={14} /> {t('Topology')}</button><button type="button" aria-pressed={workspaceView === 'definitions'} onClick={() => { setWorkspaceView('definitions'); if (!panelVisibility.inspector) setPanelVisible('inspector', inspectorPanelRef, true) }}><Blocks size={14} /> {t('Definitions')}</button></div>
@@ -756,6 +800,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
           <button type="button" className="button run" onClick={() => void run()} disabled={running || !historyReady}><Play size={15} fill="currentColor" /> {t(running ? 'Running…' : 'Run simulation')}</button>
           <button type="button" className="button subtle language-toggle" aria-label={t(locale === 'en' ? 'Switch to Chinese' : 'Switch to English')} title={t(locale === 'en' ? 'Switch to Chinese' : 'Switch to English')} onClick={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}><Languages size={15} /><span>{locale === 'en' ? '中文' : 'EN'}</span></button>
         </div>
+        </>}
       </header>
       <WorkbenchShell
         palette={palettePanel} canvas={canvasPanel}
@@ -769,8 +814,8 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false }: Workbench
   )
 }
 
-export function Workbench({ session: providedSession, onRunCompleted, embedded }: WorkbenchProps = {}) {
+export function Workbench({ session: providedSession, onRunCompleted, embedded, sidebar, defaultPanels }: WorkbenchProps = {}) {
   const [ownedSession] = useState(() => providedSession ?? createWorkbenchSession({ id: 'active' }))
   const session = providedSession ?? ownedSession
-  return <WorkbenchStoreProvider store={session.store}><ReactFlowProvider><WorkbenchInner session={session} {...(onRunCompleted ? { onRunCompleted } : {})} {...(embedded === undefined ? {} : { embedded })} /></ReactFlowProvider></WorkbenchStoreProvider>
+  return <WorkbenchStoreProvider store={session.store}><ReactFlowProvider><WorkbenchInner key={session.id} session={session} {...(onRunCompleted ? { onRunCompleted } : {})} {...(embedded === undefined ? {} : { embedded })} {...(sidebar ? { sidebar } : {})} {...(defaultPanels ? { defaultPanels } : {})} /></ReactFlowProvider></WorkbenchStoreProvider>
 }

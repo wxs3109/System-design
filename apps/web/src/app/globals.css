@@ -73,6 +73,8 @@ button { color: inherit; }
 .brand div { display: flex; flex-direction: column; gap: 1px; }
 .brand strong { font-size: 13px; letter-spacing: .01em; }
 .brand span { color: var(--muted); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
+.brand .practice-entry { display: inline-flex; align-items: center; min-height: 22px; width: fit-content; color: var(--cyan); text-decoration: none; font-size: 10px; letter-spacing: 0; }
+.brand .practice-entry:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .topbar-center { flex: 1; display: flex; justify-content: center; align-items: center; color: var(--muted); font-size: 11px; gap: 8px; }
 .topbar-center strong { color: var(--muted-bright); }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; }
