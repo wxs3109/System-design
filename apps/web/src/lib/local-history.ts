@@ -5,6 +5,11 @@ import { getActiveExperiment, parseProjectFile, type ProjectFile, type Simulatio
 
 export type ProjectRevisionSource = 'autosave' | 'import' | 'manual' | 'restore'
 
+export interface SaveProjectRevisionOptions {
+  /** Update this repository's restore pointer. Snapshot-only saves can opt out. */
+  activate?: boolean
+}
+
 export interface ProjectRevisionRecord {
   revisionId: string
   projectId: string
@@ -27,7 +32,7 @@ export interface SimulationRunRecord {
 }
 
 interface ActiveWorkspaceRecord {
-  key: 'active'
+  key: string
   projectId: string
   projectRevisionId: string
   updatedAt: number
@@ -84,18 +89,21 @@ export class LocalHistoryDatabase extends Dexie {
 }
 
 export class LocalHistoryRepository {
-  constructor(readonly database = new LocalHistoryDatabase()) {}
+  /** Scopes isolate restore pointers; callers still own globally distinct project IDs. */
+  constructor(readonly database = new LocalHistoryDatabase(), readonly workspaceKey = 'active') {}
 
-  async saveProjectRevision(input: ProjectFile | unknown, source: ProjectRevisionSource = 'autosave'): Promise<ProjectRevisionRecord> {
+  async saveProjectRevision(input: ProjectFile | unknown, source: ProjectRevisionSource = 'autosave', options: SaveProjectRevisionOptions = {}): Promise<ProjectRevisionRecord> {
     const project = parseProjectFile(immutableCopy(input))
     const fingerprint = fingerprintProject(project)
 
     return this.database.transaction('rw', this.database.projectRevisions, this.database.simulationRuns, this.database.activeWorkspace, async () => {
       const latest = await this.latestRevisionForProject(project.id)
       if (latest?.fingerprint === fingerprint) {
-        await this.database.activeWorkspace.put({
-          key: 'active', projectId: project.id, projectRevisionId: latest.revisionId, updatedAt: Date.now(),
-        })
+        if (options.activate !== false) {
+          await this.database.activeWorkspace.put({
+            key: this.workspaceKey, projectId: project.id, projectRevisionId: latest.revisionId, updatedAt: Date.now(),
+          })
+        }
         return immutableCopy(latest)
       }
 
@@ -110,16 +118,18 @@ export class LocalHistoryRepository {
         project: immutableCopy(project),
       }
       await this.database.projectRevisions.add(revision)
-      await this.database.activeWorkspace.put({
-        key: 'active', projectId: project.id, projectRevisionId: revision.revisionId, updatedAt: createdAt,
-      })
+      if (options.activate !== false) {
+        await this.database.activeWorkspace.put({
+          key: this.workspaceKey, projectId: project.id, projectRevisionId: revision.revisionId, updatedAt: createdAt,
+        })
+      }
       await this.pruneRevisions(project.id)
       return immutableCopy(revision)
     })
   }
 
   async loadActiveProject(): Promise<ProjectRevisionRecord | undefined> {
-    const active = await this.database.activeWorkspace.get('active')
+    const active = await this.database.activeWorkspace.get(this.workspaceKey)
     if (!active) return undefined
     const revision = await this.database.projectRevisions.get(active.projectRevisionId)
     if (!revision) return undefined
@@ -147,7 +157,7 @@ export class LocalHistoryRepository {
     const experiment = getActiveExperiment(project)
     const revision = projectRevisionId
       ? await this.database.projectRevisions.get(projectRevisionId)
-      : await this.saveProjectRevision(project, 'autosave')
+      : await this.saveProjectRevision(project, 'autosave', { activate: false })
     if (!revision || revision.projectId !== project.id) throw new Error('The simulation run must reference a revision of the same project.')
     if (revision.fingerprint !== fingerprintProject(project)) throw new Error('The simulation run must reference the exact project revision that was simulated.')
     if (result.scenarioId !== project.id || result.seed !== experiment.seed) throw new Error('The simulation result does not match the project and experiment snapshot.')
@@ -195,6 +205,9 @@ export class LocalHistoryRepository {
       .offset(MAX_REVISIONS_PER_PROJECT)
       .primaryKeys()
     const referenced = new Set((await this.database.simulationRuns.where('projectId').equals(projectId).toArray()).map((run) => run.projectRevisionId))
+    for (const workspace of await this.database.activeWorkspace.toArray()) {
+      referenced.add(workspace.projectRevisionId)
+    }
     await this.database.projectRevisions.bulkDelete(candidates.filter((revisionId) => !referenced.has(revisionId)))
   }
 
@@ -209,5 +222,14 @@ export class LocalHistoryRepository {
   }
 }
 
-let repository: LocalHistoryRepository | undefined
-export const getLocalHistoryRepository = () => repository ??= new LocalHistoryRepository()
+let sharedDatabase: LocalHistoryDatabase | undefined
+const repositories = new Map<string, LocalHistoryRepository>()
+export const getLocalHistoryRepository = (workspaceKey = 'active') => {
+  let repository = repositories.get(workspaceKey)
+  if (!repository) {
+    sharedDatabase ??= new LocalHistoryDatabase()
+    repository = new LocalHistoryRepository(sharedDatabase, workspaceKey)
+    repositories.set(workspaceKey, repository)
+  }
+  return repository
+}

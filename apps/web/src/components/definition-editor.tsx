@@ -5,7 +5,8 @@ import { Braces, ChevronDown, Database, FileJson, Gauge, GitBranch, Plus, Radio,
 import type {
   ApiDefinition, CacheKeyDefinition, DataModel, EventDefinition, InteractionDefinition, JsonSchemaDocument, OperationWorkload, ProjectFile, WorkflowDefinition,
 } from '@system-design/model'
-import { useWorkbenchStore, type ProjectEditIssue } from '@/lib/store'
+import type { ProjectEditIssue } from '@/lib/store'
+import { useWorkbenchStore, useWorkbenchStoreApi } from '@/lib/workbench-store-provider'
 import {
   addDefinitionResource, buildDefinitionTopologyBinding, createDefinitionResource, definitionGroups, findDefinitionResource, listDefinitionResources, removeDefinitionResource,
   replaceDefinitionResource, selectionKey, type DataModelKind, type DefinitionKind, type DefinitionResource, type DefinitionSelection,
@@ -122,6 +123,7 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
   onSelectionChange: (selection: DefinitionSelection | null) => void
 }) {
   const { t } = useI18n()
+  const store = useWorkbenchStoreApi()
   const project = useWorkbenchStore((state) => state.project)
   const commitProjectEdit = useWorkbenchStore((state) => state.commitProjectEdit)
   const resource = selection ? findDefinitionResource(project, selection) : undefined
@@ -139,7 +141,7 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
 
   const commit = (next: DefinitionResource, extraIssues: ProjectEditIssue[] = []) => {
     if (!selection || extraIssues.length > 0) { updateDraft(next, extraIssues); return }
-    const latest = useWorkbenchStore.getState().project
+    const latest = store.getState().project
     const result = commitProjectEdit(replaceDefinitionResource(latest, selection, next))
     if (!result.success) { updateDraft(next, relativeIssues(latest, selection, result.issues)); return }
     updateDraft(next, [], JSON.stringify(next))
@@ -149,7 +151,7 @@ export function DefinitionEditor({ selection, onSelectionChange }: {
 
   const remove = () => {
     if (!selection) return
-    const latest = useWorkbenchStore.getState().project
+    const latest = store.getState().project
     const result = commitProjectEdit(removeDefinitionResource(latest, selection))
     if (!result.success) { if (draft) updateDraft(draft, relativeIssues(latest, selection, result.issues)); return }
     onSelectionChange(nextSelectionAfterDelete(latest, selection))

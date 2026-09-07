@@ -4,7 +4,8 @@ import { useMemo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { componentPresetRegistry, componentRegistry, policyRegistry } from '@system-design/components'
 import { Activity, Archive, CalendarClock, Cloud, Database, GitFork, Globe2, HardDrive, Layers3, RadioTower, Search, Server, Workflow, type LucideIcon } from 'lucide-react'
-import { useWorkbenchStore, type WorkbenchNode } from '@/lib/store'
+import type { WorkbenchNode } from '@/lib/store'
+import { useWorkbenchStore } from '@/lib/workbench-store-provider'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 
 export const componentIcons: Record<string, LucideIcon> = { globe: Globe2, activity: Activity, 'calendar-clock': CalendarClock, workflow: Workflow, 'git-fork': GitFork, server: Server, layers: Layers3, database: Database, 'hard-drive': HardDrive, 'radio-tower': RadioTower, archive: Archive, cloud: Cloud, search: Search }

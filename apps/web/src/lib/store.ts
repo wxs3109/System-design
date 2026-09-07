@@ -1,17 +1,15 @@
-'use client'
-
 import { addEdge, applyEdgeChanges, applyNodeChanges, type Connection as FlowConnection, type Edge, type EdgeChange, type Node, type NodeChange } from '@xyflow/react'
 import { componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry } from '@system-design/components'
 import { createEmptyProject, parseProjectFile, projectFileV3Schema, projectToScenario, type ComponentType, type Experiment, type Fault, type PolicyAttachment, type ProjectConnection, type ProjectFile, type SimulationResult, type TopologyGroup } from '@system-design/model'
-import { create, useStore } from 'zustand'
-import { temporal } from 'zundo'
+import { createStore, type StoreApi } from 'zustand/vanilla'
+import { temporal, type TemporalState } from 'zundo'
 
 export type ProjectNode = ProjectFile['topology']['nodes'][number]
 export type WorkbenchNode = Node<ProjectNode, 'component'>
 export interface ProjectEditIssue { path: Array<string | number>; message: string }
 export type ProjectEditResult = { success: true } | { success: false; issues: ProjectEditIssue[] }
 
-interface WorkbenchState {
+export interface WorkbenchState {
   project: ProjectFile
   selectedNodeId: string | null
   selectedEdgeId: string | null
@@ -54,6 +52,10 @@ interface WorkbenchState {
   setRunning: (running: boolean) => void
   setResult: (result: SimulationResult | null) => void
   setError: (error: string | null) => void
+}
+
+export type WorkbenchStore = StoreApi<WorkbenchState> & {
+  temporal: StoreApi<TemporalState<Pick<WorkbenchState, 'project'>>>
 }
 
 const updateActiveExperiment = (project: ProjectFile, update: (experiment: Experiment) => Experiment): ProjectFile => ({
@@ -103,18 +105,23 @@ const syncEdges = (project: ProjectFile, edges: Edge[]): ProjectFile => ({
     }),
   },
 })
-let nextNodeNumber = 1
-
-export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) => ({
-  project: createEmptyProject(), selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, running: false, error: null,
+export const createWorkbenchStore = (initialProject: ProjectFile = createEmptyProject()): WorkbenchStore => {
+  let nextNodeNumber = 1
+  const project = componentRegistry.validateProject(parseProjectFile(structuredClone(initialProject)), componentPresetRegistry)
+  const store: WorkbenchStore = createStore<WorkbenchState>()(temporal((set, get) => ({
+  project, selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, running: false, error: null,
   setProject: (input) => set({ project: componentRegistry.validateProject(parseProjectFile(input), componentPresetRegistry), selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null }),
   restoreProject: (input) => {
     const project = componentRegistry.validateProject(parseProjectFile(input), componentPresetRegistry)
-    const history = useWorkbenchStore.temporal.getState()
+    const history = store.temporal.getState()
+    const wasTracking = history.isTracking
     history.pause()
-    set({ project, selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null })
-    history.clear()
-    history.resume()
+    try {
+      set({ project, selectedNodeId: null, selectedEdgeId: null, selectedFaultId: null, result: null, error: null })
+      history.clear()
+    } finally {
+      if (wasTracking) history.resume()
+    }
   },
   commitProjectEdit: (input) => {
     const parsed = projectFileV3Schema.safeParse(input)
@@ -436,24 +443,26 @@ export const useWorkbenchStore = create<WorkbenchState>()(temporal((set, get) =>
   partialize: (state) => ({ project: structuredClone(state.project) }),
   equality: (past, current) => JSON.stringify(past.project) === JSON.stringify(current.project),
 }))
+  return store
+}
 
-const applyTimeTravel = (direction: 'undo' | 'redo') => {
-  const history = useWorkbenchStore.temporal.getState()
+const applyTimeTravel = (store: WorkbenchStore, direction: 'undo' | 'redo') => {
+  const history = store.temporal.getState()
   if (direction === 'undo') history.undo()
   else history.redo()
-  const state = useWorkbenchStore.getState()
+  const state = store.getState()
   const parsed = projectFileV3Schema.safeParse(state.project)
   if (!parsed.success) {
     if (direction === 'undo') history.redo()
     else history.undo()
-    useWorkbenchStore.setState({ error: `Cannot ${direction}: the resulting project is invalid.` })
+    store.setState({ error: `Cannot ${direction}: the resulting project is invalid.` })
     return
   }
   const project = parsed.data
   const nodeIds = new Set(project.topology.nodes.map((node) => node.id))
   const edgeIds = new Set(project.topology.edges.map((edge) => edge.id))
   history.pause()
-  useWorkbenchStore.setState({
+  store.setState({
     project,
     selectedNodeId: state.selectedNodeId && nodeIds.has(state.selectedNodeId) ? state.selectedNodeId : null,
     selectedEdgeId: state.selectedEdgeId && edgeIds.has(state.selectedEdgeId) ? state.selectedEdgeId : null,
@@ -464,16 +473,13 @@ const applyTimeTravel = (direction: 'undo' | 'redo') => {
   history.resume()
 }
 
-export const undoProject = () => {
-  applyTimeTravel('undo')
+export const undoProject = (store: WorkbenchStore) => {
+  applyTimeTravel(store, 'undo')
 }
 
-export const redoProject = () => {
-  applyTimeTravel('redo')
+export const redoProject = (store: WorkbenchStore) => {
+  applyTimeTravel(store, 'redo')
 }
-
-export const useCanUndo = () => useStore(useWorkbenchStore.temporal, (state) => state.pastStates.length > 0)
-export const useCanRedo = () => useStore(useWorkbenchStore.temporal, (state) => state.futureStates.length > 0)
 
 export const getScenario = (project: ProjectFile) => {
   return projectToScenario(project)

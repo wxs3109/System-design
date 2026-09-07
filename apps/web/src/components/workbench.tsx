@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, BackgroundVariant, ControlButton, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, ViewportPortal, useReactFlow, type NodeChange, type OnConnect } from '@xyflow/react'
 import { builtInComponentTypes, componentCatalog, componentPresetRegistry, componentRegistry, policyRegistry, type BehaviorVariantManifest, type ComponentCategoryManifest, type ComponentPresetManifest, type ConfigField } from '@system-design/components'
 import { createEmptyProject, getActiveExperiment, parseProjectFile, type ComponentType, type PolicyAttachment, type ProjectConnection, type SimulationProgress, type SimulationResult } from '@system-design/model'
-import { SimulationWorkerClient } from '@system-design/simulation/client'
-import { validateScenarioForSimulation } from '@system-design/simulation'
 import { Activity, AlignHorizontalSpaceAround, ArrowDown, ArrowUp, Blocks, Braces, ChevronDown, CircleAlert, ClipboardPaste, Copy, DatabaseZap, Download, FlaskConical, History, Languages, Layers3, LayoutDashboard, ListChecks, Maximize2, Minus, Moon, MousePointer2, PanelBottom, PanelRight, Play, Plus, Redo2, RotateCcw, Save, Settings2, Square, Sun, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
@@ -24,8 +22,11 @@ import { TopologyGroupOverlay } from './topology-group-overlay'
 import { SimulationCanvasOverlay } from './simulation-canvas-overlay'
 import { ArchitectureReviewPanel } from './architecture-review-panel'
 import { createAsyncExample, createCollaborativeEditingExample, createDataPlatformExample, createDirectExample, createGlobalStorefrontExample, createIncidentFanOutExample, createJobSchedulerExample, createLogSearchExample, createMultiRegionFailoverExample, createOrderEventFanOutExample, createOrderFulfillmentWorkflowExample, createOrderSystemExample, createPaymentCheckoutWorkflowExample, createProductSearchExample, createRealtimeChatExample, createVideoDeliveryExample } from '@/lib/examples'
-import { getLocalHistoryRepository, type ProjectRevisionRecord, type SimulationRunRecord } from '@/lib/local-history'
-import { projectToEdges, projectToNodes, redoProject, undoProject, useCanRedo, useCanUndo, useWorkbenchStore, type ProjectNode, type WorkbenchNode } from '@/lib/store'
+import type { SimulationRunRecord } from '@/lib/local-history'
+import { projectToEdges, projectToNodes, redoProject, undoProject, type ProjectNode, type WorkbenchNode } from '@/lib/store'
+import { WorkbenchStoreProvider, useCanRedo, useCanUndo, useWorkbenchStore, useWorkbenchStoreApi } from '@/lib/workbench-store-provider'
+import { createWorkbenchSession, type CompletedWorkbenchRun, type WorkbenchSession } from '@/lib/workbench-session'
+import { useWorkbenchSession } from '@/lib/use-workbench-session'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology, type CanvasNodeDimensions } from '@/lib/canvas-layout'
 import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount, type CanvasEdgeMetric } from '@/lib/canvas-metrics'
@@ -63,9 +64,9 @@ interface CanvasContextMenu {
   nodeId?: string
 }
 
-function loadPanelVisibility(): PanelVisibility {
+function loadPanelVisibility(storageKey: string): PanelVisibility {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(panelVisibilityStorageKey) ?? '{}') as Partial<PanelVisibility>
+    const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}') as Partial<PanelVisibility>
     return { faults: saved.faults !== false, inspector: saved.inspector !== false, results: saved.results !== false }
   } catch {
     return defaultPanelVisibility
@@ -372,7 +373,16 @@ function formatDomainMetrics(details: SimulationResult['nodes'][number]['details
   }).join(' · ')
 }
 
-function WorkbenchInner() {
+export interface WorkbenchProps {
+  session?: WorkbenchSession
+  onRunCompleted?: (run: CompletedWorkbenchRun) => void
+  embedded?: boolean
+}
+
+function WorkbenchInner({ session, onRunCompleted, embedded = false }: WorkbenchProps & { session: WorkbenchSession }) {
+  const store = useWorkbenchStoreApi()
+  const workbenchRef = useRef<HTMLElement>(null)
+  const visibilityStorageKey = session.id === 'active' ? panelVisibilityStorageKey : `${panelVisibilityStorageKey}:${session.id}`
   const { resolvedTheme, setTheme } = useTheme()
   const { locale, setLocale, t } = useI18n()
   const project = useWorkbenchStore((state) => state.project)
@@ -383,7 +393,7 @@ function WorkbenchInner() {
   const result = useWorkbenchStore((state) => state.result)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const { setProject, restoreProject, addCatalogComponent, pasteComponent, applyNodeLayout, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, deleteSelectedNode, updateSimulation, updateMeta, setRunning, setResult, setError } = useWorkbenchStore()
+  const { setProject, restoreProject, addCatalogComponent, pasteComponent, applyNodeLayout, onNodesChange, onEdgesChange, connect, selectNode, selectEdge, selectFault, addFault, updateFault, deleteFault, deleteSelectedNode, updateSimulation, updateMeta, setResult, setError } = useWorkbenchStore()
   const canUndo = useCanUndo()
   const canRedo = useCanRedo()
   const selectedNode = project.topology.nodes.find((node) => node.id === selectedNodeId)
@@ -392,17 +402,16 @@ function WorkbenchInner() {
   const affected = useMemo(() => affectedTopology(selectedFault, project), [project, selectedFault])
   const reactFlow = useReactFlow<ReturnType<typeof projectToNodes>[number]>()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const clientRef = useRef<SimulationWorkerClient | null>(null)
   const [exampleOpen, setExampleOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null)
   const [clipboardNode, setClipboardNode] = useState<ProjectNode | null>(null)
-  const [revisions, setRevisions] = useState<ProjectRevisionRecord[]>([])
-  const [runs, setRuns] = useState<SimulationRunRecord[]>([])
-  const [historyReady, setHistoryReady] = useState(false)
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
-  const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
+  const { ready: historyReady, progress, revisions, runs, refreshHistory, run } = useWorkbenchSession(session, (completed) => {
+    setResultsView('run')
+    onRunCompleted?.(completed)
+  })
   const [workspaceView, setWorkspaceView] = useState<'topology' | 'definitions'>('topology')
   const [selectedDefinition, setSelectedDefinition] = useState<DefinitionSelection | null>(null)
   const [formatDialog, setFormatDialog] = useState<'openapi' | 'dbml' | null>(null)
@@ -440,68 +449,39 @@ function WorkbenchInner() {
   const hoveredEdgeMetric = showCanvasMetrics && hoveredEdgeId ? canvasMetrics.edges.get(hoveredEdgeId) : undefined
   const selectedEdgeMetric = selectedEdgeId && canvasMetrics ? canvasMetrics.edges.get(selectedEdgeId) : undefined
 
-  const refreshHistory = useCallback(async (projectId: string) => {
-    const repository = getLocalHistoryRepository()
-    const [savedRevisions, savedRuns] = await Promise.all([repository.listProjectRevisions(projectId), repository.listSimulationRuns(projectId)])
-    setRevisions(savedRevisions)
-    setRuns(savedRuns)
-  }, [])
-
   useEffect(() => {
     // next-themes resolves the persisted/system theme only in the browser. Keep the hydration render identical to SSR.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeReady(true)
   }, [])
 
-  useEffect(() => {
-    let active = true
-    void (async () => {
-      try {
-        const saved = await getLocalHistoryRepository().loadActiveProject()
-        if (active && saved) restoreProject(saved.project)
-      } catch (cause) {
-        if (active) setError(cause instanceof Error ? `Could not restore local project: ${cause.message}` : 'Could not restore local project.')
-      } finally {
-        if (active) setHistoryReady(true)
-      }
-    })()
-    return () => { active = false; clientRef.current?.dispose() }
-  }, [restoreProject, setError])
-
-  useEffect(() => {
-    if (!historyReady) return
-    const timer = window.setTimeout(() => {
-      void getLocalHistoryRepository().saveProjectRevision(project).then(() => refreshHistory(project.id)).catch((cause) => setError(cause instanceof Error ? `Could not save local revision: ${cause.message}` : 'Could not save local revision.'))
-    }, 350)
-    return () => window.clearTimeout(timer)
-  }, [historyReady, project, refreshHistory, setError])
-
   // Layout preferences are local UI state, independent from the exported project file.
   useEffect(() => {
-    const visibility = loadPanelVisibility()
+    const visibility = loadPanelVisibility(visibilityStorageKey)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPanelVisibility(visibility)
     if (!visibility.faults) faultsPanelRef.current?.collapse()
     if (!visibility.inspector) inspectorPanelRef.current?.collapse()
     if (!visibility.results) resultsPanelRef.current?.collapse()
-  }, [])
+  }, [visibilityStorageKey])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.target instanceof Node) || !workbenchRef.current?.contains(event.target)) return
       if (event.key === 'Escape') setContextMenu(null)
       if (!(event.ctrlKey || event.metaKey) || event.altKey || running) return
       const key = event.key.toLowerCase()
-      if (key === 'z' && event.shiftKey && canRedo) { event.preventDefault(); redoProject() }
-      else if (key === 'z' && canUndo) { event.preventDefault(); undoProject() }
-      else if (key === 'y' && canRedo) { event.preventDefault(); redoProject() }
+      if (key === 'z' && event.shiftKey && canRedo) { event.preventDefault(); redoProject(store) }
+      else if (key === 'z' && canUndo) { event.preventDefault(); undoProject(store) }
+      else if (key === 'y' && canRedo) { event.preventDefault(); redoProject(store) }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [canRedo, canUndo, running])
+  }, [canRedo, canUndo, running, store])
 
   const addCatalogAtCenter = useCallback((selection: CatalogSelection) => {
     const viewport = reactFlow.getViewport()
-    const element = document.querySelector('.canvas-stage')
+    const element = workbenchRef.current?.querySelector('.canvas-stage')
     const rect = element?.getBoundingClientRect()
     const position = rect ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: (400 - viewport.x) / viewport.zoom, y: (240 - viewport.y) / viewport.zoom }
     addCatalogComponent(selection.categoryId, selection.type, position, selection.preset)
@@ -513,8 +493,8 @@ function WorkbenchInner() {
     try {
       applyNodeLayout(await layoutTopology(project, nodeDimensions, mode))
       window.requestAnimationFrame(() => {
-        const stage = document.querySelector('.canvas-stage')?.getBoundingClientRect()
-        const toolbar = document.querySelector('.canvas-toolbar')?.getBoundingClientRect()
+        const stage = workbenchRef.current?.querySelector('.canvas-stage')?.getBoundingClientRect()
+        const toolbar = workbenchRef.current?.querySelector('.canvas-toolbar')?.getBoundingClientRect()
         const topPadding = stage && toolbar ? Math.max(20, Math.ceil(toolbar.bottom - stage.top + 10)) : 56
         void reactFlow.fitView({ duration: 350, padding: { top: `${topPadding}px`, right: '16px', bottom: '16px', left: '16px' } })
       })
@@ -574,32 +554,13 @@ function WorkbenchInner() {
     if (source && target) reactFlow.setCenter((source.position.x + target.position.x) / 2 + 99, (source.position.y + target.position.y) / 2 + 38, { zoom: 1.1, duration: 350 })
   }, [project.topology.edges, project.topology.nodes, reactFlow, selectEdge, selectNode])
 
-  const run = async () => {
-    setRunning(true); setError(null); setResult(null); setProgress(null)
-    try {
-      const projectSnapshot = componentRegistry.validateProject(structuredClone(project), componentPresetRegistry)
-      const validation = validateScenarioForSimulation(projectSnapshot)
-      if (validation.errors.length > 0) throw new Error(validation.errors.join(' '))
-      clientRef.current ??= new SimulationWorkerClient()
-      const completed = await clientRef.current.run(projectSnapshot, { onProgress: setProgress })
-      setResultsView('run')
-      setResult(completed)
-      const repository = getLocalHistoryRepository()
-      const revision = await repository.saveProjectRevision(projectSnapshot)
-      await repository.saveSimulationRun(projectSnapshot, completed, revision.revisionId)
-      await refreshHistory(projectSnapshot.id)
-    } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : 'Simulation failed.')
-    } finally { setRunning(false) }
-  }
-
-  const cancelRun = () => clientRef.current?.cancelActive()
+  const cancelRun = () => session.cancel()
   const setPanelVisible = (panel: PanelName, ref: React.RefObject<ImperativePanelHandle | null>, visible: boolean) => {
     if (visible) ref.current?.expand()
     else ref.current?.collapse()
     setPanelVisibility((current) => {
       const next = { ...current, [panel]: visible }
-      window.localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next))
+      window.localStorage.setItem(visibilityStorageKey, JSON.stringify(next))
       return next
     })
   }
@@ -668,24 +629,24 @@ function WorkbenchInner() {
     try {
       const imported = componentRegistry.validateProject(parseProjectFile(JSON.parse(await file.text())), componentPresetRegistry)
       setProject(imported)
-      await getLocalHistoryRepository().saveProjectRevision(imported, 'import')
+      await session.history?.saveProjectRevision(imported, 'import')
       await refreshHistory(imported.id)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid project file.') }
   }
 
   const restoreRevision = async (revisionId: string) => {
     try {
-      const saved = await getLocalHistoryRepository().loadProjectRevision(revisionId)
+      const saved = await session.history?.loadProjectRevision(revisionId)
       if (!saved) throw new Error('The selected revision no longer exists.')
       restoreProject(saved.project)
-      await getLocalHistoryRepository().saveProjectRevision(saved.project, 'restore')
+      await session.history?.saveProjectRevision(saved.project, 'restore')
       await refreshHistory(saved.projectId)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not restore project revision.') }
   }
 
   const restoreRun = async (savedRun: SimulationRunRecord) => {
     try {
-      const snapshot = savedRun.projectSnapshot ?? (await getLocalHistoryRepository().loadProjectRevision(savedRun.projectRevisionId))?.project
+      const snapshot = savedRun.projectSnapshot ?? (await session.history?.loadProjectRevision(savedRun.projectRevisionId))?.project
       if (!snapshot) throw new Error('The project snapshot for this run no longer exists.')
       restoreProject(snapshot)
       setResult(structuredClone(savedRun.result))
@@ -764,7 +725,11 @@ function WorkbenchInner() {
   )
 
   return (
-    <main className="workbench">
+    <main ref={workbenchRef} className={`workbench${embedded ? ' workbench--embedded' : ''}`} tabIndex={-1} data-session-id={session.id}
+      onPointerDownCapture={(event) => {
+        const target = event.target
+        if (target instanceof Element && !target.closest('input, textarea, select, button, a, [contenteditable="true"]')) workbenchRef.current?.focus({ preventScroll: true })
+      }}>
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('System Design Simulator')}</strong><span>{t('Build · Run · Break · Measure')}</span></div></div>
         <div className="topbar-center"><span className="status-dot" /> {t('Local simulation')} <span className="separator" /><span className={`modeling-mode modeling-mode--${project.modelingMode}`} aria-label={t('Project modeling mode: {mode}', { mode: t(project.modelingMode === 'business-aware' ? 'Business-aware' : 'Capacity-only') })}>{t(project.modelingMode === 'business-aware' ? 'Business-aware' : 'Capacity-only')}</span><span className="separator" /> {t('{count} components', { count: project.topology.nodes.length })} <span className="separator" /> {t('{count} links', { count: project.topology.edges.length })}</div>
@@ -775,8 +740,8 @@ function WorkbenchInner() {
           <button type="button" className="button subtle layout-toggle" aria-label={t(panelVisibility.faults ? 'Hide fault laboratory' : 'Show fault laboratory')} title={t(panelVisibility.faults ? 'Hide fault laboratory' : 'Show fault laboratory')} aria-pressed={panelVisibility.faults} onClick={() => setPanelVisible('faults', faultsPanelRef, !panelVisibility.faults)}><FlaskConical size={15} /><span>{t('Fault lab')}</span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={t(panelVisibility.results ? 'Hide simulation output' : 'Show simulation output')} title={t(panelVisibility.results ? 'Hide simulation output' : 'Show simulation output')} aria-pressed={panelVisibility.results} onClick={() => setPanelVisible('results', resultsPanelRef, !panelVisibility.results)}><PanelBottom size={15} /><span>{t('Output')}</span></button>
           <button type="button" className="button subtle layout-toggle" aria-label={t(panelVisibility.inspector ? 'Hide properties panel' : 'Show properties panel')} title={t(panelVisibility.inspector ? 'Hide properties panel' : 'Show properties panel')} aria-pressed={panelVisibility.inspector} onClick={() => setPanelVisible('inspector', inspectorPanelRef, !panelVisibility.inspector)}><PanelRight size={15} /><span>{t('Properties')}</span></button>
-          <button type="button" className="button subtle icon-only" aria-label={t('Undo project change')} title={t('Undo project change')} disabled={!canUndo || running} onClick={undoProject}><Undo2 size={15} /></button>
-          <button type="button" className="button subtle icon-only" aria-label={t('Redo project change')} title={t('Redo project change')} disabled={!canRedo || running} onClick={redoProject}><Redo2 size={15} /></button>
+          <button type="button" className="button subtle icon-only" aria-label={t('Undo project change')} title={t('Undo project change')} disabled={!canUndo || running} onClick={() => undoProject(store)}><Undo2 size={15} /></button>
+          <button type="button" className="button subtle icon-only" aria-label={t('Redo project change')} title={t('Redo project change')} disabled={!canRedo || running} onClick={() => redoProject(store)}><Redo2 size={15} /></button>
           <div className="history-picker">
             <button type="button" className="button subtle" aria-expanded={historyOpen} onClick={() => { const next = !historyOpen; setHistoryOpen(next); if (next) void refreshHistory(project.id) }}><History size={15} /> {t('History')}</button>
             {historyOpen ? <div className="history-menu" role="dialog" aria-label={t('Local project history')}>
@@ -788,7 +753,7 @@ function WorkbenchInner() {
           <input ref={fileInputRef} hidden type="file" accept="application/json" onChange={(event) => void importProject(event.target.files?.[0])} />
           <button type="button" className="button subtle" onClick={exportProject}><Download size={15} /> {t('Export')}</button>
           {running ? <button type="button" className="button subtle" onClick={cancelRun}><Square size={14} fill="currentColor" /> {t('Cancel')}</button> : null}
-          <button type="button" className="button run" onClick={() => void run()} disabled={running}><Play size={15} fill="currentColor" /> {t(running ? 'Running…' : 'Run simulation')}</button>
+          <button type="button" className="button run" onClick={() => void run()} disabled={running || !historyReady}><Play size={15} fill="currentColor" /> {t(running ? 'Running…' : 'Run simulation')}</button>
           <button type="button" className="button subtle language-toggle" aria-label={t(locale === 'en' ? 'Switch to Chinese' : 'Switch to English')} title={t(locale === 'en' ? 'Switch to Chinese' : 'Switch to English')} onClick={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}><Languages size={15} /><span>{locale === 'en' ? '中文' : 'EN'}</span></button>
         </div>
       </header>
@@ -797,10 +762,15 @@ function WorkbenchInner() {
         faults={<div className="panel-container"><button type="button" className="panel-close panel-close--overlay" aria-label={t('Hide fault laboratory')} title={t('Hide fault laboratory')} onClick={() => setPanelVisible('faults', faultsPanelRef, false)}><X size={13} /></button><FaultLaboratory experiment={experiment} project={project} selectedFaultId={selectedFaultId} onSelectFault={selectFault} onAddFault={addFault} onUpdateFault={updateFault} onDeleteFault={deleteFault} /></div>}
         inspector={inspectorPanel} results={resultsPanel}
         faultsRef={faultsPanelRef} inspectorRef={inspectorPanelRef} resultsRef={resultsPanelRef}
+        layoutId={session.id === 'active' ? 'system-design' : `system-design:${session.id}`}
       />
       {formatDialog ? <FormatDialog kind={formatDialog} selection={selectedDefinition} onClose={() => setFormatDialog(null)} onSelectionChange={setSelectedDefinition} /> : null}
     </main>
   )
 }
 
-export function Workbench() { return <ReactFlowProvider><WorkbenchInner /></ReactFlowProvider> }
+export function Workbench({ session: providedSession, onRunCompleted, embedded }: WorkbenchProps = {}) {
+  const [ownedSession] = useState(() => providedSession ?? createWorkbenchSession({ id: 'active' }))
+  const session = providedSession ?? ownedSession
+  return <WorkbenchStoreProvider store={session.store}><ReactFlowProvider><WorkbenchInner session={session} {...(onRunCompleted ? { onRunCompleted } : {})} {...(embedded === undefined ? {} : { embedded })} /></ReactFlowProvider></WorkbenchStoreProvider>
+}

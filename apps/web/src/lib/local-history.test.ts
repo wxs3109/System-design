@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Dexie from 'dexie'
 import { createEmptyProject, type ProjectFileV2, type SimulationResult } from '@system-design/model'
-import { LocalHistoryDatabase, LocalHistoryRepository } from './local-history'
+import { getLocalHistoryRepository, LocalHistoryDatabase, LocalHistoryRepository } from './local-history'
 
 const databases: LocalHistoryDatabase[] = []
 const createRepository = () => {
@@ -57,6 +57,58 @@ describe('local project and run history', () => {
     expect((await repository.loadActiveProject())?.project.name).toBe('Untitled system')
   })
 
+  it('isolates free-workspace and exercise restore pointers in the same database', async () => {
+    const freeWorkspace = createRepository()
+    const firstAttempt = new LocalHistoryRepository(freeWorkspace.database, 'exercise:attempt-one')
+    const secondAttempt = new LocalHistoryRepository(freeWorkspace.database, 'exercise:attempt-two')
+    const freeProject = createEmptyProject('free-project')
+    const firstProject = createEmptyProject('attempt-one-project')
+    const secondProject = createEmptyProject('attempt-two-project')
+
+    await freeWorkspace.saveProjectRevision(freeProject)
+    await firstAttempt.saveProjectRevision(firstProject)
+    await secondAttempt.saveProjectRevision(secondProject)
+    firstProject.name = 'First attempt edited'
+    await firstAttempt.saveProjectRevision(firstProject)
+
+    expect((await freeWorkspace.loadActiveProject())?.project).toEqual(freeProject)
+    expect((await firstAttempt.loadActiveProject())?.project).toEqual(firstProject)
+    expect((await secondAttempt.loadActiveProject())?.project).toEqual(secondProject)
+    const restoredAttempt = new LocalHistoryRepository(freeWorkspace.database, firstAttempt.workspaceKey)
+    expect((await restoredAttempt.loadActiveProject())?.project).toEqual(firstProject)
+    expect(await new LocalHistoryRepository(freeWorkspace.database, 'unused-scope').loadActiveProject()).toBeUndefined()
+  })
+
+  it('keeps active pointers unchanged for both new and deduplicated snapshot-only saves', async () => {
+    const repository = createRepository()
+    const active = await repository.saveProjectRevision(createEmptyProject('current-project'))
+    const snapshot = createEmptyProject('snapshot-project')
+
+    const first = await repository.saveProjectRevision(snapshot, 'manual', { activate: false })
+    const duplicate = await repository.saveProjectRevision(snapshot, 'autosave', { activate: false })
+
+    expect(duplicate.revisionId).toBe(first.revisionId)
+    expect((await repository.loadActiveProject())?.revisionId).toBe(active.revisionId)
+    expect((await repository.loadProjectRevision(first.revisionId))?.project).toEqual(snapshot)
+
+    const emptyScope = new LocalHistoryRepository(repository.database, 'empty-attempt')
+    await emptyScope.saveProjectRevision(snapshot, 'autosave', { activate: false })
+    expect(await emptyScope.loadActiveProject()).toBeUndefined()
+    await emptyScope.saveProjectRevision(snapshot)
+    expect((await emptyScope.loadActiveProject())?.revisionId).toBe(first.revisionId)
+    expect((await repository.loadActiveProject())?.revisionId).toBe(active.revisionId)
+  })
+
+  it('reuses repositories per scope and shares one database across cached scopes', () => {
+    const defaultRepository = getLocalHistoryRepository()
+    const scopedRepository = getLocalHistoryRepository('repository-cache-test')
+
+    expect(getLocalHistoryRepository('active')).toBe(defaultRepository)
+    expect(getLocalHistoryRepository('repository-cache-test')).toBe(scopedRepository)
+    expect(scopedRepository).not.toBe(defaultRepository)
+    expect(scopedRepository.database).toBe(defaultRepository.database)
+  })
+
   it('upgrades persisted v2 revisions and run snapshots to capacity-only v3 records', async () => {
     const name = `history-test-${crypto.randomUUID()}`
     const legacyDatabase = new Dexie(name)
@@ -93,6 +145,7 @@ describe('local project and run history', () => {
     expect(listedRevision?.project).toEqual(revision?.project)
     expect(listedRevision?.fingerprint).toBe(JSON.stringify(listedRevision?.project))
     expect(run?.projectSnapshot).toEqual(revision?.project)
+    expect(await new LocalHistoryRepository(database, 'new-exercise').loadActiveProject()).toBeUndefined()
   })
 
   it('deduplicates identical autosaves but keeps exact changed revisions', async () => {
@@ -155,6 +208,26 @@ describe('local project and run history', () => {
     expect(await repository.listSimulationRuns(project.id)).toEqual([])
   })
 
+  it('saves scoped run snapshots without moving restore pointers and still validates exact revisions', async () => {
+    const freeWorkspace = createRepository()
+    const attempt = new LocalHistoryRepository(freeWorkspace.database, 'exercise:run-attempt')
+    const freeRevision = await freeWorkspace.saveProjectRevision(createEmptyProject('free-run-project'))
+    const project = createEmptyProject('scoped-run-project')
+    const current = structuredClone(project)
+    current.name = 'Edited while simulation was running'
+    const activeRevision = await attempt.saveProjectRevision(current)
+
+    const run = await attempt.saveSimulationRun(project, resultFor('scoped-run', project.id))
+
+    expect((await freeWorkspace.loadActiveProject())?.revisionId).toBe(freeRevision.revisionId)
+    expect((await attempt.loadActiveProject())?.revisionId).toBe(activeRevision.revisionId)
+    expect(run.projectSnapshot).toEqual(project)
+    expect((await attempt.loadProjectRevision(run.projectRevisionId))?.project).toEqual(project)
+    await expect(attempt.saveSimulationRun(current, resultFor('mismatched-scoped-run', project.id), run.projectRevisionId))
+      .rejects.toThrow('exact project revision')
+    expect(await attempt.listSimulationRuns(project.id)).toHaveLength(1)
+  })
+
   it('rejects invalid project snapshots before writing anything', async () => {
     const repository = createRepository()
     await expect(repository.saveProjectRevision({ schemaVersion: 2, id: 'invalid' })).rejects.toThrow()
@@ -191,5 +264,19 @@ describe('local project and run history', () => {
     expect(runs).toHaveLength(25)
     expect(runs.map((run) => run.runId)).toEqual(expect.arrayContaining(['run-29', 'run-5']))
     expect(runs.map((run) => run.runId)).not.toContain('run-4')
+  })
+
+  it('preserves a scoped active revision when pruning later snapshot-only saves', async () => {
+    const repository = createRepository()
+    const project = createEmptyProject('active-retained-project')
+    const active = await repository.saveProjectRevision(project)
+
+    for (let index = 1; index <= 55; index += 1) {
+      project.name = `Snapshot ${index}`
+      await repository.saveProjectRevision(project, 'autosave', { activate: false })
+    }
+
+    expect((await repository.loadActiveProject())?.revisionId).toBe(active.revisionId)
+    expect(await repository.listProjectRevisions(project.id, 100)).toHaveLength(51)
   })
 })

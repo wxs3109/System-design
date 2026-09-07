@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ApiDefinition, DataModel, JsonSchemaDocument, ProjectFile } from '@system-design/model'
 import { Download, Upload, X } from 'lucide-react'
-import { useWorkbenchStore } from '@/lib/store'
+import { useWorkbenchStore } from '@/lib/workbench-store-provider'
 import type { DefinitionSelection } from './definition-editor-model'
 import { useI18n } from '@/lib/i18n'
 
