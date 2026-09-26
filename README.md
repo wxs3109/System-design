@@ -39,7 +39,8 @@ node .tools/lint-content.mjs
 
 ## 当前能力
 
-- **交互练习**：[本地练习入口](http://localhost:3000/practice)提供服务排队、数据库瓶颈和缓存压力三题。题干、参数、提示与指标由题目定义驱动，支持运行证据检查、前后比较、反馈失效和尝试记录恢复。
+- **基础知识**：[本地知识入口](http://localhost:3000/learn)提供九组、24 篇入门讲解，支持中英文搜索、前置导航和三条阅读路径；每篇包含最小例子、机制、成立条件、反例和自测，并与现有 Lab 双向关联。尚未实现的协议实验与案例设计题明确标记为规划项。
+- **交互练习**：[本地练习入口](http://localhost:3000/practice)提供 18 个 Lab，覆盖容量/分布、故障恢复、并发与过载，以及副本旧读、Quorum、Raft、2PC 和持久恢复。可交错读写、递送/丢弃消息、触发选举、刷盘与重放，查看实际账本和局部判断；各题支持证据核验与本地恢复。
 - **搭建与配置**：空白画布、类型化连线、拓扑分组、自动布局和属性编辑。
 - **业务合同**：定义 API、数据模型、事件、Interaction 和 Workflow，绑定具体 operation 的负载；支持有明确范围的 OpenAPI 3.1 / DBML 导入导出。
 - **运行与故障实验**：常量/泊松到达、容量限制、排队、超时、重试、熔断、背压，以及支持的节点、链路和区域故障。
@@ -50,14 +51,17 @@ node .tools/lint-content.mjs
 
 ## 当前限制与计划
 
-- 运行控制目前支持启动和取消；暂停、单步和加速仍待实现。
-- 部分组件使用较粗的容量或状态近似。例如 Queue/Stream/Topic 的独立消费过程、共享带宽竞争和长期存储预测仍需补强，具体边界见[仿真模型说明](docs/model-assumptions.md)。
+- 自由工作台目前支持启动和取消，暂停、单步和加速待实现；独立协议 Lab 已支持手动逐步操作与逻辑时间推进。
+- 部分共享组件使用较粗的容量或状态近似。独立消息 Lab 已有重投与消费调度，共享工作台的 Queue/Stream/Topic、共享带宽竞争和长期存储预测仍需补强，见[仿真模型说明](docs/model-assumptions.md)。
+- 基础协议 Lab 使用各自声明的有限模型。Raft 不含成员变更和日志压缩，2PC 不含全局快照隔离，持久恢复不实现真实磁盘；完整案例设计题仍待实现。
 - **需求与容量规划尚未实现**：已拆为 20 份 spec，第一里程碑先打通“业务需求 → Service 容量建议 → 应用 → 仿真 → 对比”。
 - 外部组件 SDK、插件隔离、共享服务和服务端 Runner 保留在未来扩展中。
 
 ## 工作原理与代码结构
 
 场景、业务合同、负载和故障经过校验与编译，由浏览器 Web Worker 中的 SimScript 推进虚拟时间。界面展示运行事件和指标；Canvas 布局不影响执行语义。
+
+知识元数据和讲解正文独立维护在 `apps/web/src/features/learning/`；阅读页不执行模型或评分。现有实验从同一概念索引获得知识关联，算法与协议题使用各自的版本化输入、操作记录与结果。
 
 | 路径 | 职责 |
 |---|---|
@@ -71,10 +75,11 @@ node .tools/lint-content.mjs
 
 | 文档 | 内容 |
 |---|---|
-| [当前实施规划](docs/roadmap/demand-capacity-planning/README.md) | 容量规划目标、里程碑、依赖和各部分 spec |
+| [容量规划候选计划](docs/roadmap/demand-capacity-planning/README.md) | 容量规划目标、里程碑、依赖和各部分 spec，尚未实现 |
 | [容量规划共享合同](docs/roadmap/demand-capacity-planning/shared-contracts.md) | 学习模型边界、公式、运行证据和验收规则 |
 | [学习能力矩阵](docs/roadmap/learning-capability-matrix.md) | 能力、候选练习、前置知识、验收证据、模型缺口与学习路径 |
-| [数据分布与 Hot Key Lab 计划](docs/roadmap/data-distribution-hot-key-labs.md) | 一致性哈希、热点只读实验的分段 spec、交互与验收，尚未开始 |
+| [基础概念与平台接入](docs/roadmap/failure-recovery-foundations.md) | 知识入口、六个故障恢复 Lab 的模型合同与剩余范围 |
+| [数据分布与 Hot Key Lab 计划](docs/roadmap/data-distribution-hot-key-labs.md) | 一致性哈希与热点只读缓存实验的模型合同、实现和验收 |
 | [综合设计练习候选计划](docs/roadmap/practice-design-exercises.md) | 短链接读取路径练习的候选范围与验收条件，尚未开始 |
 | [组件覆盖说明](docs/component-coverage.md) | 组件类别、行为变体、Preset 和能力边界 |
 | [仿真模型说明](docs/model-assumptions.md) | 当前执行语义、假设、指标解释和未支持行为 |

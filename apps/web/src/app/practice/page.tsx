@@ -1,21 +1,23 @@
 import Link from 'next/link'
-import { ArrowRight, FlaskConical, Layers3 } from 'lucide-react'
-import { exercises } from '@/features/practice/exercises'
+import { ArrowRight, FlaskConical } from 'lucide-react'
+import { practiceCatalog } from '@/features/practice/catalog'
+import { LearningNav } from '@/features/learning/learning-nav'
 import styles from '@/features/practice/practice.module.css'
 
 export const metadata = { title: '系统设计练习 · System Design Simulator' }
 
 export default function PracticePage() {
   return <main className={styles.catalog}>
-    <nav className={styles.catalogNav} aria-label="主导航"><Link className={styles.wordmark} href="/"><Layers3 size={20} />System Design Lab</Link><Link href="/">自由工作台 <ArrowRight size={15} /></Link></nav>
+    <LearningNav />
     <section className={styles.hero}>
       <span className={styles.eyebrow}><FlaskConical size={15} />练习 · 观察 · 解释</span>
       <h1>系统设计练习</h1>
       <p>先预测，再运行。用一个可以亲手调整的实验，弄清设计为什么有效。</p>
+      <p><Link className={styles.knowledgeEntry} href="/learn">先理解原理：浏览基础知识与学习路径 <ArrowRight size={15} /></Link></p>
       <div className={styles.journey}><span>01 读取约束</span><ArrowRight size={14} /><span>02 调整设计</span><ArrowRight size={14} /><span>03 用证据复盘</span></div>
     </section>
     <section className={styles.exerciseGrid} aria-label="可用练习">
-      {exercises.map((exercise, index) => <Link className={styles.exerciseCard} key={exercise.id} aria-label={exercise.title} href={`/practice/${exercise.id}`}>
+      {practiceCatalog.map((exercise, index) => <Link className={styles.exerciseCard} key={exercise.id} aria-label={exercise.title} href={`/practice/${exercise.id}`}>
         <div className={styles.cardTop}><span className={styles.cardNumber}>{String(index + 1).padStart(2, '0')}</span><span className={styles.pill}>{exercise.category} · {exercise.difficulty}</span></div>
         <h2>{exercise.title}</h2><p>{exercise.summary}</p>
         <div className={styles.miniFlow} aria-hidden="true">{exercise.flow.map((step, stepIndex) => <span className={styles.flowStep} key={`${stepIndex}:${step}`}>{stepIndex > 0 ? <ArrowRight size={16} /> : null}<span>{step}</span></span>)}</div>

@@ -1,6 +1,6 @@
 # 数据分布与 Hot Key Lab 实施计划
 
-> 状态：计划已记录，所有实现部分均未开始。日期：2026-09-06。对应[学习能力矩阵](./learning-capability-matrix.md)的 SCALE-03、SCALE-04，复用 SCALE-01 的部分缓存知识；本次只写计划。
+> 状态：第一、第二里程碑 DIST-01 至 DIST-05 均已完成并通过验收。更新于 2026-09-20。对应[学习能力矩阵](./learning-capability-matrix.md)的 SCALE-03、SCALE-04，复用 SCALE-01 的部分缓存知识。
 
 ## 1. 交付目标与顺序
 
@@ -10,11 +10,11 @@
 
 | 部分 | 交付件 | 依赖 | 状态 |
 |---|---|---|---|
-| DIST-01 | 确定性分配模型、输入/结果合同、比较指标和测试向量 | 当前工程基础 | 未开始 |
-| DIST-02 | 哈希 Lab 页面、目录接入、编辑/撤销、独立保存和前后比较 | DIST-01 | 未开始 |
-| DIST-03 | 引导挑战、证据评分、迁移题及经典案例关联；发布第一题 | DIST-02 | 未开始 |
-| DIST-04 | Hot Key 请求序列、键数/请求数并列视图及热点挑战 | DIST-03 | 未开始 |
-| DIST-05 | 有限只读缓存对照、后端读取证据及第二题验收 | DIST-04 | 未开始 |
+| DIST-01 | 确定性分配模型、输入/结果合同、比较指标和测试向量 | 当前工程基础 | 已完成 |
+| DIST-02 | 哈希 Lab 页面、目录接入、编辑/撤销、独立保存和前后比较 | DIST-01 | 已完成 |
+| DIST-03 | 引导挑战、证据评分、迁移题及经典案例关联；发布第一题 | DIST-02 | 已完成 |
+| DIST-04 | Hot Key 请求序列、键数/请求数并列视图及热点挑战 | DIST-03 | 已完成 |
+| DIST-05 | 有限只读缓存对照、后端读取证据及第二题验收 | DIST-04 | 已完成 |
 
 **第一里程碑只包含 DIST-01 至 DIST-03：一题完整的一致性哈希 Lab。** 第二里程碑为 DIST-04、DIST-05：Hot Key 只读分布实验。两题验证后，再按[短链接候选计划](./practice-design-exercises.md)进入自由搭建的综合题；本计划不包含该综合题实现。
 
@@ -129,6 +129,8 @@ Token 按 `(hash, nodeId, vnodeIndex)` 排成全序；同 hash 位置保留全�
 - 默认生成 10,000 次读取，可选 1,000/10,000/20,000；请求 ID、key、逻辑时间与采样序列均可追溯。逻辑时间使用等间隔时刻，只用于顺序/TTL，不表示实测到达能力。
 - `uniform` 在全部 key 中均匀抽样；`hotspot` 指定一个现有 key，选择概率为 20%/80%/95%，剩余概率均匀分给其他 key。UI 分别展示目标概率与这次实际比例。
 - 固定并版本化采样器及 workloadSeed，成员/算法/V 改变时复用同一份完整请求序列，不能因 UI 操作消耗其他随机数。保存生成器版本和已生成序列，不能只保存一个可能被新实现重新解释的 seed。
+- 初版固定 `hot-key-v1` / `reads-v1` / `murmur-counter-v1`：第 i 条请求的 gate 与 choice 分别为 `hashV1(JSON.stringify(["read-v1", seed, i, "gate"]))` 与 `hashV1(JSON.stringify(["read-v1", seed, i, "choice"]))`。两个无符号 32 位整数分别除以 `2^32`；uniform 以 choice 选择完整有序 key 集，hotspot 在 gate 小于目标概率时选择 hot key，否则以 choice 选择移除 hot key 后的有序集合。选择下标用 `floor(choice / 2^32 * populationSize)`。这是固定的伪随机采样规则，实际份额必须通过计数展示。
+- 请求从 i=0 开始，ID 为 `read-` 加五位补零编号，逻辑时刻为 i ms；记录原始 gate/choice、实际 key 与时刻。载入或保存运行证据时会按声明版本重算并核对完整序列。
 - 比较不同热点概率属于改变工作负载，固定总请求数、逻辑时刻与底层随机样本，并标明“负载变化”；比较分片/缓存策略则必须复用实际的同一请求序列。
 - 并列展示节点 key 数、每 key 请求数、物理 owner 请求数、最大请求份额和 key 数份额；请求总计必须与输入一致。新增 V 可以改变分布，但一个 key 的每次读取仍指向一个 owner。
 
@@ -150,6 +152,26 @@ Token 按 `(hash, nodeId, vnodeIndex)` 排成全序；同 hash 位置保留全�
 **第二里程碑出口**：用户能用同一请求序列比较键分配、热点与只读缓存策略，解释各指标分母并关联到一个案例。模型、历史隔离、窄屏/键盘和浏览器流程通过，完成完整 `pnpm check`。SCALE-04 只标本期的只读分布/后端访问子目标；独立 shard 排队、写热点拆分和多副本策略继续留作后续。
 
 ## 8. 验证、交付与文档维护
+
+### 第一里程碑实现入口
+
+- 验收记录（2026-09-14）：完整 `pnpm check` 通过，包含 564 项单元/性质测试和 59 项浏览器测试；本轮新增 41 项模型/评分/保存测试与 3 项浏览器流程。既有 100,000 请求性能测试首轮用时 5.10 秒，超过 5 秒门槛；未改阈值，单独复测和整套重跑均通过。桌面与窄屏已检查，最大输入与键盘操作通过。
+- 练习 ID `consistent-hashing` v1，入口 `/practice/consistent-hashing`；[目录与分流](../../apps/web/src/features/practice/catalog.ts)、[页面](../../apps/web/src/features/practice/distribution/hashing-lab.tsx)、[分布视图](../../apps/web/src/features/practice/distribution/distribution-view.tsx)。
+- [纯分配模型](../../apps/web/src/features/practice/distribution/model.ts)、[题目与证据评分](../../apps/web/src/features/practice/distribution/lesson.ts)、[会话与撤销](../../apps/web/src/features/practice/distribution/session.ts)、[独立保存](../../apps/web/src/features/practice/distribution/repository.ts)。算法在有界输入上同步计算，没有异步计算结果覆盖新输入的通道；保存排队执行，状态按修订号更新。
+- 哈希参考固定为 SMHasher [commit 07bb4de](https://github.com/aappleby/smhasher/blob/07bb4de10a63e8cc2e1724865454eba635742383/src/MurmurHash3.cpp) 的 `MurmurHash3_x86_32`。Austin Appleby 将该源代码置于 public domain。测试向量另以工具依赖中已有的 `imurmurhash` 0.1.4（MIT）按 UTF-8 字节独立生成，覆盖块、尾部、领域编码和 Unicode；不新增运行时依赖。
+- [模型测试](../../apps/web/src/features/practice/distribution/model.test.ts)核对向量、独立枚举归属、碰撞、局部重映射、守恒与最大输入；[评分测试](../../apps/web/src/features/practice/distribution/lesson.test.ts)核对完整证据、固定基线及迁移题；[保存测试](../../apps/web/src/features/practice/distribution/repository.test.ts)核对不可变记录、版本、隔离、撤销和失败恢复；[浏览器验收](../../apps/web/tests/consistent-hashing.spec.ts)覆盖完整作答、刷新、窄屏、键盘、最大输入及旧练习隔离。
+
+### 第二里程碑实现入口
+
+- 验收记录（2026-09-20）：完整 `pnpm check` 通过，包含 585 项单元/性质测试及 62 项浏览器测试。本轮新增 21 项模型/评分/保存测试和 3 项浏览器流程；旧仿真与一致性哈希回归通过，修复了公共会话泛型约束及探索预置切换后的表单同步问题。
+- 题目 ID `hot-key` v1，入口 `/practice/hot-key`。[页面](../../apps/web/src/features/practice/hot-key/hot-lab.tsx)提供发现热点、虚拟节点边界、缓存对照三步指导及自由探索；[参数面板](../../apps/web/src/features/practice/hot-key/hot-controls.tsx)区分固定条件和可编辑项，包含均匀大工作集反例。
+- [模型](../../apps/web/src/features/practice/hot-key/model.ts)生成并核验完整读取序列，执行顺序只读缓存；[证据视图](../../apps/web/src/features/practice/hot-key/hot-evidence.tsx)并列显示 key、请求和后端读取，以分页表覆盖所有 key 和请求，展示每次 expiry、hit/miss、fill、eviction 与原始采样值。
+- 节点的 `requests` 是按 key owner 归属的缓存前读取需求，`backendReads` 才是到达该 owner 的实际模型访问；缓存命中不能被解释成节点处理了一次读取。视图明确区分两者及统计分母。
+- [评分](../../apps/web/src/features/practice/hot-key/lesson.ts)分别核对证据、固定条件下的操作和解释；要求识别实际热门 key、读取次数、owner、后端次数及案例边界。错误初始预测不会阻止通过；自由文字只保存，不自动判理解正确。
+- 两个算法 Lab 复用[会话](../../apps/web/src/features/practice/algorithm/session.ts)与[保存实现](../../apps/web/src/features/practice/algorithm/repository.ts)，通过各自合同解析、运行和核验。原 `system-design-algorithm-labs` 数据库表结构与一致性哈希记录格式保持兼容；Hot Key 使用 `hot-key:v1` scope，原题使用 `consistent-hashing:v1`，不触碰 LocalHistory。
+- [模型测试](../../apps/web/src/features/practice/hot-key/model.test.ts)使用独立数组 LRU 参考、逐条计数及反例；[评分测试](../../apps/web/src/features/practice/hot-key/lesson.test.ts)检查固定基线、完整证据、错误解释、迁移边界与最大输入；[保存测试](../../apps/web/src/features/practice/hot-key/session.test.ts)检查跨题/版本隔离、不可变尝试、撤销、恢复及写入失败；[浏览器测试](../../apps/web/tests/hot-key.spec.ts)覆盖完整三步、反例、明确的 4,096 keys / 20,000 reads 最大输入、窄屏、键盘与历史。
+
+### 维护规则
 
 - 模型测试优先检查独立向量、归属不变量、碰撞、精确计数与反例；不以截图或实现镜像测试代替算法证据。
 - 浏览器验收从目录开始，覆盖操作、可见证据、预测纠正、迁移任务、保存恢复、基线锁定、旧结果拒绝和跨题隔离。最大输入只检查有界运行和界面可用，不将运行机器耗时解释成模型性能。

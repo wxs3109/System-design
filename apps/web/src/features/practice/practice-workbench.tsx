@@ -10,6 +10,7 @@ import { useWorkbenchStore, useWorkbenchStoreApi } from '@/lib/workbench-store-p
 import { getExercise, type ExerciseDefinition, type ExerciseEvaluation, type ExerciseMetricDisplay, type ExerciseParameter } from './exercises'
 import { readExerciseParameter, withExerciseParameter } from './exercise-project'
 import styles from './practice.module.css'
+import { LabConceptLinks } from '../learning/lab-concept-links'
 
 const statusText = { pass: '目标已达成', fail: '继续调整', inconclusive: '需要完整运行' } as const
 const formatMetric = (value: number | undefined, display: ExerciseMetricDisplay) => {
@@ -57,6 +58,7 @@ function ExerciseSidebar({ exercise, controls, completed }: { exercise: Exercise
 
   return <aside className={styles.sidebar} aria-label="练习任务与反馈">
     <div className={styles.lessonHeading}><span className={styles.eyebrow}>{exercise.category} · {exercise.difficulty}</span><h1>{exercise.title}</h1><p>{exercise.introduction}</p></div>
+    <LabConceptLinks labId={exercise.id} />
     <div className={styles.givens} aria-label="固定实验条件">{exercise.givens.map((given) => <div key={given.label}><strong>{given.value}{given.unit ? <span> {given.unit}</span> : null}</strong><small>{given.label}</small></div>)}</div>
     <section className={styles.taskSection}><h2>题目说明</h2><p className={styles.promptText}>{exercise.prompt}</p></section>
     <section className={styles.taskSection}><h2>实验目标</h2><ul className={styles.objectives}>{exercise.objectives.map((objective) => <li key={objective}><Circle size={11} /><span>{objective}</span></li>)}</ul><p className={styles.timing}>{exercise.observationNote}</p></section>
