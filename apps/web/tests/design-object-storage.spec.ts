@@ -1,0 +1,31 @@
+import { test, expect } from '@playwright/test'
+
+test('executes multipart, retry, data-loss, integrity and version scenarios with persisted evidence', async ({ page }) => {
+  await page.goto('/practice/design-object-storage')
+  await expect(page.getByRole('button', { name: '执行本关场景', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '执行本关场景', exact: true }).click()
+  await page.getByRole('button', { name: '核验并保存设计', exact: true }).click()
+  await expect(page.getByTestId('product-feedback')).toContainText('本关目标尚未满足')
+  await expect(page.getByRole('table', { name: '对象读取记录', exact: true })).toContainText('暂存对象提前可见')
+  await page.getByLabel('对象可见边界', { exact: true }).selectOption('manifest')
+  await page.getByLabel('确认前保存副本', { exact: true }).selectOption('2')
+  await page.getByLabel('提交重试', { exact: true }).selectOption('idempotent')
+  await page.getByLabel('内容校验', { exact: true }).selectOption('verify')
+  await page.getByLabel('覆盖写入', { exact: true }).selectOption('keep')
+  for (const name of ['半成品可见性', '提交结果未知', '确认后丢失节点', '损坏分片与重传', '覆盖写与旧版本读取']) {
+    await page.getByRole('button', { name, exact: true }).click()
+    await page.getByRole('button', { name: '执行本关场景', exact: true }).click()
+    await page.getByRole('button', { name: '核验并保存设计', exact: true }).click()
+    await expect(page.getByTestId('product-feedback')).toContainText('本关设计验证通过')
+  }
+  await expect(page.getByRole('table', { name: '对象读取记录', exact: true })).toContainText('hello world')
+  await expect(page.getByRole('table', { name: '对象读取记录', exact: true })).toContainText('new world')
+  await expect(page.getByTestId('product-save-status')).toHaveText('当前操作已保存')
+  await page.reload()
+  await expect(page.getByTestId('product-progress')).toContainText('5 / 5')
+  await expect(page.getByTestId('product-feedback')).toContainText('本关设计验证通过')
+  await page.getByRole('link', { name: '← 全部练习', exact: true }).click()
+  await page.getByRole('link', { name: 'News Feed 设计：分发与名人热点', exact: true }).click()
+  await expect(page.getByTestId('product-progress')).toContainText('0 / 4')
+  await expect(page.getByTestId('product-history').locator('details')).toHaveCount(0)
+})

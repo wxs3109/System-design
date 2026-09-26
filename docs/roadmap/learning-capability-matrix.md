@@ -207,7 +207,7 @@
 |---|---|---|---|
 | CASE-01 短链接 | 已有短码的跳转读路径 | REQ-01、API-02、DATA-01、PERF-02、SCALE-01、SCALE-04 | 已上线 `design-short-link` v1：自建直接 DB 或缓存拓扑，逐请求路径证据、固定负载、p95 与资源比较；ID 生成与写入一致性未实现。见[交付计划](./practice-design-exercises.md) |
 | CASE-02 Social Feed | 普通用户和 Celebrity 的发布/读取 | API-02、API-03、RT-03、SCALE-04、CONS-01、SEC-03 | 已上线 `design-news-feed` v1：固定关注图的真实发布/分发/读取、名人写放大、提交中断、去重和删除；动态关注图、任意读写比例与推荐仍待扩展 |
-| CASE-03 S3 类对象存储 | 对象发布与读取，再做片段故障和修复 | SPECIAL-01、SPECIAL-02、SPECIAL-03、NET-03、SEC-01、REL-05 | 元数据不能引用未完成对象，明确版本/故障域/修复工作；需命名对象和片段状态，不承诺 S3 API 兼容或生产耐久性 |
+| CASE-03 S3 类对象存储 | 分片、发布、持久性和版本读取 | API-02、DATA-04、CONS-02、OPS-05、REQ-02 | 已上线 `design-object-storage` v1：真实虚拟片、原子 manifest、提交幂等、校验、节点丢失与修复、旧版本读取；metadata 共识、纠删码、权限和 GC 未实现 |
 | CASE-04 地图与导航 | 附近查询和小型路网寻路，再做瓦片交付 | SPECIAL-05、SPECIAL-06、SPECIAL-07、SCALE-01、NET-03 | 与小数据参考答案核对，标出位置新鲜度与路网版本；需空间/道路状态，地图传输与寻路分别评分 |
 | CASE-05 Uber 类派单 | 位置更新、附近候选和竞争指派 | SPECIAL-05、RT-01、CONS-01、DATA-05、COORD-02、REL-02 | 过期位置不能当当前状态，同一司机/行程的竞争更新须满足声明不变量；需通用条件状态迁移、指派与租约模型 |
 | CASE-06 聊天 | 在线广播，再做离线、重连与权限 | RT-01、RT-02、MSG-02、CONS-01、SEC-01 | 核对每个接收者的交付、重放和可见顺序；连接成功不代表不丢消息，需用户/收件箱/游标 |
