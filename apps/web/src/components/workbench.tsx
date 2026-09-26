@@ -425,7 +425,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
     onRunCompleted?.(completed)
   })
   useEffect(() => {
-    const key = `${session.id}:${project.id}`
+    const key = `${session.id}:${project.id}:${project.topology.nodes.map((node) => node.id).join(',')}`
     if (!embedded || !historyReady || project.topology.nodes.length === 0 || initialFit.current === key) return
     const stage = workbenchRef.current?.querySelector('.canvas-stage')
     if (!stage) return

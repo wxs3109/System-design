@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, BookOpen, FlaskConical } from 'lucide-react'
 import { getPracticeEntry } from '../practice/catalog'
 import { caseContexts, conceptGroups, getConcept, learningPaths, plannedLabs } from './catalog'
+import { publishedDesigns } from '../design/published'
 import { conceptBodies, readingSources } from './content'
 import type { Concept } from './types'
 import { LearningNav } from './learning-nav'
@@ -27,7 +28,7 @@ export function ConceptPage({ concept }: { concept: Concept }) {
           {candidates.length ? <div className={styles.planned}>{candidates.map((lab) => <div key={lab.id}><span>实验规划中</span><strong>{lab.title}</strong></div>)}</div> : null}
           <p className={styles.note}>一个 Lab 可以关联多个概念。进入实验后仍以该题的实际模型范围为准；阅读内容不会改变组件或评分规则。</p>
         </section>
-        <section id="cases" aria-label="应用案例"><h2>把概念带回案例</h2><div className={styles.caseCards}>{concept.caseIds.map((id) => { const item = caseContexts.find((entry) => entry.id === id)!; return <div key={id}><span>应用背景 · 设计题待实现</span><h3>{item.title}</h3><p>{item.question}</p></div> })}</div></section>
+        <section id="cases" aria-label="应用案例"><h2>把概念带回案例</h2><div className={styles.caseCards}>{concept.caseIds.map((id) => { const item = caseContexts.find((entry) => entry.id === id)!; const design = publishedDesigns[id]; return <div key={id}><span>{design ? `可运行设计题 · ${design.scope}` : '应用背景 · 设计题待实现'}</span><h3>{item.title}</h3><p>{item.question}</p>{design ? <Link href={`/practice/${design.id}`}>进入设计题 →</Link> : null}</div> })}</div></section>
         <section id="sources"><h2>继续阅读</h2><ul className={styles.sources}>{body.sourceIds.map((id) => <li key={id}><a href={readingSources[id]!.url} target="_blank" rel="noreferrer">{readingSources[id]!.title} ↗</a></li>)}</ul><p className={styles.note}>本文是面向入门的概念整理；具体系统的保证还需核对其协议、配置与故障模型。</p></section>
       </article>
       <aside className={styles.articleAside} aria-label="知识导航">

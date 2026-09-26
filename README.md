@@ -39,6 +39,7 @@ node .tools/lint-content.mjs
 
 ## 当前能力
 
+- **综合设计题**：短链接读取路径可从空白添加组件、连接、运行和比较，涵盖业务痛点、接口/数据设计、逐请求证据与复盘；其余案例按[交付计划](docs/roadmap/practice-design-exercises.md)依次实现。
 - **基础知识**：[本地知识入口](http://localhost:3000/learn)提供九组、24 篇入门讲解，支持中英文搜索、前置导航和三条阅读路径；每篇包含最小例子、机制、成立条件、反例和自测，并与现有 Lab 双向关联。尚未实现的协议实验与案例设计题明确标记为规划项。
 - **交互练习**：[本地练习入口](http://localhost:3000/practice)提供 18 个 Lab，覆盖容量/分布、故障恢复、并发与过载，以及副本旧读、Quorum、Raft、2PC 和持久恢复。可交错读写、递送/丢弃消息、触发选举、刷盘与重放，查看实际账本和局部判断；各题支持证据核验与本地恢复。
 - **搭建与配置**：空白画布、类型化连线、拓扑分组、自动布局和属性编辑。
@@ -80,7 +81,7 @@ node .tools/lint-content.mjs
 | [学习能力矩阵](docs/roadmap/learning-capability-matrix.md) | 能力、候选练习、前置知识、验收证据、模型缺口与学习路径 |
 | [基础概念与平台接入](docs/roadmap/failure-recovery-foundations.md) | 知识入口、六个故障恢复 Lab 的模型合同与剩余范围 |
 | [数据分布与 Hot Key Lab 计划](docs/roadmap/data-distribution-hot-key-labs.md) | 一致性哈希与热点只读缓存实验的模型合同、实现和验收 |
-| [综合设计练习候选计划](docs/roadmap/practice-design-exercises.md) | 短链接读取路径练习的候选范围与验收条件，尚未开始 |
+| [综合设计练习交付计划](docs/roadmap/practice-design-exercises.md) | 短链接可执行读取题，以及 News Feed、S3、地图、派单、云盘的逐题交付范围 |
 | [组件覆盖说明](docs/component-coverage.md) | 组件类别、行为变体、Preset 和能力边界 |
 | [仿真模型说明](docs/model-assumptions.md) | 当前执行语义、假设、指标解释和未支持行为 |
 | [格式适配决策](docs/decisions/adr-001-format-adapters.md) | OpenAPI / DBML 的已选实现与支持范围 |

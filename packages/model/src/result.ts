@@ -1,5 +1,6 @@
 import type { ComponentType } from './schema'
 import type { RuntimeEvent, TraceSpan } from './events'
+import { parseProjectFile } from './project'
 
 export interface SummaryMetrics {
   generatedRequests: number
@@ -63,6 +64,8 @@ export interface ActionMetrics {
 }
 
 export interface SimulationResult {
+  /** Canonical input identity for evidence freshness; older saved runs may omit it. */
+  inputSignature?: string
   runId: string
   scenarioId: string
   seed: string
@@ -78,3 +81,14 @@ export interface SimulationResult {
   actions: ActionMetrics[]
   warnings: string[]
 }
+
+const canonicalInput = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalInput).join(',')}]`
+  if (value !== null && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonicalInput(item)}`).join(',')}}`
+  return JSON.stringify(value)
+}
+
+/** Project migrations retain identity; different executable inputs do not. */
+export const simulationInputSignature = (input: unknown): string => canonicalInput(
+  input !== null && typeof input === 'object' && 'schemaVersion' in input && (input.schemaVersion === 2 || input.schemaVersion === 3) ? parseProjectFile(input) : input,
+)

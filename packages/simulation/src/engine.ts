@@ -2,6 +2,7 @@ import { validateScenarioForSimulation, SimulationValidationError } from './comp
 import { executeSimulation, SystemDesignSimulation } from './runtime/simulation'
 import { buildSimulationResult } from './telemetry/result'
 import type { RuntimeEvent, SimulationProgress, SimulationResult } from '@system-design/model'
+import { simulationInputSignature } from '@system-design/model'
 
 const seedToInteger = (seed: string) => {
   let hash = 2_166_136_261
@@ -21,6 +22,7 @@ export const runSimulation = async (input: unknown, runId: string = crypto.rando
   const startedAt = performance.now()
   const validation = validateScenarioForSimulation(input)
   if (!validation.scenario || !validation.compiled || validation.errors.length > 0) throw new SimulationValidationError(validation.errors)
+  const inputSignature = simulationInputSignature(input)
   const scenario = validation.scenario
   let simulation!: SystemDesignSimulation
   const onBatch = options.onProgress ? (events: RuntimeEvent[]) => options.onProgress?.({
@@ -36,7 +38,7 @@ export const runSimulation = async (input: unknown, runId: string = crypto.rando
   )
   await executeSimulation(simulation)
   simulation.eventSink.flush()
-  return buildSimulationResult(simulation, scenario, runId, performance.now() - startedAt)
+  return { ...buildSimulationResult(simulation, scenario, runId, performance.now() - startedAt), inputSignature }
 }
 
 export const simulationEngineInfo = { scheduler: 'SimScript', version: 1, seedHash: seedToInteger } as const

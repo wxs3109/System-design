@@ -13,11 +13,13 @@ import { ReplicationLab } from '@/features/practice/replication/replication-lab'
 import { RaftLab } from '@/features/practice/raft/raft-lab'
 import { CommitLab } from '@/features/practice/two-phase-commit/commit-lab'
 import { DurabilityLab } from '@/features/practice/durability/durability-lab'
+import { DesignWorkbench } from '@/features/design/design-workbench'
 
 export default async function ExercisePage({ params }: { params: Promise<{ exerciseId: string }> }) {
   const { exerciseId } = await params
   const entry = getPracticeEntry(exerciseId)
   if (!entry) notFound()
+  if (entry.kind === 'design') return <DesignWorkbench exerciseId={exerciseId} />
   if (entry.kind === 'protocol') {
     if (entry.id === 'retry-idempotency') return <RetryIdempotencyLab />
     if (entry.id === 'ack-checkpoint' || entry.id === 'transactional-outbox') return <MessageLab labId={entry.id} />
