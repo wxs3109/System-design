@@ -767,7 +767,8 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
         if (target instanceof Element && !target.closest('input, textarea, select, button, a, [contenteditable="true"]')) workbenchRef.current?.focus({ preventScroll: true })
       }}>
       {storage.error || storage.retained.length ? <div className="workbench-storage-banner"><StorageNotice state={storage} session={recovery} saveLabel="重试保存工作台" /></div> : null}
-      <div style={{ display: 'contents' }} inert={!historyReady} data-testid="workbench-editing-surface">
+      {!historyReady && !storage.error ? <div className="workbench-storage-banner workbench-storage-banner--loading" role="status">{t('Restoring saved work… Editing will be available when recovery finishes.')}</div> : null}
+      <div style={{ display: 'contents' }} inert={!historyReady} aria-busy={!historyReady && !storage.error} data-testid="workbench-editing-surface">
       <header className="topbar">
         {embedded ? <>
           <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('Topology')}</strong><span>{t('Local simulation')}</span></div></div>

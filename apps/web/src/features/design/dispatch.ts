@@ -1,11 +1,15 @@
-import { check, choice, type DesignConfig, type ProductDesign, type ProductResult } from './product-types'
+import { dispatchDesign as legacyDefinition } from './compat/v1/dispatch'
+import { productV1Reader } from './compat/read-product-v1'
+import { defineProductDesign } from './define-product'
+import { check, choice } from './product-types'
 import { runDispatch } from './models/dispatch'
 import { presentDispatch } from './presentation/dispatch'
 export { runDispatch } from './models/dispatch'
 
-const invariant = (r: ProductResult) => [check('司机与乘客唯一指派', r.metrics.driverDuplicates === 0 && r.metrics.tripDuplicates === 0, `重复占用司机 ${r.metrics.driverDuplicates} 次，重复指派乘客 ${r.metrics.tripDuplicates} 次；账本保留全部实际效果。`)]
-const safe: DesignConfig = { freshness: '1000', claim: 'cas', fencing: 'check', idempotency: 'trip' }
-export const dispatchDesign: ProductDesign = {
+const invariant = (r: ReturnType<typeof runDispatch>) => [check('司机与乘客唯一指派', r.metrics.driverDuplicates === 0 && r.metrics.tripDuplicates === 0, `重复占用司机 ${r.metrics.driverDuplicates} 次，重复指派乘客 ${r.metrics.tripDuplicates} 次；账本保留全部实际效果。`)]
+const safe = { freshness: '1000', claim: 'cas', fencing: 'check', idempotency: 'trip' } as const
+export const dispatchDesign = defineProductDesign({
+  compatibility: productV1Reader(legacyDefinition, 'dispatch-v1'),
   versions: { model: 'dispatch-v1', definition: 1, assessment: 1 },
   id: 'design-dispatch', kind: 'product-design', category: '综合设计', difficulty: '进阶', estimatedMinutes: 40, title: 'Uber 类设计：附近司机与竞争派单', summary: '让两个乘客竞争司机，交错查询、预占与确认，检验位置新鲜度、原子预占、租约和迟到请求。',
   pains: ['附近查询结果只是快照，两位乘客可能同时选择同一位空闲司机。', '司机已经移动或失联，旧位置还留在索引里，不能继续当作新报告。', '预占过期后旧客户端仍能发确认；仅释放锁无法阻止迟到写入。', '匹配成功响应丢失后重试，不应增加第二条业务指派。'],
@@ -27,5 +31,5 @@ export const dispatchDesign: ProductDesign = {
   alternatives: [{ title: '条件预占 + 1000 ms 新鲜度', config: safe }, { title: '条件预占 + 500 ms 新鲜度', config: { ...safe, freshness: '500' } }],
   architecture: (c) => ['位置上报 → 空间候选与时间戳', `匹配 API → ${c.claim === 'cas' ? '原子预占' : '候选快照盲写'} → 2000 ms Offer`, `确认 API → ${c.fencing === 'check' ? '资源端所有权校验' : '直接接受'} → ${c.idempotency === 'trip' ? '按行程去重账本' : '追加账本'}`],
   run: runDispatch,
-  present: (result) => presentDispatch(result as ReturnType<typeof runDispatch>),
-}
+  present: presentDispatch,
+})

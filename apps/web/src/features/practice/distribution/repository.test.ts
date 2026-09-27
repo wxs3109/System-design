@@ -109,6 +109,8 @@ describe('algorithm session lifecycle', () => {
     const oldSave = new Promise<void>((_, reject) => { rejectOld = reject })
     const saves = vi.spyOn(repo, 'save').mockReturnValueOnce(oldSave).mockResolvedValueOnce(undefined)
     session.run()
+    // Let the first automatic write start before delivering an independent newer edit.
+    await vi.waitFor(() => expect(saves).toHaveBeenCalledTimes(1))
     const original = session.getSnapshot().draft
     session.edit({ ...original, input: { ...original.input, nodes: [...original.input.nodes, 'new'] } })
     await vi.waitFor(() => expect(session.getSnapshot().storage).toBe('saved'))

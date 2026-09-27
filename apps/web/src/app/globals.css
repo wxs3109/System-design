@@ -691,3 +691,4 @@ button { color: inherit; }
 
 .workbench-storage-banner { position: fixed; bottom: 20px; right: 20px; z-index: 3000; width: min(420px, calc(100vw - 40px)); max-height: 65vh; overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--warning); border-radius: 10px; box-shadow: 0 12px 40px #0003; padding: 16px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .workbench-storage-banner button { margin: 5px 7px 0 0; padding: 7px 10px; border: 1px solid var(--border-bright); border-radius: 6px; background: var(--panel-raised); color: var(--text); cursor: pointer; }
+.workbench-storage-banner--loading { border-color: var(--border-bright); }

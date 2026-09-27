@@ -1,12 +1,16 @@
-import { check, choice, type DesignConfig, type ProductDesign, type ProductResult } from './product-types'
+import { cloudDriveDesign as legacyDefinition } from './compat/v1/cloud-drive'
+import { productV1Reader } from './compat/read-product-v1'
+import { defineProductDesign } from './define-product'
+import { check, choice } from './product-types'
 import { runCloudDrive } from './models/cloud-drive'
 import { presentCloudDrive } from './presentation/cloud-drive'
 export { runCloudDrive } from './models/cloud-drive'
 
 
-const safe: DesignConfig = { publication: 'durable', conflict: 'reject', changefeed: 'atomic', checkpoint: 'atomic', deletion: 'tombstone', sharing: 'recheck', idempotency: 'key' }
-const consistent = (r: ProductResult) => [check('文件引用与命名空间有效', r.metrics.wrongReferences === 0 && r.metrics.namespaceUnique === 1, `${r.metrics.wrongReferences} 个缺失内容引用；同一父目录下名称唯一。`), check('设备 B 收敛到当前元数据', r.metrics.deviceBCurrent === 1, '必须消费实际日志并应用文件变化，不根据服务器期望状态伪造同步。')]
-export const cloudDriveDesign: ProductDesign = {
+const safe = { publication: 'durable', conflict: 'reject', changefeed: 'atomic', checkpoint: 'atomic', deletion: 'tombstone', sharing: 'recheck', idempotency: 'key' } as const
+const consistent = (r: ReturnType<typeof runCloudDrive>) => [check('文件引用与命名空间有效', r.metrics.wrongReferences === 0 && r.metrics.namespaceUnique === 1, `${r.metrics.wrongReferences} 个缺失内容引用；同一父目录下名称唯一。`), check('设备 B 收敛到当前元数据', r.metrics.deviceBCurrent === 1, '必须消费实际日志并应用文件变化，不根据服务器期望状态伪造同步。')]
+export const cloudDriveDesign = defineProductDesign({
+  compatibility: productV1Reader(legacyDefinition, 'cloud-drive-v1'),
   versions: { model: 'cloud-drive-v1', definition: 1, assessment: 1 },
   id: 'design-cloud-drive', kind: 'product-design', category: '综合设计', difficulty: '综合', estimatedMinutes: 60, title: '云盘设计：文件、同步、冲突与分享', summary: '串起不可变内容、目录元数据、并发编辑、同步进度、离线删除、回收站和分享撤销，验证完整的有限用户流程。',
   pains: ['上传内容与发布文件条目跨越两个存储边界，半成功会产生打不开的文件。', '两台设备从同一个旧版本编辑，不能静默覆盖另一台设备的修改。', '同步通知丢失或 checkpoint 提前推进，会让设备长期停在旧状态。', '离线设备带着旧文件回来，可能复活已删除文件；旧分享链接也可能绕过撤销。'],
@@ -41,5 +45,5 @@ export const cloudDriveDesign: ProductDesign = {
   alternatives: [{ title: '条件提交，冲突明确拒绝', config: safe }, { title: '条件提交，冲突另存副本', config: { ...safe, conflict: 'copy' } }],
   architecture: (c) => ['设备编辑 → 不可变内容上传 → 对象副本', `Commit API → ${c.conflict === 'overwrite' ? '覆盖文件指针' : 'baseRevision 条件提交'} → ${c.changefeed === 'atomic' ? '元数据 + 持久变更日志' : '稍后通知'}`, `设备同步 → ${c.checkpoint === 'atomic' ? '文件与 cursor 同时保存' : '提前保存 cursor'} → 版本下载`, `删除/分享 API → ${c.deletion === 'tombstone' ? '删除身份与回收站' : '移除索引'} / ${c.sharing === 'recheck' ? '当前权限校验' : '永久旧链接'}`],
   run: runCloudDrive,
-  present: (result) => presentCloudDrive(result as ReturnType<typeof runCloudDrive>),
-}
+  present: presentCloudDrive,
+})

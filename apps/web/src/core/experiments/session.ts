@@ -15,8 +15,8 @@ export interface LabSessionState<D, A> extends Editable<D> {
   undoCount: number
   redoCount: number
 }
-/** Synchronous bounded execution has no in-flight computation that can replace newer input.
- * Storage is asynchronous and serialized; only the latest revision updates save status.
+/** Execution owns its input revision; storage results own their save revision.
+ * Same-turn automatic edits share a write; explicit saves flush immediately.
  */
 export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   private state: LabSessionState<D, A>
@@ -26,6 +26,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   private revision = 0
   private persistedAttempts = new Set<string>()
   private loading: Promise<void> | null = null
+  private scheduledSave: object | null = null
   private readonly execution = new ExecutionCoordinator()
   constructor(readonly repository: ExperimentRepository<D, A>) {
     this.state = { draft: repository.contract.initial(), activeAttemptId: null, attempts: [], ready: false, running: false, storage: 'loading', error: '', errorKind: null, rejected: 0, retained: [], undoCount: 0, redoCount: 0 }
@@ -42,6 +43,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   private read(force: boolean) {
     if (this.loading) return this.loading
     if (this.state.ready && !force) return Promise.resolve()
+    this.scheduledSave = null
     const revision = ++this.revision
     this.execution.cancel()
     this.publish({ ready: false, running: false, storage: 'loading', error: '', errorKind: null })
@@ -62,7 +64,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     this.past = [...this.past.slice(-99), { draft: this.state.draft, activeAttemptId: this.state.activeAttemptId }]
     this.future = []
     this.publish({ draft: parsed, running: false })
-    void this.save()
+    this.scheduleSave()
   }
   undo() {
     if (!this.state.ready) return
@@ -71,7 +73,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     this.execution.cancel()
     this.future.push({ draft: this.state.draft, activeAttemptId: this.state.activeAttemptId })
     this.publish({ ...previous, running: false })
-    void this.save()
+    this.scheduleSave()
   }
   redo() {
     if (!this.state.ready) return
@@ -80,7 +82,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     this.execution.cancel()
     this.past.push({ draft: this.state.draft, activeAttemptId: this.state.activeAttemptId })
     this.publish({ ...next, running: false })
-    void this.save()
+    this.scheduleSave()
   }
   run() {
     if (!this.state.ready) return
@@ -89,7 +91,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
       const attempt = this.repository.contract.runAttempt(structuredClone(this.state.draft))
       if (!lease.isCurrent()) return
       this.publish({ attempts: [attempt, ...this.state.attempts], activeAttemptId: attempt.id, running: false })
-      void this.save()
+      this.scheduleSave()
     } finally { lease.finish() }
   }
   /** Async/worker adapters share the same ownership rule; stale completions cannot replace a newer draft. */
@@ -115,9 +117,18 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     if (!this.state.ready) return
     this.edit(attempt.draft)
     this.publish({ activeAttemptId: attempt.id })
-    void this.save()
+  }
+  private scheduleSave() {
+    if (this.scheduledSave) return
+    const task = {}; this.scheduledSave = task
+    ++this.revision
+    this.publish({ storage: 'saving', error: '', errorKind: null })
+    // A run followed by several synchronous edits must not clone the same large
+    // evidence for every intermediate state. Explicit save/reload supersedes this task.
+    void Promise.resolve().then(() => { if (this.scheduledSave === task) return this.save() })
   }
   async save() {
+    this.scheduledSave = null
     if (!this.state.ready) return
     const revision = ++this.revision
     this.publish({ storage: 'saving', error: '', errorKind: null })

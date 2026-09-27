@@ -1,11 +1,15 @@
-import { check, choice, type DesignConfig, type ProductDesign } from './product-types'
+import { mapsDesign as legacyDefinition } from './compat/v1/maps'
+import { productV1Reader } from './compat/read-product-v1'
+import { defineProductDesign } from './define-product'
+import { check, choice } from './product-types'
 import { runMaps } from './models/maps'
 import { presentMaps } from './presentation/maps'
 export { runMaps } from './models/maps'
 export { cityPoints, cityRoads } from './models/maps'
 
-const grid: DesignConfig = { index: 'grid', filter: 'distance', updates: 'eager', routeCache: 'versioned' }
-export const mapsDesign: ProductDesign = {
+const grid = { index: 'grid', filter: 'distance', updates: 'eager', routeCache: 'versioned' } as const
+export const mapsDesign = defineProductDesign({
+  compatibility: productV1Reader(legacyDefinition, 'maps-v1'),
   versions: { model: 'maps-v1', definition: 1, assessment: 1 },
   id: 'design-maps', kind: 'product-design', category: '综合设计', difficulty: '进阶', estimatedMinutes: 40, title: 'Google Maps 类设计：附近查询与路线', summary: '在真实小点集和道路图上检验空间索引、精确距离、更新滞后、路线缓存失效和不可达结果。',
   pains: ['跨网格边界的附近地点会被“只查本格”漏掉；网格候选也不一定在查询半径内。', '地点移动或更新后，旧索引可能继续返回错误位置。', '道路关闭或拥堵变化会让端点相同的旧路线失效，缓存不能只看起终点。'],
@@ -27,5 +31,5 @@ export const mapsDesign: ProductDesign = {
   alternatives: [{ title: '网格精筛 + 版本化路线', config: grid }, { title: '全扫描 + 每次寻路', config: { ...grid, index: 'scan', routeCache: 'none' } }],
   architecture: (c) => [`Nearby API → ${c.index === 'scan' ? '当前点集全扫描' : '空间网格候选'} → ${c.filter === 'distance' ? '距离过滤' : '直接返回'}`, `更新流 → 地点与道路版本 → ${c.updates === 'eager' ? '同步刷新索引' : '等待索引刷新'}`, `Route API → ${c.routeCache === 'none' ? 'Dijkstra' : '路线缓存 / Dijkstra'} → 返回路径或不可达`],
   run: runMaps,
-  present: (result) => presentMaps(result as ReturnType<typeof runMaps>),
-}
+  present: presentMaps,
+})

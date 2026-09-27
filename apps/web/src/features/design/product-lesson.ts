@@ -2,7 +2,7 @@ import { AlgorithmDatabase, LabRepository } from '../../core/experiments/reposit
 import { LabSession } from '../../core/experiments/session'
 import { same } from '../../core/experiments/equality'
 import { sameVersions, type ExperimentVersions } from '../../core/experiments/versions'
-import { verifyLegacyProductAttempt, type LegacyProductAttempt, type LegacyProductDraft } from './compat/v1/attempt'
+import type { LegacyProductAttempt, LegacyProductDraft } from './compat/v1/attempt'
 import type { ProductDesign, ProductResult } from './product-types'
 
 export const PRODUCT_COMMAND_LIMIT = 120
@@ -41,7 +41,7 @@ export function productLesson(design: ProductDesign) {
     return { id: crypto.randomUUID(), exerciseId: design.id, exerciseVersion: design.versions.definition, createdAt: Date.now(), formatVersion: 2, versions: { ...design.versions }, draft, result, evaluation: assess(draft, result) }
   }
   const verifyAttempt = (value: unknown): value is ProductAttempt => {
-    if (verifyLegacyProductAttempt(design.id, value)) return true
+    if (design.compatibility?.verify(value)) return true
     try {
       const a = value as CurrentProductAttempt
       if (!a || a.formatVersion !== 2 || a.exerciseId !== design.id || a.exerciseVersion !== design.versions.definition || typeof a.id !== 'string' || !a.id || !Number.isFinite(a.createdAt) || !a.versions || !sameVersions(a.versions, design.versions)) return false
@@ -63,6 +63,5 @@ export function productFeedback(design: ProductDesign, attempt: ProductAttempt):
 export function compatibleProductAttempt(design: ProductDesign, attempt: ProductAttempt): boolean {
   if (attempt.exerciseId !== design.id) return false
   if (isCurrentProductAttempt(attempt)) return sameVersions(attempt.versions, design.versions)
-  const legacyModels: Record<string, string> = { 'design-news-feed': 'news-feed-v1', 'design-object-storage': 'object-storage-v1', 'design-maps': 'maps-v1', 'design-dispatch': 'dispatch-v1', 'design-cloud-drive': 'cloud-drive-v1' }
-  return sameVersions({ model: legacyModels[attempt.exerciseId] ?? '', definition: 1, assessment: 1 }, design.versions)
+  return !!design.compatibility && sameVersions(design.compatibility.versions, design.versions)
 }

@@ -1,11 +1,15 @@
-import { check, choice, type DesignConfig, type ProductDesign, type ProductResult } from './product-types'
+import { objectStorageDesign as legacyDefinition } from './compat/v1/object-storage'
+import { productV1Reader } from './compat/read-product-v1'
+import { defineProductDesign } from './define-product'
+import { check, choice } from './product-types'
 import { runObjectStorage } from './models/object-storage'
 import { presentObjectStorage } from './presentation/object-storage'
 export { runObjectStorage } from './models/object-storage'
 
-const readable = (r: ProductResult) => check('最后一次读取正确', r.metrics.lastCorrect === 1, '读取必须获得完整的真实已保存片；不能从期望值恢复内容。')
-const safe: DesignConfig = { publication: 'manifest', copies: '2', completion: 'idempotent', checksum: 'verify', versions: 'keep' }
-export const objectStorageDesign: ProductDesign = {
+const readable = (r: ReturnType<typeof runObjectStorage>) => check('最后一次读取正确', r.metrics.lastCorrect === 1, '读取必须获得完整的真实已保存片；不能从期望值恢复内容。')
+const safe = { publication: 'manifest', copies: '2', completion: 'idempotent', checksum: 'verify', versions: 'keep' } as const
+export const objectStorageDesign = defineProductDesign({
+  compatibility: productV1Reader(legacyDefinition, 'object-storage-v1'),
   versions: { model: 'object-storage-v1', definition: 1, assessment: 1 },
   id: 'design-object-storage', kind: 'product-design', category: '综合设计', difficulty: '进阶', estimatedMinutes: 45, title: 'S3 类设计：对象提交与持久性', summary: '上传真实的虚拟分片，处理未完成上传、提交重试、节点数据丢失、校验失败和版本化读取。',
   pains: ['大文件分片并行上传，中断时不能把半个对象当成完整对象。', 'Complete 已成功但响应丢失，重试不应意外创建第二个业务版本。', '确认上传不等于可以承受节点数据丢失；副本必须实际保存数据。', '覆盖写入时，下载者可能仍在读取旧版本，需要稳定的版本引用。'],
@@ -34,5 +38,5 @@ export const objectStorageDesign: ProductDesign = {
   alternatives: [{ title: '完整提交 + 两份数据', config: safe }, { title: '完整提交 + 三份数据', config: { ...safe, copies: '3' } }],
   architecture: (c) => [`上传控制 API → Upload 会话`, `客户端分片 → ${c.copies} 个数据节点 → ${c.publication === 'manifest' ? '校验后安装 manifest' : '提前暴露暂存对象'}`, `读取 API → ${c.versions === 'keep' ? '版本索引' : '最新索引'} → 真实片 → 返回内容`],
   run: runObjectStorage,
-  present: (result) => presentObjectStorage(result as ReturnType<typeof runObjectStorage>),
-}
+  present: presentObjectStorage,
+})

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter @system-design/web dev",
     "build": "pnpm -r --if-present run build",
-    "lint": "node .tools/lint-content.mjs && pnpm -r --if-present run lint",
+    "lint": "node .tools/lint-content.mjs && node .tools/check-architecture.mjs --self-test && pnpm -r --if-present run lint",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
     "test:e2e": "pnpm --filter @system-design/web test:e2e",

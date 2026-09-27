@@ -30,6 +30,7 @@ const zhCN: Record<string, string> = {
   'Cancel': '取消',
   'Running…': '运行中…',
   'Run simulation': '运行模拟',
+  'Restoring saved work… Editing will be available when recovery finishes.': '正在恢复已保存的工作… 恢复完成后即可编辑。',
   'Switch to Chinese': '切换到中文',
   'Switch to English': '切换到英文',
   'Switch to light theme': '切换到浅色主题',

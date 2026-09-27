@@ -27,6 +27,41 @@ async function renameService(page: Page, name: string) {
   if (await show.count()) await show.click()
   await page.getByLabel('Name', { exact: true }).fill(name)
 }
+test('a slow restore announces its locked state and enables keyboard editing only after recovery', async ({ page }) => {
+  await page.addInitScript(() => {
+    const open = IDBFactory.prototype.open
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    Object.assign(window, { releaseCanvasRead: release })
+    IDBFactory.prototype.open = function (...args: Parameters<typeof open>) {
+      const request = open.apply(this, args)
+      if (args[0] === 'system-design-simulator') request.addEventListener('success', event => {
+        event.stopImmediatePropagation()
+        void gate.then(() => request.dispatchEvent(new Event('success')))
+      }, { once: true })
+      return request
+    }
+  })
+  await page.goto('/')
+  const surface = page.getByTestId('workbench-editing-surface')
+  const loading = page.getByRole('status').filter({ hasText: 'Restoring saved work' })
+  const category = page.locator('.category-toggle').filter({ hasText: 'Database' })
+  await expect(loading).toBeVisible()
+  await expect(surface).toHaveAttribute('inert', '')
+  await expect(surface).toHaveAttribute('aria-busy', 'true')
+  await category.focus()
+  await expect(category).not.toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(category).toHaveAttribute('aria-expanded', 'false')
+  await page.evaluate(() => (window as unknown as { releaseCanvasRead(): void }).releaseCanvasRead())
+  await expect(loading).toHaveCount(0)
+  await expect(surface).not.toHaveAttribute('inert')
+  await expect(surface).toHaveAttribute('aria-busy', 'false')
+  await category.focus()
+  await expect(category).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(category).toHaveAttribute('aria-expanded', 'true')
+})
 test('canvas tabs preserve a winning save and export the unsaved branch before explicit reload', async ({ page, context }) => {
   await openDirect(page)
   const other = await context.newPage(); await other.goto('/')

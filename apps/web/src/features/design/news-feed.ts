@@ -1,11 +1,15 @@
-import { check, choice, type ProductDesign, type ProductResult } from './product-types'
+import { newsFeedDesign as legacyDefinition } from './compat/v1/news-feed'
+import { productV1Reader } from './compat/read-product-v1'
+import { defineProductDesign } from './define-product'
+import { check, choice } from './product-types'
 import { runNewsFeed } from './models/news-feed'
 import { presentNewsFeed } from './presentation/news-feed'
 export { runNewsFeed } from './models/news-feed'
 
 
-const settled = (r: ProductResult) => [check('读结果正确', r.metrics.correctRead === 1, '最后一次 u1 读取必须与当时作者日志、关注关系、删除状态和顺序一致。'), check('待处理工作排空', r.metrics.pending === 0, `剩余 ${r.metrics.pending} 项；不能只读到局部结果便结束。`)]
-export const newsFeedDesign: ProductDesign = {
+const settled = (r: ReturnType<typeof runNewsFeed>) => [check('读结果正确', r.metrics.correctRead === 1, '最后一次 u1 读取必须与当时作者日志、关注关系、删除状态和顺序一致。'), check('待处理工作排空', r.metrics.pending === 0, `剩余 ${r.metrics.pending} 项；不能只读到局部结果便结束。`)]
+export const newsFeedDesign = defineProductDesign({
+  compatibility: productV1Reader(legacyDefinition, 'news-feed-v1'),
   versions: { model: 'news-feed-v1', definition: 1, assessment: 1 },
   id: 'design-news-feed', kind: 'product-design', category: '综合设计', difficulty: '进阶', estimatedMinutes: 40,
   title: 'News Feed 设计：分发与名人热点', summary: '实际发布帖子、分发收件箱并读取 Feed，比较推、拉和混合策略，重现双写中断与重复投递。',
@@ -37,5 +41,5 @@ export const newsFeedDesign: ProductDesign = {
   ],
   architecture: (c) => c.strategy === 'pull' ? ['作者 API → 作者日志', 'Feed API → 关注关系 → 拉取作者日志 → 合并排序'] : ['作者 API → 作者日志' + (c.outbox === 'atomic' ? ' + Outbox' : ''), '发布器 → 分发队列 → 收件箱', `Feed API → 收件箱${c.strategy === 'hybrid' ? ' + 名人作者日志' : ''} → ${c.hydrate === 'source' ? '校验可见性 → ' : ''}合并排序`],
   run: runNewsFeed,
-  present: (result) => presentNewsFeed(result as ReturnType<typeof runNewsFeed>),
-}
+  present: presentNewsFeed,
+})

@@ -6,7 +6,6 @@ import type { ProjectFile } from '@system-design/model'
 import { Workbench, type WorkbenchControls } from '@/components/workbench'
 import { createWorkbenchSession, type CompletedWorkbenchRun } from '@/lib/workbench-session'
 import { useWorkbenchStore, useWorkbenchStoreApi } from '@/lib/workbench-store-provider'
-import { getDesignExercise } from './catalog'
 import { designEdge } from './short-link'
 import { DesignNotebook } from './notebook'
 import type { DesignExercise } from './types'
@@ -80,8 +79,6 @@ function DesignWorkbenchInner({ exercise }: { exercise: DesignExercise }) {
   const [completed, setCompleted] = useState<CompletedWorkbenchRun | null>(null)
   return <div className={styles.page}><nav><Link href="/practice">← 全部练习</Link><span>需求 → 设计 → 验证 → 取舍</span><Link href="/">自由工作台</Link></nav><div className={styles.workspace}><Workbench session={session} embedded onRunCompleted={setCompleted} defaultPanels={{ inspector: false, faults: false, results: true }} sidebar={(controls) => <Sidebar exercise={exercise} controls={controls} completed={completed} />} /></div></div>
 }
-export function DesignWorkbench({ exerciseId }: { exerciseId: string }) {
-  const exercise = getDesignExercise(exerciseId)
-  if (!exercise) throw new Error('Unknown design exercise')
+export function DesignWorkbench({ exercise }: { exercise: DesignExercise }) {
   return <DesignWorkbenchInner key={exercise.id} exercise={exercise} />
 }

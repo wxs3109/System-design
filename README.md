@@ -54,7 +54,7 @@ node .tools/lint-content.mjs
 
 - 自由工作台目前支持启动和取消，暂停、单步和加速待实现；独立协议 Lab 已支持手动逐步操作与逻辑时间推进。
 - 部分共享组件使用较粗的容量或状态近似。独立消息 Lab 已有重投与消费调度，共享工作台的 Queue/Stream/Topic、共享带宽竞争和长期存储预测仍需补强，见[仿真模型说明](docs/model-assumptions.md)。
-- 基础协议 Lab 使用各自声明的有限模型。Raft 不含成员变更和日志压缩，2PC 不含全局快照隔离，持久恢复不实现真实磁盘；完整案例设计题仍待实现。
+- 基础协议 Lab 与综合设计题使用各自声明的有限模型。Raft 不含成员变更和日志压缩，2PC 不含全局快照隔离，持久恢复不实现真实磁盘；综合题用可重算的业务状态解释取舍。
 - **需求与容量规划尚未实现**：已拆为 20 份 spec，第一里程碑先打通“业务需求 → Service 容量建议 → 应用 → 仿真 → 对比”。
 - 外部组件 SDK、插件隔离、共享服务和服务端 Runner 保留在未来扩展中。
 
@@ -63,6 +63,8 @@ node .tools/lint-content.mjs
 场景、业务合同、负载和故障经过校验与编译，由浏览器 Web Worker 中的 SimScript 推进虚拟时间。界面展示运行事件和指标；Canvas 布局不影响执行语义。
 
 知识元数据和讲解正文独立维护在 `apps/web/src/features/learning/`；阅读页不执行模型或评分。现有实验从同一概念索引获得知识关联，算法与协议题使用各自的版本化输入、操作记录与结果。
+
+24 个实验由 `apps/web/src/experiments/registry.ts` 统一注册路由、目录、案例关联和按需加载入口。`core/experiments` 提供不依赖页面的执行与存储接口；产品模型分别维护语义证据、评分和展示投影。版本迁移、恢复保护与新增实验约束见[教学实验架构决策](docs/decisions/adr-002-experiment-core.md)。
 
 | 路径 | 职责 |
 |---|---|
@@ -85,6 +87,7 @@ node .tools/lint-content.mjs
 | [组件覆盖说明](docs/component-coverage.md) | 组件类别、行为变体、Preset 和能力边界 |
 | [仿真模型说明](docs/model-assumptions.md) | 当前执行语义、假设、指标解释和未支持行为 |
 | [格式适配决策](docs/decisions/adr-001-format-adapters.md) | OpenAPI / DBML 的已选实现与支持范围 |
+| [教学实验架构决策](docs/decisions/adr-002-experiment-core.md) | 模型/展示边界、执行接口、存储兼容、统一注册与依赖检查 |
 | [未来扩展](docs/roadmap/future-extensions.md) | 延期的平台扩展方向 |
 | [System Design 知识库](docs/knowledge-base/) | 学习资料与实验素材；不决定组件类型或运行逻辑 |
 

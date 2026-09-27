@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { ModelPreview } from '../../core/experiments/execution'
 import { useExperiment } from '../../components/experiments/use-experiment'
-import { getProductDesign } from './product-catalog'
 import { PRODUCT_COMMAND_LIMIT, productLesson, productFeedback, compatibleProductAttempt, isCurrentProductAttempt } from './product-lesson'
 import { DesignNotebook } from './notebook'
 import { Diagram } from './product-diagram'
@@ -61,8 +60,6 @@ function Studio({ design }: { design: ProductDesign }) {
   </main>
 }
 
-export function ProductStudio({ exerciseId }: { exerciseId: string }) {
-  const design = getProductDesign(exerciseId)
-  if (!design) throw new Error('Unknown product design')
-  return <Studio key={exerciseId} design={design} />
+export function ProductStudio({ design }: { design: ProductDesign }) {
+  return <Studio key={design.id} design={design} />
 }

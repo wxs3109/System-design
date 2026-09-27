@@ -1244,12 +1244,15 @@ test('drags an executable variant from its category onto the canvas', async ({ p
 
 test('creates a nested preset through its component category and exports the resolved variant', async ({ page }) => {
   await page.goto('/')
+  // Programmatic focus does not wait for actionability: recovery intentionally makes this subtree inert.
+  await expect(page.getByTestId('workbench-editing-surface')).not.toHaveAttribute('inert')
 
   await expect(page.getByText('Components', { exact: true })).toBeVisible()
   await expect(page.getByText('Role presets', { exact: true })).toHaveCount(0)
   await expect(page.getByText(/SQL Store|NoSQL Store|API Gateway/)).toHaveCount(0)
   const databaseCategory = page.locator('.category-toggle').filter({ hasText: 'Database' })
   await databaseCategory.focus()
+  await expect(databaseCategory).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(databaseCategory).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator('#category-database')).toContainText('Database')

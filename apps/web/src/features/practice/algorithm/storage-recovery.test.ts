@@ -43,6 +43,7 @@ it('detects stale writers atomically and retains unsaved work until explicit rel
   await Promise.all([a.load(), b.load()])
   const draftA = initialDraft(); draftA.commands = [{ type: 'read', worker: 'A' }]
   a.edit(draftA); await a.save()
+  const winningRevision = (await db.drafts.get('concurrent-update:v1'))!.revision!
   const draftB = initialDraft(); draftB.commands = [{ type: 'read', worker: 'B' }]
   b.edit(draftB); b.run(); await b.save()
   expect(b.getSnapshot()).toMatchObject({ ready: false, storage: 'error', errorKind: 'conflict', draft: draftB })
@@ -56,7 +57,7 @@ it('detects stale writers atomically and retains unsaved work until explicit rel
   await b.reload()
   expect(b.getSnapshot()).toMatchObject({ ready: true, storage: 'saved', errorKind: null, draft: draftA, undoCount: 0 })
   b.edit({ ...draftA, commands: [...draftA.commands, { type: 'read', worker: 'B' }] }); await b.save()
-  expect((await db.drafts.get('concurrent-update:v1'))!.revision).toBeGreaterThan(2)
+  expect((await db.drafts.get('concurrent-update:v1'))!.revision).toBeGreaterThan(winningRevision)
 })
 
 it('allows rapid queued edits from one writer without false conflicts', async () => {

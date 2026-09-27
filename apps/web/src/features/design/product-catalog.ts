@@ -1,9 +1,3 @@
-import { newsFeedDesign } from './news-feed'
-import { objectStorageDesign } from './object-storage'
-import { mapsDesign } from './maps'
-import { dispatchDesign } from './dispatch'
-import { cloudDriveDesign } from './cloud-drive'
-import type { ProductDesign } from './product-types'
-
-export const productDesigns: readonly ProductDesign[] = [newsFeedDesign, objectStorageDesign, mapsDesign, dispatchDesign, cloudDriveDesign]
-export const getProductDesign = (id: string) => productDesigns.find((d) => d.id === id)
+import { experiments } from '../../experiments/registry'
+export const productDesigns = experiments.entries.filter(e => e.kind === 'product-design').map(e => e.definition)
+export const getProductDesign = (id: string) => productDesigns.find(d => d.id === id)

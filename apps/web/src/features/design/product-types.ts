@@ -1,5 +1,6 @@
 import type { DesignConfig, ProductResult } from './model-contracts'
 import type { ExperimentVersions } from '../../core/experiments/versions'
+import type { LegacyProductAttempt } from './compat/v1/attempt'
 export type { DesignConfig, DesignEvent, ProductResult } from './model-contracts'
 export interface DesignCheck { label: string; pass: boolean; detail: string }
 export interface ProductView {
@@ -20,6 +21,7 @@ export interface ProductScenario {
 }
 export interface ProductDesign {
   versions: ExperimentVersions
+  compatibility?: { versions: ExperimentVersions; verify: (value: unknown) => value is LegacyProductAttempt }
   id: string; kind: 'product-design'; title: string; summary: string; category: string; difficulty: string; estimatedMinutes: number
   pains: readonly string[]; requirements: readonly string[]; contracts: readonly { name: string; description: string }[]
   decisions: readonly string[]; boundary: readonly string[]; relatedLabs: readonly { id: string; title: string }[]
@@ -34,4 +36,4 @@ export interface ProductDesign {
   present: (result: ProductResult) => ProductView
 }
 export const check = (label: string, pass: boolean, detail: string): DesignCheck => ({ label, pass, detail })
-export const choice = (value: string, label: string) => ({ value, label })
+export const choice = <const V extends string>(value: V, label: string) => ({ value, label })

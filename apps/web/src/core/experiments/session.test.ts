@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { LabSession } from './session'
 import type { ExperimentRepository, LabContract } from './contracts'
 
@@ -19,6 +19,25 @@ function memoryRepository(): ExperimentRepository<Draft, Attempt> {
   }
 }
 describe('storage-independent experiment sessions', () => {
+  it('flushes a burst of edits once without dropping evidence or saving it repeatedly', async () => {
+    const repository = memoryRepository(); const save = vi.spyOn(repository, 'save')
+    const session = new LabSession(repository); await session.load()
+    session.run()
+    const attempt = structuredClone(session.getSnapshot().attempts[0]!)
+    for (let value = 2; value < 22; value++) session.edit({ value })
+    session.undo(); session.redo()
+    await session.save()
+    expect(save).toHaveBeenCalledTimes(1)
+    const restored = new LabSession(repository); await restored.load()
+    expect(restored.getSnapshot()).toMatchObject({ draft: { value: 21 }, attempts: [attempt], activeAttemptId: attempt.id })
+  })
+  it('drops a scheduled unsaved edit when explicitly reloading the saved revision', async () => {
+    const repository = memoryRepository(); await repository.save({ value: 4 }, null, [])
+    const session = new LabSession(repository); await session.load()
+    session.edit({ value: 99 }); await session.reload()
+    expect(session.getSnapshot()).toMatchObject({ draft: { value: 4 }, storage: 'saved' })
+    expect((await repository.load()).draft).toEqual({ value: 4 })
+  })
   it('edits, executes, undoes and restores through a storage port without IndexedDB', async () => {
     const repository = memoryRepository(); const session = new LabSession(repository)
     await session.load(); session.edit({ value: 4 }); session.run(); await session.save()
