@@ -46,9 +46,10 @@ function Sidebar({ exercise, controls, completed }: { exercise: DesignExercise; 
   const project = useWorkbenchStore((s) => s.project)
   const running = useWorkbenchStore((s) => s.running)
   const error = useWorkbenchStore((s) => s.error)
-  const latest = completed ?? (controls.runs[0]?.projectSnapshot ? { project: controls.runs[0].projectSnapshot, result: controls.runs[0].result } : null)
+  const previous = controls.runs.find(run => !run.imported)
+  const latest = completed ?? (previous?.projectSnapshot ? { project: previous.projectSnapshot, result: previous.result } : null)
   const stale = !!latest && JSON.stringify(latest.project) !== JSON.stringify(project)
-  const attempts = useMemo(() => controls.runs.flatMap((r) => r.projectSnapshot ? [{ ...r, evaluation: exercise.evaluate(r.projectSnapshot, r.result) }] : []), [controls.runs, exercise])
+  const attempts = useMemo(() => controls.runs.filter(run => !run.imported).flatMap((r) => r.projectSnapshot ? [{ ...r, evaluation: exercise.evaluate(r.projectSnapshot, r.result) }] : []), [controls.runs, exercise])
   const evaluation = latest ? exercise.evaluate(latest.project, latest.result) : null
   const [preflight, setPreflight] = useState<string | null>(null)
   const replace = (next: ProjectFile) => { const result = store.getState().commitProjectEdit(next); if (!result.success) store.getState().setError(result.issues.map((i) => i.message).join(' ')); setPreflight(null) }

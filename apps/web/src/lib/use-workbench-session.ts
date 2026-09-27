@@ -6,6 +6,7 @@ import type { ProjectRevisionRecord, SimulationRunRecord } from './local-history
 import type { CompletedWorkbenchRun, WorkbenchSession } from './workbench-session'
 import { useWorkbenchStore } from './workbench-store-provider'
 import { LabStorageError } from '../core/experiments/errors'
+import type { BackupPreview } from '../core/experiments/history'
 
 export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (run: CompletedWorkbenchRun) => void) {
   const project = useWorkbenchStore(state => state.project)
@@ -102,6 +103,17 @@ export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (ru
   const recovery = {
     load: restore, reload: restore, save: () => save(),
     recoverySnapshot: () => structuredClone({ format: 'system-design-workbench-recovery', version: 1, scope: session.id, capturedAt: new Date().toISOString(), project: session.store.getState().project, result: session.store.getState().result, revisions, runs, persistedSource: session.history?.recoveryData?.() ?? null }),
+    exportRecovery: async () => { if (!session.history?.exportBackup) throw new Error('此存储不支持备份。'); return session.history.exportBackup(session.store.getState().project) },
+    previewRecovery: async (value: unknown) => { if (!session.history?.previewBackup) throw new Error('此存储不支持备份。'); const preview = await session.history.previewBackup(value); if (session.id !== 'active' && (preview.draft as ProjectFile).id !== session.store.getState().project.id) throw new Error('备份不属于本练习。'); return preview },
+    importRecovery: async (preview: BackupPreview) => {
+      if (!readyRef.current || !session.history?.importBackup) throw new Error('请先成功读取当前工作台。')
+      invalidate(); readyRef.current = false; setReady(false); session.cancel()
+      try {
+        const project = await session.history.importBackup(preview, session.store.getState().project)
+        session.store.getState().restoreProject(project); persistedFingerprint.current = JSON.stringify(project)
+        await refreshHistory(project.id); readyRef.current = true; setReady(true)
+      } catch (cause) { readyRef.current = true; setReady(true); throw cause }
+    },
   }
   return { ready, progress, revisions, runs, refreshHistory, run, storage, recovery }
 }

@@ -29,6 +29,7 @@ import { WorkbenchStoreProvider, useCanRedo, useCanUndo, useWorkbenchStore, useW
 import { createWorkbenchSession, type CompletedWorkbenchRun, type WorkbenchSession } from '@/lib/workbench-session'
 import { useWorkbenchSession } from '@/lib/use-workbench-session'
 import { StorageNotice } from './experiments/storage-notice'
+import { BackupTools } from './experiments/backup-tools'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology, type CanvasNodeDimensions } from '@/lib/canvas-layout'
 import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount, type CanvasEdgeMetric } from '@/lib/canvas-metrics'
@@ -773,6 +774,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
         {embedded ? <>
           <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('Topology')}</strong><span>{t('Local simulation')}</span></div></div>
           <div className="top-actions">
+            <div className="history-picker"><button type="button" className="button subtle" aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}>备份与恢复</button>{historyOpen ? <div className="history-menu" role="dialog" aria-label="实验备份与恢复"><BackupTools recovery={recovery} ready={historyReady} /></div> : null}</div>
             <button type="button" className="button subtle icon-only" aria-label={t('Undo project change')} disabled={!canUndo || running} onClick={() => undoProject(store)}><Undo2 size={15} /></button>
             <button type="button" className="button subtle icon-only" aria-label={t('Redo project change')} disabled={!canRedo || running} onClick={() => redoProject(store)}><Redo2 size={15} /></button>
             <button type="button" className="button subtle" aria-pressed={panelVisibility.inspector} onClick={() => setPanelVisible('inspector', inspectorPanelRef, !panelVisibility.inspector)}><PanelRight size={15} />{t('Properties')}</button>
@@ -794,6 +796,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
           <div className="history-picker">
             <button type="button" className="button subtle" aria-expanded={historyOpen} onClick={() => { const next = !historyOpen; setHistoryOpen(next); if (next) void refreshHistory(project.id) }}><History size={15} /> {t('History')}</button>
             {historyOpen ? <div className="history-menu" role="dialog" aria-label={t('Local project history')}>
+              <BackupTools recovery={recovery} ready={historyReady} />
               <div className="history-section"><strong>{t('Project revisions')}</strong>{revisions.length ? revisions.slice(0, 8).map((revision) => <button type="button" key={revision.revisionId} onClick={() => void restoreRevision(revision.revisionId)}><span>{revision.projectName}</span><small>{t(`history-source.${revision.source}`, {}, revision.source)} · {new Date(revision.createdAt).toLocaleString(locale)}</small></button>) : <p>{t('No saved revisions yet.')}</p>}</div>
               <div className="history-section"><strong>{t('Simulation runs')}</strong>{runs.length ? runs.slice(0, 8).map((savedRun) => <button type="button" key={savedRun.runId} onClick={() => void restoreRun(savedRun)}><span>{t('{completed} completed · {errors}% errors', { completed: savedRun.result.summary.completedRequests.toLocaleString(locale), errors: (savedRun.result.summary.errorRate * 100).toFixed(1) })}</span><small>{t('{time} · seed {seed}', { time: new Date(savedRun.createdAt).toLocaleString(locale), seed: savedRun.result.seed })}</small></button>) : <p>{t('No saved runs yet.')}</p>}</div>
             </div> : null}

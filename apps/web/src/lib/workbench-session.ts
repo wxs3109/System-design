@@ -7,7 +7,7 @@ import { ExecutionCoordinator } from '../core/experiments/execution'
 import { createWorkbenchStore } from './store'
 
 export type WorkbenchHistory = Pick<LocalHistoryRepository,
-  'saveProjectRevision' | 'loadActiveProject' | 'listProjectRevisions' | 'loadProjectRevision' | 'saveSimulationRun' | 'listSimulationRuns'> & Partial<Pick<LocalHistoryRepository, 'recoveryData' | 'retainedRecords'>>
+  'saveProjectRevision' | 'loadActiveProject' | 'listProjectRevisions' | 'loadProjectRevision' | 'saveSimulationRun' | 'listSimulationRuns'> & Partial<Pick<LocalHistoryRepository, 'recoveryData' | 'retainedRecords' | 'exportBackup' | 'previewBackup' | 'importBackup'>>
 
 export interface CompletedWorkbenchRun {
   project: ProjectFile

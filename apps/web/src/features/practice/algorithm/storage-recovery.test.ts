@@ -79,7 +79,7 @@ it('migrates version-one data and isolates current drafts from legacy writers', 
   legacy.close()
   const db = database(name); const repo = new ConcurrentRepository(db)
   const loaded = await repo.load()
-  expect(loaded.draft).toEqual(draft); expect(loaded.attempts).toEqual([attempt]); expect(db.verno).toBe(2)
+  expect(loaded.draft).toEqual(draft); expect(loaded.attempts).toEqual([attempt]); expect(db.verno).toBe(3)
   await repo.save(draft, attempt.id, [])
   expect((await db.drafts.get(repo.scope))!.revision).toBe(1)
   await legacy.open()

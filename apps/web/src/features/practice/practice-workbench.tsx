@@ -31,13 +31,13 @@ function ExerciseSidebar({ exercise, controls, completed }: { exercise: Exercise
   const project = useWorkbenchStore((state) => state.project)
   const running = useWorkbenchStore((state) => state.running)
   const error = useWorkbenchStore((state) => state.error)
-  const previous = controls.runs[0]
+  const previous = controls.runs.find(run => !run.imported)
   const restoredEvidence = useRef(false)
   const evidence = useMemo(() => completed ?? (previous?.projectSnapshot ? { project: previous.projectSnapshot, result: previous.result } : null), [completed, previous])
   // Match WorkbenchSession's snapshot identity: any project edit needs a rerun.
   const stale = evidence !== null && JSON.stringify(evidence.project) !== JSON.stringify(project)
   const evaluation = useMemo(() => evidence ? exercise.evaluate(evidence.project, evidence.result) : null, [exercise, evidence])
-  const attempts = useMemo(() => controls.runs.slice(0, 5).flatMap((run) => run.projectSnapshot ? [{ run, label: configurationLabel(run.projectSnapshot, exercise.parameters), evaluation: exercise.evaluate(run.projectSnapshot, run.result) }] : []), [controls.runs, exercise])
+  const attempts = useMemo(() => controls.runs.filter(run => !run.imported).slice(0, 5).flatMap((run) => run.projectSnapshot ? [{ run, label: configurationLabel(run.projectSnapshot, exercise.parameters), evaluation: exercise.evaluate(run.projectSnapshot, run.result) }] : []), [controls.runs, exercise])
   const comparison = attempts.find((attempt) => attempt.run.runId !== evidence?.result.runId && hasComparableEvidence(attempt.evaluation))
 
   useEffect(() => { if (controls.ready) store.getState().selectNode(exercise.focusNodeId) }, [controls.ready, store, exercise.focusNodeId])

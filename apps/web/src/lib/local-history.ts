@@ -3,6 +3,7 @@
 import Dexie, { type DexieOptions, type Table } from 'dexie'
 import { getActiveExperiment, parseProjectFile, type ProjectFile, type SimulationResult } from '@system-design/model'
 import { LabStorageError } from '../core/experiments/errors'
+import { checkBackupSize, recoveryObject, type BackupPreview } from '../core/experiments/history'
 
 export type ProjectRevisionSource = 'autosave' | 'import' | 'manual' | 'restore'
 
@@ -22,6 +23,7 @@ export interface ProjectRevisionRecord {
 }
 
 export interface SimulationRunRecord {
+  imported?: boolean
   recordVersion?: 2
   runId: string
   projectId: string
@@ -186,6 +188,68 @@ export class LocalHistoryRepository {
 
   recoveryData() { return immutableCopy({ active: this.loadedSource, retained: [...this.retained.values()] }) }
   retainedRecords() { return immutableCopy([...this.retained.values()]) }
+
+  async exportBackup(project: ProjectFile) {
+    const [revisions, runs] = await Promise.all([this.database.projectRevisions.where('projectId').equals(project.id).toArray(), this.database.simulationRuns.where('projectId').equals(project.id).toArray()])
+    return { format: 'system-design-workbench-recovery', version: 2, scope: this.workspaceKey, capturedAt: new Date().toISOString(), project: immutableCopy(project), revisions, runs, persistedSource: this.recoveryData() }
+  }
+  async previewBackup(value: unknown): Promise<BackupPreview> {
+    checkBackupSize(value); const data = recoveryObject(value)
+    if (data.format !== 'system-design-workbench-recovery' || ![1, 2].includes(data.version as number) || data.scope !== this.workspaceKey) throw new Error('工作台备份的范围或版本不匹配。')
+    const project = parseProjectFile(data.project)
+    if (!Array.isArray(data.revisions) || !Array.isArray(data.runs) || data.revisions.length + data.runs.length > 10000) throw new Error('工作台历史格式或数量无效。')
+    const revisions = data.revisions.map(row => normalizeRevision(row as ProjectRevisionRecord))
+    if (revisions.some(row => typeof row.revisionId !== 'string' || !row.revisionId || !Number.isFinite(row.createdAt) || row.projectId !== project.id)) throw new Error('备份包含其他项目的版本。')
+    const byId = new Map(revisions.map(row => [row.revisionId, row]))
+    if (byId.size !== revisions.length) throw new Error('备份内存在重复项目版本。')
+    let retained = 0
+    const seen = new Set<string>()
+    const runs = data.runs.map(raw => {
+      const row = recoveryObject(raw) as unknown as SimulationRunRecord
+      if (typeof row.runId !== 'string' || !row.runId || seen.has(row.runId) || row.projectId !== project.id || !Number.isFinite(row.createdAt)) throw new Error('备份运行身份无效或重复。')
+      seen.add(row.runId)
+      let run: SimulationRunRecord
+      try { run = normalizeRun(row) } catch { retained++; return immutableCopy({ ...row, imported: true }) }
+      const snapshot = run.projectSnapshot ?? byId.get(run.projectRevisionId)?.project
+      if (!snapshot || snapshot.id !== project.id || run.result.seed !== getActiveExperiment(snapshot).seed || run.experimentId !== getActiveExperiment(snapshot).id) throw new Error('运行结果与项目快照不匹配。')
+      return { ...run, imported: true }
+    })
+    return { records: revisions.length + runs.length, retained, draft: project, data: { ...data, project, revisions, runs } }
+  }
+  async importBackup(preview: BackupPreview, currentProject: ProjectFile) {
+    const checked = await this.previewBackup(preview.data)
+    const data = checked.data as { project: ProjectFile; revisions: ProjectRevisionRecord[]; runs: SimulationRunRecord[] }
+    const prior = parseProjectFile(immutableCopy(currentProject))
+    const queueKey = this.database.name + ':' + this.workspaceKey
+    const save = (writeQueues.get(queueKey) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+      if (this.loadFailed || this.expectedRevision === undefined) throw new LabStorageError('load', '成功读取工作台后才能导入。')
+      const revision = await this.database.transaction('rw', this.database.projectRevisions, this.database.simulationRuns, this.database.workspaceHeads, this.database.activeWorkspace, async () => {
+        const head = await this.database.workspaceHeads.get(this.workspaceKey)
+        const legacy = head ? undefined : await this.database.activeWorkspace.get(this.workspaceKey)
+        if (headRevision(head) !== this.expectedRevision || !head && this.legacyFingerprint !== JSON.stringify(legacy ?? null)) throw new LabStorageError('conflict', '其他标签页已更新工作台，导入未写入。')
+        for (const row of data.revisions) {
+          const existing = await this.database.projectRevisions.get(row.revisionId)
+          if (existing && JSON.stringify(existing) !== JSON.stringify(row)) throw new Error('同名项目版本内容不同，原记录未变。')
+          if (!existing) await this.database.projectRevisions.add(row)
+        }
+        for (const row of data.runs) {
+          const existing = await this.database.simulationRuns.get(row.runId)
+          if (existing && JSON.stringify({ ...existing, imported: true }) !== JSON.stringify(row)) throw new Error('同名运行历史内容不同，原记录未变。')
+          if (!existing) await this.database.simulationRuns.add(row)
+        }
+        for (const [index, project] of [prior, data.project].entries()) {
+          const createdAt = Date.now() + index
+          const record: ProjectRevisionRecord = { revisionId: `${project.id}:${nextId()}`, projectId: project.id, projectName: project.name, createdAt, source: index ? 'import' : 'manual', fingerprint: fingerprintProject(project), project }
+          await this.database.projectRevisions.add(record)
+          if (index) await this.database.workspaceHeads.put({ key: this.workspaceKey, version: 1, revision: this.expectedRevision! + 1, projectId: project.id, projectRevisionId: record.revisionId, updatedAt: createdAt })
+        }
+        return this.expectedRevision! + 1
+      })
+      this.expectedRevision = revision; this.legacyFingerprint = undefined
+    })
+    writeQueues.set(queueKey, save); await save
+    return data.project
+  }
 
   async listProjectRevisions(projectId: string, limit = MAX_REVISIONS_PER_PROJECT): Promise<ProjectRevisionRecord[]> {
     const records = await this.database.projectRevisions

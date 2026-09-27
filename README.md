@@ -47,6 +47,7 @@ node .tools/lint-content.mjs
 - **运行与故障实验**：常量/泊松到达、容量限制、排队、超时、重试、熔断、背压，以及支持的节点、链路和区域故障。
 - **观察与比较**：吞吐量、延迟、错误率、利用率、积压、请求 Trace，以及相同实验条件下的运行对比。
 - **保存与复现**：独立工作台会话、隔离的撤销/重做与保存范围、本地版本和运行历史、项目导入导出，以及固定场景、实验、版本和种子的可复现实验。
+- **历史与备份**：Lab 历史分页、按需核验、归档与显式清理；实验、笔记和工作台备份支持预览后导入，保留原草稿并拒绝冲突覆盖。
 
 内置行为覆盖 Service、Database、Object Storage、Queue/Stream/Topic、Cache/CDN、Network、负载均衡、Global Router、Realtime Gateway、Scheduler 和 Workflow 等。每个行为的执行范围见[组件覆盖说明](docs/component-coverage.md)。
 
