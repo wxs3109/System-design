@@ -23,6 +23,7 @@ import { cloudDriveDesign } from '../features/design/cloud-drive'
 import { exercise as qualityGoalsExercise } from '../features/practice/quality-goals/lesson'
 import { exercise as resourceBudgetExercise } from '../features/practice/resource-budget/lesson'
 import { exercise as dataAccessExercise } from '../features/practice/data-access/lesson'
+import { exercise as statePlacementExercise } from '../features/practice/state-placement/lesson'
 
 export type ExperimentRenderer = ComponentType<{ exerciseId: string }>
 interface CardSource { id: string; title: string; summary: string; category: string; difficulty: string; estimatedMinutes: number; version?: number; versions?: { definition: number }; flow?: readonly string[] }
@@ -38,6 +39,7 @@ export const experiments = experimentRegistry([
   register(qualityGoalsExercise, 'algorithm', async () => (await import('../features/practice/quality-goals/quality-lab')).QualityGoalsLab, undefined, { step: true }),
   register(resourceBudgetExercise, 'algorithm', async () => (await import('../features/practice/resource-budget/resource-lab')).ResourceBudgetLab, undefined, { step: true }),
   register(dataAccessExercise, 'algorithm', async () => (await import('../features/practice/data-access/access-lab')).DataAccessLab, undefined, { step: true }),
+  register(statePlacementExercise, 'algorithm', async () => (await import('../features/practice/state-placement/state-lab')).StatePlacementLab, undefined, { step: true }),
   ...exercises.map(exercise => register(exercise, 'simulation', async () => (await import('../features/practice/practice-workbench')).PracticeWorkbench)),
   register(hashingExercise, 'algorithm', async () => (await import('../features/practice/distribution/hashing-lab')).HashingLab),
   register(hotKeyExercise, 'algorithm', async () => (await import('../features/practice/hot-key/hot-lab')).HotKeyLab, undefined, { execution: 'worker' }),
