@@ -1,0 +1,26 @@
+import { expect, test, type Page } from '@playwright/test'
+async function save(page: Page, values: string[]) {
+  await page.getByLabel('实验预测', { exact: true }).selectOption('unknown')
+  for (const [i, name] of ['平均请求率作答', '峰值请求率作答', '逻辑存储 MB 作答', '副本存储 MB 作答'].entries()) await page.getByLabel(name, { exact: true }).fill(values[i]!)
+  await page.getByLabel('容量推导边界').selectOption('work-and-boundaries')
+  await page.getByRole('button', { name: '核对并保存实验', exact: true }).click()
+  await expect(page.getByTestId('experiment-feedback')).toContainText('本关实验验证通过')
+  await expect(page.getByTestId('experiment-save-status')).toHaveText('当前操作已保存')
+}
+test('connects dimensional estimates to actual resource bottlenecks and restores verified work', async ({ page }) => {
+  await page.goto('/learn/capacity-estimation'); await page.locator('#labs a[href="/practice/resource-budget"]').click()
+  await expect(page.getByTestId('experiment-save-status')).toHaveText('当前操作已保存')
+  await expect(page.getByLabel('每日用户数')).toBeDisabled()
+  const run = page.getByRole('button', { name: '运行完整实验示例', exact: true })
+  await run.click(); await expect(page.getByTestId('budget-logical')).toHaveText('259.2 MB')
+  await expect(page.getByTestId('budget-count')).toHaveText('50'); await save(page, ['1','10','259.2','777.6'])
+  await page.getByRole('button', { name: '大响应的网络瓶颈', exact: true }).click(); await run.click()
+  const slow = await page.getByTestId('budget-p95').textContent()
+  await page.getByLabel('独立计算槽').selectOption('4'); await run.click(); await expect(page.getByTestId('budget-p95')).toHaveText(slow!)
+  await page.getByLabel('共享响应带宽（Mbps）').selectOption('80'); await run.click(); await expect(page.getByTestId('budget-p95')).toHaveText('250 ms')
+  await save(page, ['1','10','259.2','777.6'])
+  await page.getByRole('button', { name: '共享存储的瓶颈', exact: true }).click(); await page.getByLabel('并行存储槽').selectOption('2'); await run.click()
+  await expect(page.getByTestId('budget-p95')).toHaveText('160 ms'); await save(page, ['2','20','518.4','1555.2'])
+  await page.reload(); await expect(page.getByLabel('实验学习进度', { exact: true })).toContainText('3 / 3')
+  await page.setViewportSize({ width: 390, height: 844 }); expect(await page.locator('main').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true)
+})

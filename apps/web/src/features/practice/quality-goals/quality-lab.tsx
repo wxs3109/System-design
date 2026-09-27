@@ -1,8 +1,9 @@
 'use client'
 import { ProtocolExperiment } from '../protocol/experiment'
 import { AnswerFields } from '../protocol/answer-fields'
+import { ConfigurationFields } from '../protocol/configuration-fields'
 import { exercise, goals, lesson, measures, scenarioCommands, scenarios } from './lesson'
-import { MAX_COMMANDS, missingAcknowledged, runModel, type Command, type Config, type State } from './model'
+import { MAX_COMMANDS, missingAcknowledged, runModel, type Command, type State } from './model'
 import styles from '../retry-idempotency/retry-lab.module.css'
 
 const labels: Record<Command['type'], string> = { read: '读取核心与附加内容', write: '写入并等待确认', 'read-confirmed': '读取已确认记录', 'fail-domain': '关闭服务故障域', 'recover-domain': '恢复服务故障域', 'crash-storage': '让存储进程崩溃', 'recover-storage': '从稳定集合恢复存储', 'fail-dependency': '关闭附加依赖', 'recover-dependency': '恢复附加依赖' }
@@ -21,12 +22,12 @@ function Live({ state, allowDegraded, act, disabled }: { state: State; allowDegr
 export function QualityGoalsLab() {
   return <ProtocolExperiment id={exercise.id} title={exercise.title} summary={exercise.summary} conceptId="quality-goals" createSession={() => lesson.session()} initial={lesson.initial} scenarios={scenarios} goals={goals}
     selectScenario={(d, scenario) => ({ ...lesson.initial(), scenario, config: d.config })} runModel={runModel} guide={d => scenarioCommands(d.scenario)} commandLabel={commandLabel} maxCommands={MAX_COMMANDS}
-    renderConfig={(d, edit, disabled) => <>
-      <label>服务实例数<select aria-label="目标实验服务实例数" disabled={disabled} value={d.config.replicas} onChange={e => edit({ ...d, config: { ...d.config, replicas: Number(e.target.value) as Config['replicas'] }, commands: [] })}><option value="1">1 个实例</option><option value="2">2 个实例</option></select></label>
-      <label>实例放置<select aria-label="目标实验实例放置" disabled={disabled} value={d.config.placement} onChange={e => edit({ ...d, config: { ...d.config, placement: e.target.value as Config['placement'] }, commands: [] })}><option value="shared">同一故障域 A</option><option value="separate">分别放在 A / B</option></select></label>
-      <label>写入确认边界<select aria-label="目标实验确认边界" disabled={disabled} value={d.config.acknowledgement} onChange={e => edit({ ...d, config: { ...d.config, acknowledgement: e.target.value as Config['acknowledgement'] }, commands: [] })}><option value="memory">写入易失内存后确认</option><option value="stable">稳定保存后确认</option></select></label>
-      <label>附加依赖失败策略<select aria-label="目标实验依赖策略" disabled={disabled} value={d.config.dependency} onChange={e => edit({ ...d, config: { ...d.config, dependency: e.target.value as Config['dependency'] }, commands: [] })}><option value="required">完整依赖失败就返回失败</option><option value="degrade">失败时仅返回核心内容</option></select></label>
-    </>}
+    renderConfig={(d, edit, disabled) => <ConfigurationFields config={d.config} disabled={disabled} change={config => edit({ ...d, config, commands: [] })} fields={[
+      { key: 'replicas', label: '服务实例数', ariaLabel: '目标实验服务实例数', choices: [{ value: 1, label: '1 个实例' }, { value: 2, label: '2 个实例' }] },
+      { key: 'placement', label: '实例放置', ariaLabel: '目标实验实例放置', choices: [{ value: 'shared', label: '同一故障域 A' }, { value: 'separate', label: '分别放在 A / B' }] },
+      { key: 'acknowledgement', label: '写入确认边界', ariaLabel: '目标实验确认边界', choices: [{ value: 'memory', label: '写入易失内存后确认' }, { value: 'stable', label: '稳定保存后确认' }] },
+      { key: 'dependency', label: '附加依赖失败策略', ariaLabel: '目标实验依赖策略', choices: [{ value: 'required', label: '完整依赖失败就返回失败' }, { value: 'degrade', label: '失败时仅返回核心内容' }] },
+    ]} />}
     renderLive={(d, s, act, disabled) => <Live state={s} allowDegraded={d.scenario === 'degradation'} act={act} disabled={disabled} />}
     renderAnswers={(d, edit, disabled) => <AnswerFields fields={[{ id: 'offered', label: '本次请求数' }, { id: 'good', label: '满足请求合同的次数' }, { id: 'missing', label: '已确认但缺失的记录数' }, { id: 'reason', label: '本关保证成立的原因', options: [{ value: 'failure-domains', label: '剩余实例覆盖本次故障范围' }, { value: 'commit-boundary', label: '确认发生在稳定保存之后' }, { value: 'allowed-degradation', label: '需求明确允许核心内容降级' }, { value: 'more-replicas', label: '只要增加副本就能保证所有目标' }] }]} answers={d.answers} disabled={disabled} change={answers => edit({ ...d, answers })} />}
     compare={d => ({ headings: ['合约内成功 / 全部请求', '完整返回', '降级返回', '确认后缺失'], rows: (d.scenario === 'availability'
