@@ -1,3 +1,4 @@
+import { timelineEvidence } from '../../../core/experiments/timeline-evidence'
 import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
 import { canDeliver, defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, type Command, type Config, type Message, type NodeId } from './model'
 export const exercise = { kind: 'protocol' as const, id: 'raft-consensus', version: 1, title: '选出 Leader 以后，哪些日志真的提交了？', category: 'Raft 选举与日志安全', difficulty: '进阶', estimatedMinutes: 40, summary: '手动触发选举、递送投票与 AppendEntries，观察分票、少数派旧 Leader、冲突后缀，以及旧任期多数副本为何不能直接提交。', flow: ['触发选举', '逐条复制日志', '分区与恢复', '核对安全性和进展'] } as const
@@ -28,7 +29,7 @@ export function scenarioCommands(c: Config, scenario: string): Command[] {
   }
   cache.set(key, structuredClone(commands)); return commands
 }
-export const lesson = createProtocolLesson({ id: exercise.id, initialConfig: defaultConfig, scenarios, maxCommands: MAX_COMMANDS, parseConfig, parseCommand, runModel,
+export const lesson = createProtocolLesson({ id: exercise.id, initialConfig: defaultConfig, scenarios, maxCommands: MAX_COMMANDS, parseConfig, parseCommand, runModel, resultEvidence: (s) => timelineEvidence(s, { counted: ['violations'] }),
   assess: (d, s) => {
     const safe = s.violations.length === 0
     const committed = s.acknowledged.length

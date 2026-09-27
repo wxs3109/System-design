@@ -14,6 +14,7 @@ function parse(value: unknown): Notes {
 }
 export function DesignNotebook({ exerciseId }: { exerciseId: string }) {
   const [session] = useState(() => new LabSession(new LabRepository<Notes, { id: string; exerciseId: string; exerciseVersion: number; createdAt: number; draft: Notes }>(new AlgorithmDatabase(), `${exerciseId}:notes:v1`, {
+    versions: { model: 'design-notebook-v1', definition: 1, assessment: 1 }, draftVersion: 1,
     initial: empty, parseDraft: parse, runAttempt: () => { throw new Error('笔记不自动评分。') }, verifyAttempt: (value): value is never => { void value; return false },
   })))
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)

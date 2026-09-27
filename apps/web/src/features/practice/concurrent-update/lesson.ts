@@ -1,4 +1,5 @@
-import { defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, same, type Command, type Config, type State, type WorkerId } from './model'
+import { sameAssessment, sameTimelineEvidence } from '../../../core/experiments/timeline-evidence'
+import { defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, type Command, type Config, type State, type WorkerId } from './model'
 export const concurrentExercise = { kind: 'protocol' as const, id: 'concurrent-update', version: 1, title: '两个任务争抢名额，库存没负数就安全吗？', category: '并发正确性', difficulty: '基础', estimatedMinutes: 25, summary: '交错读取与提交，观察超卖和丢失更新，比较幂等去重、版本 CAS 与行锁，并在提交前制造崩溃。', flow: ['读取同一状态', '交错提交', '检查业务账本', '重读或串行化'] } as const
 export const scenarioLabels = { 'last-slot': '争抢最后一个名额', 'lost-update': '两个名额的丢失更新', 'crash-before-commit': '提交前崩溃', manual: '自由实验' } as const
 export type Scenario = keyof typeof scenarioLabels
@@ -30,7 +31,7 @@ export function invariant(c: Config, s: State): boolean {
   return s.remaining >= 0 && s.remaining + s.reservations.length === c.capacity && s.reservations.length <= c.capacity && new Set(s.reservations.map((r) => r.intent)).size === s.reservations.length
 }
 export function evaluate(d: Draft, s: State): Evaluation {
-  try { if (!same(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, status: 'inconclusive', messages: ['状态与事件无法完整重算。'] } }
+  try { if (!sameTimelineEvidence(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, status: 'inconclusive', messages: ['状态与事件无法完整重算。'] } }
   const safe = invariant(d.config, s)
   const settled = !s.lock && !s.waiting.length && s.workers.every((w) => w.status === 'committed' || w.status === 'sold-out')
   const aRead = s.events.find((e) => e.kind === 'read' && e.subject === 'A')
@@ -52,4 +53,4 @@ export function evaluate(d: Draft, s: State): Evaluation {
   ] }
 }
 export function runAttempt(value: Draft): Attempt { const draft = parseDraft(value); const result = runModel(draft.config, draft.commands); return { id: crypto.randomUUID(), exerciseId: 'concurrent-update', exerciseVersion: 1, createdAt: Date.now(), draft: structuredClone(draft), result, evaluation: evaluate(draft, result) } }
-export function verifyAttempt(value: unknown): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== 'concurrent-update' || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const d = parseDraft(a.draft); const e = evaluate(d, a.result); return e.evidence && same(e, a.evaluation) } catch { return false } }
+export function verifyAttempt(value: unknown): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== 'concurrent-update' || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const d = parseDraft(a.draft); const e = evaluate(d, a.result); return e.evidence && sameAssessment(e, a.evaluation) } catch { return false } }

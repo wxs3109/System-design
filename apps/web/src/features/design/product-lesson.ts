@@ -49,7 +49,7 @@ export function productLesson(design: ProductDesign) {
       return evaluation.evidence && same(evaluation, a.evaluation)
     } catch { return false }
   }
-  const contract = { initial, parseDraft, runAttempt, verifyAttempt }
+  const contract = { initial, parseDraft, runAttempt, verifyAttempt, versions: design.versions, draftVersion: 1 }
   const repository = (db = new AlgorithmDatabase()) => new LabRepository<ProductDraft, ProductAttempt>(db, `${design.id}:v1`, contract)
   const session = (db?: AlgorithmDatabase) => new LabSession(repository(db))
   return { ...contract, evaluate, repository, session }

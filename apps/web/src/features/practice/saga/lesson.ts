@@ -1,4 +1,5 @@
-import { defaultConfig, MAX_COMMANDS, nextOperation, parseCommand, parseConfig, runModel, same, type Command, type Config, type State } from './model'
+import { sameAssessment, sameTimelineEvidence } from '../../../core/experiments/timeline-evidence'
+import { defaultConfig, MAX_COMMANDS, nextOperation, parseCommand, parseConfig, runModel, type Command, type Config, type State } from './model'
 export const sagaExercise = { kind: 'protocol' as const, id: 'saga-recovery', version: 1, title: '视频流程部分成功，怎样收场？', category: '跨服务恢复', difficulty: '基础', estimatedMinutes: 30, summary: '预留配额、生成产物后让发布失败，逐步补偿，并处理补偿响应丢失、协调者崩溃与补偿失败。', flow: ['局部成功', '业务失败', '补偿与重试', '核对最终状态'] } as const
 export const scenarioLabels = { 'response-lost': '补偿响应丢失', 'coordinator-crash': '补偿后、记进度前崩溃', 'compensation-failure': '补偿本身失败', manual: '自由实验' } as const
 export type Scenario = keyof typeof scenarioLabels
@@ -29,7 +30,7 @@ export function scenarioCommands(c: Config, scenario: Exclude<Scenario, 'manual'
   return commands
 }
 export function evaluate(d: Draft, s: State): Evaluation {
-  try { if (!same(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, settled: false, status: 'inconclusive', messages: ['完整状态和事件无法重算，不能核验证据。'] } }
+  try { if (!sameTimelineEvidence(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, settled: false, status: 'inconclusive', messages: ['完整状态和事件无法重算，不能核验证据。'] } }
   const settled = !s.packets.some((p) => p.status === 'network' || p.response === 'network' || p.response === 'delivered')
   const r = s.resource
   const quota = 1 - r.reserved + r.released
@@ -51,4 +52,4 @@ export function evaluate(d: Draft, s: State): Evaluation {
   ] }
 }
 export function runAttempt(value: Draft): Attempt { const draft = parseDraft(value); const result = runModel(draft.config, draft.commands); return { id: crypto.randomUUID(), exerciseId: 'saga-recovery', exerciseVersion: 1, createdAt: Date.now(), draft: structuredClone(draft), result, evaluation: evaluate(draft, result) } }
-export function verifyAttempt(value: unknown): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== 'saga-recovery' || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const d = parseDraft(a.draft); const verdict = evaluate(d, a.result); return verdict.evidence && same(verdict, a.evaluation) } catch { return false } }
+export function verifyAttempt(value: unknown): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== 'saga-recovery' || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const d = parseDraft(a.draft); const verdict = evaluate(d, a.result); return verdict.evidence && sameAssessment(verdict, a.evaluation) } catch { return false } }

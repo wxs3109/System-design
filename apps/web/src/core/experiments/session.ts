@@ -9,6 +9,7 @@ export interface LabSessionState<D, A> extends Editable<D> {
   error: string
   errorKind: 'load' | 'save' | 'conflict' | null
   rejected: number
+  retained: unknown[]
   undoCount: number
   redoCount: number
 }
@@ -24,7 +25,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   private persistedAttempts = new Set<string>()
   private loading: Promise<void> | null = null
   constructor(readonly repository: ExperimentRepository<D, A>) {
-    this.state = { draft: repository.contract.initial(), activeAttemptId: null, attempts: [], ready: false, storage: 'loading', error: '', errorKind: null, rejected: 0, undoCount: 0, redoCount: 0 }
+    this.state = { draft: repository.contract.initial(), activeAttemptId: null, attempts: [], ready: false, storage: 'loading', error: '', errorKind: null, rejected: 0, retained: [], undoCount: 0, redoCount: 0 }
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   getSnapshot = () => this.state
@@ -44,7 +45,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
       if (revision !== this.revision) return
       this.persistedAttempts = new Set(saved.attempts.map((attempt) => attempt.id))
       this.past = []; this.future = []
-      this.publish({ draft: saved.draft ?? this.repository.contract.initial(), activeAttemptId: saved.activeAttemptId, attempts: saved.attempts, rejected: saved.rejected, ready: true, storage: 'saved', error: '', errorKind: null })
+      this.publish({ draft: saved.draft ?? this.repository.contract.initial(), activeAttemptId: saved.activeAttemptId, attempts: saved.attempts, rejected: saved.rejected, retained: saved.retained ?? [], ready: true, storage: 'saved', error: '', errorKind: null })
     }).catch((error: unknown) => {
       if (revision === this.revision) this.publish({ ready: false, storage: 'error', errorKind: 'load', error: error instanceof Error ? error.message : '无法恢复本地实验。' })
     }).finally(() => { this.loading = null })
@@ -104,6 +105,6 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     }
   }
   recoverySnapshot() {
-    return structuredClone({ format: 'system-design-lab-recovery', version: 1, scope: this.repository.scope, capturedAt: new Date().toISOString(), draft: this.state.draft, activeAttemptId: this.state.activeAttemptId, attempts: this.state.attempts, unsavedAttemptIds: this.state.attempts.filter((a) => !this.persistedAttempts.has(a.id)).map((a) => a.id) })
+    return structuredClone({ format: 'system-design-lab-recovery', version: 1, scope: this.repository.scope, capturedAt: new Date().toISOString(), draft: this.state.draft, activeAttemptId: this.state.activeAttemptId, attempts: this.state.attempts, retained: this.state.retained, persistedSource: this.repository.recoveryData?.() ?? null, unsavedAttemptIds: this.state.attempts.filter((a) => !this.persistedAttempts.has(a.id)).map((a) => a.id) })
   }
 }

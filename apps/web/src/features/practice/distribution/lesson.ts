@@ -1,3 +1,4 @@
+import { sameAssessment } from '../../../core/experiments/timeline-evidence'
 import { compare, distribute, fingerprint, makeInput, methods, parseInput, same, type Comparison, type DistributionInput, type DistributionResult, type Method } from './model'
 
 export const hashingExercise = {
@@ -100,7 +101,7 @@ export function verifyAttempt(value: unknown): value is AlgorithmAttempt {
     if (attempt.exerciseId !== 'consistent-hashing' || attempt.exerciseVersion !== 1 || typeof attempt.id !== 'string' || !Number.isFinite(attempt.createdAt)) return false
     const draft = parseDraft(attempt.draft)
     const evaluation = evaluate(draft, attempt.result, attempt.baselineResult)
-    return evaluation.evidence && same(evaluation, attempt.evaluation) && same(attempt.comparison, attempt.baselineResult ? compare(attempt.baselineResult, attempt.result) : null)
+    return evaluation.evidence && sameAssessment(evaluation, attempt.evaluation) && same(attempt.comparison, attempt.baselineResult ? compare(attempt.baselineResult, attempt.result) : null)
   } catch { return false }
 }
 export function learningProgress(attempts: AlgorithmAttempt[]) {

@@ -1,5 +1,5 @@
 import { AlgorithmDatabase, LabRepository } from '../../../core/experiments/repository'
 import { LabSession } from '../../../core/experiments/session'
 import { initialDraft, parseDraft, runAttempt, verifyAttempt, type Draft, type Attempt } from './lesson'
-export class ConcurrentRepository extends LabRepository<Draft, Attempt> { constructor(database = new AlgorithmDatabase()) { super(database, 'concurrent-update:v1', { initial: initialDraft, parseDraft, runAttempt, verifyAttempt }) } }
+export class ConcurrentRepository extends LabRepository<Draft, Attempt> { constructor(database = new AlgorithmDatabase()) { super(database, 'concurrent-update:v1', { versions: { model: 'concurrent-update-v1', definition: 1, assessment: 1 }, draftVersion: 1, initial: initialDraft, parseDraft, runAttempt, verifyAttempt }) } }
 export class ConcurrentSession extends LabSession<Draft, Attempt> { constructor(repository = new ConcurrentRepository()) { super(repository) } }

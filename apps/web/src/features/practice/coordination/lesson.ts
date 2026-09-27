@@ -1,4 +1,5 @@
-import { defaultConfig, parseCommand, parseConfig, runModel, same, MAX_COMMANDS, type Command, type Config, type State } from './model'
+import { sameAssessment, sameTimelineEvidence } from '../../../core/experiments/timeline-evidence'
+import { defaultConfig, parseCommand, parseConfig, runModel, MAX_COMMANDS, type Command, type Config, type State } from './model'
 export type LabId = 'heartbeat' | 'lease-fencing'
 export const exercises = [
   { kind: 'protocol' as const, id: 'heartbeat' as const, version: 1, title: '没收到心跳，节点真的死了吗？', category: '故障检测', difficulty: '基础', estimatedMinutes: 20, summary: '暂停、分区或崩溃 Worker，递送或丢弃心跳，比较实际状态与观察者的怀疑及恢复。', flow: ['发送心跳', '注入故障', '等待超时', '核对观察'] },
@@ -33,7 +34,7 @@ export function scenarioCommands(c: Config, scenario: Exclude<Scenario, 'manual'
   return commands
 }
 export function evaluate(d: Draft, s: State): Evaluation {
-  try { if (!same(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, status: 'inconclusive', messages: ['完整状态和事件不能重算核对。'] } }
+  try { if (!sameTimelineEvidence(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, status: 'inconclusive', messages: ['完整状态和事件不能重算核对。'] } }
   const observation = s.observations[0]!
   const worker = s.workers[0]!
   let task = false
@@ -57,4 +58,4 @@ export function evaluate(d: Draft, s: State): Evaluation {
   ] }
 }
 export function runAttempt(value: Draft, id: LabId): Attempt { const draft = parseDraft(value, id); const result = runModel(draft.config, draft.commands); return { id: crypto.randomUUID(), exerciseId: id, exerciseVersion: 1, createdAt: Date.now(), draft: structuredClone(draft), result, evaluation: evaluate(draft, result) } }
-export function verifyAttempt(value: unknown, id: LabId): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== id || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const d = parseDraft(a.draft, id); const verdict = evaluate(d, a.result); return verdict.evidence && same(verdict, a.evaluation) } catch { return false } }
+export function verifyAttempt(value: unknown, id: LabId): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== id || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const d = parseDraft(a.draft, id); const verdict = evaluate(d, a.result); return verdict.evidence && sameAssessment(verdict, a.evaluation) } catch { return false } }

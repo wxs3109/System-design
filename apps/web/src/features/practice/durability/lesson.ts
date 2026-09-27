@@ -1,3 +1,4 @@
+import { timelineEvidence } from '../../../core/experiments/timeline-evidence'
 import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
 import { defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, type Command, type Config } from './model'
 export const exercise = { kind: 'protocol' as const, id: 'durability-recovery', version: 1, title: '进程重启了，已经确认的数据还在吗？', category: 'WAL、检查点与恢复', difficulty: '进阶', estimatedMinutes: 30, summary: '区分内存、稳定日志、数据页、备份和归档；亲手刷盘、崩溃、重放，并从指定提交边界或损坏材料中恢复。', flow: ['提交与确认', '刷盘与快照', '故障', '核对恢复边界'] } as const
@@ -17,7 +18,7 @@ export function scenarioCommands(c: Config, scenario: string): Command[] {
   }
   return commands
 }
-export const lesson = createProtocolLesson({ id: exercise.id, initialConfig: defaultConfig, scenarios, maxCommands: MAX_COMMANDS, parseConfig, parseCommand, runModel,
+export const lesson = createProtocolLesson({ id: exercise.id, initialConfig: defaultConfig, scenarios, maxCommands: MAX_COMMANDS, parseConfig, parseCommand, runModel, resultEvidence: (s) => timelineEvidence(s, { text: ['error'] }),
   assess: (d, s) => {
     const missing = s.acknowledgements.filter((ack) => !s.applied.includes(ack.transaction))
     const expectedValue = ['checkpoint', 'damaged-archive'].includes(d.scenario) ? 3 : 1

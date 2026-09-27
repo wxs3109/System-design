@@ -1,3 +1,4 @@
+import { sameAssessment, sameTimelineEvidence } from '../../../core/experiments/timeline-evidence'
 import { clientStatus, defaultConfig, isSettled, MAX_COMMANDS, parseCommand, parseConfig, runProtocol, same, type Command, type ProtocolState, type RetryConfig } from './model'
 
 export const retryExercise = { kind: 'protocol' as const, id: 'retry-idempotency' as const, version: 1,
@@ -43,7 +44,7 @@ export function scenarioCommands(config: RetryConfig, scenario: Exclude<Scenario
 }
 export function evaluate(draft: RetryDraft, result: ProtocolState): Evaluation {
   const invalid: Evaluation = { evidence: false, faultObserved: false, noDuplicate: false, clientInformed: false, settled: false, explanation: false, status: 'inconclusive', messages: ['输入或运行证据不能完整重算，无法验证。'] }
-  try { if (!same(runProtocol(draft.config, draft.commands), result)) return invalid } catch { return invalid }
+  try { if (!sameTimelineEvidence(runProtocol(draft.config, draft.commands), result)) return invalid } catch { return invalid }
   const events = result.events
   const firstDropResponse = events.some((event) => event.kind === 'response-dropped' && event.requestId === 'request-1')
   const firstDropRequest = events.some((event) => event.kind === 'request-dropped' && event.requestId === 'request-1')
@@ -78,7 +79,7 @@ export function verifyAttempt(value: unknown): value is RetryAttempt {
     if (attempt.exerciseId !== 'retry-idempotency' || attempt.exerciseVersion !== 1 || typeof attempt.id !== 'string' || !Number.isFinite(attempt.createdAt)) return false
     const draft = parseDraft(attempt.draft)
     const evaluation = evaluate(draft, attempt.result)
-    return evaluation.evidence && same(evaluation, attempt.evaluation)
+    return evaluation.evidence && sameAssessment(evaluation, attempt.evaluation)
   } catch { return false }
 }
 export function progress(attempts: readonly RetryAttempt[]) {

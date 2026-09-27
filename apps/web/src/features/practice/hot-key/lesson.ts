@@ -1,3 +1,4 @@
+import { sameAssessment } from '../../../core/experiments/timeline-evidence'
 import { fingerprint, same } from '../distribution/model'
 import { compareHot, defaultHotInput, generateWorkload, hotFingerprint, parseHotInput, runHotModel, topKeys, type HotComparison, type HotInput, type HotResult } from './model'
 
@@ -86,7 +87,7 @@ export function verifyHotAttempt(value: unknown): value is HotAttempt {
     const draft = parseHotDraft(attempt.draft)
     const result = runHotModel(draft.input)
     const baseline = draft.baseline ? runHotModel(draft.baseline) : null
-    return same(result, attempt.result) && same(baseline, attempt.baselineResult) && same(gradeComputed(draft, result, baseline), attempt.evaluation) && same(baseline && draft.baseline ? compareHot(draft.baseline, baseline, draft.input, result) : null, attempt.comparison)
+    return same(result, attempt.result) && same(baseline, attempt.baselineResult) && sameAssessment(gradeComputed(draft, result, baseline), attempt.evaluation) && same(baseline && draft.baseline ? compareHot(draft.baseline, baseline, draft.input, result) : null, attempt.comparison)
   } catch { return false }
 }
 export const hotProgress = (attempts: HotAttempt[]) => (['hotspot', 'shards', 'cache'] as const).filter((stage) => attempts.some((attempt) => attempt.draft.stage === stage && attempt.evaluation.evidence && attempt.evaluation.task && attempt.evaluation.explanation))

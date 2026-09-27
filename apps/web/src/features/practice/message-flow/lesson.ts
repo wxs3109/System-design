@@ -1,4 +1,5 @@
-import { defaultConfig, parseCommand, parseConfig, runModel, same, unsettled, MAX_COMMANDS, type Command, type Config, type State } from './model'
+import { sameAssessment, sameTimelineEvidence } from '../../../core/experiments/timeline-evidence'
+import { defaultConfig, parseCommand, parseConfig, runModel, unsettled, MAX_COMMANDS, type Command, type Config, type State } from './model'
 
 export type LabId = 'ack-checkpoint' | 'transactional-outbox'
 export const messageExercises = [
@@ -94,7 +95,7 @@ export function scenarioCommands(config: Config, scenario: Exclude<Scenario, 'ma
 }
 export function evaluate(draft: Draft, result: State): Evaluation {
   const invalid: Evaluation = { evidence: false, faultObserved: false, noDuplicates: false, allEffects: false, allCheckpoints: false, allAcknowledged: false, intentRecorded: false, settled: false, explanation: false, status: 'inconclusive', messages: ['输入与完整事件无法重算核对，不能判定。'] }
-  try { if (!same(runModel(draft.config, draft.commands), result)) return invalid } catch { return invalid }
+  try { if (!sameTimelineEvidence(runModel(draft.config, draft.commands), result)) return invalid } catch { return invalid }
   const events = result.events
   const index = (kind: string) => events.find((e) => e.kind === kind)?.index
   const crash = index('worker-crashed')
@@ -138,7 +139,7 @@ export function verifyAttempt(value: unknown, id: LabId): value is Attempt {
     if (attempt.exerciseId !== id || attempt.exerciseVersion !== 1 || typeof attempt.id !== 'string' || !Number.isFinite(attempt.createdAt)) return false
     const draft = parseDraft(attempt.draft, id)
     const evaluation = evaluate(draft, attempt.result)
-    return evaluation.evidence && same(evaluation, attempt.evaluation)
+    return evaluation.evidence && sameAssessment(evaluation, attempt.evaluation)
   } catch { return false }
 }
 export const progress = (attempts: Attempt[], id: LabId) => scenariosFor(id).filter((scenario) => scenario !== 'manual' && attempts.some((attempt) => attempt.exerciseId === id && attempt.draft.scenario === scenario && attempt.evaluation.status === 'pass' && attempt.evaluation.explanation))

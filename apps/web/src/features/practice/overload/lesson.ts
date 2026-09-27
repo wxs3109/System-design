@@ -1,3 +1,4 @@
+import { sameAssessment, sameTimelineEvidence } from '../../../core/experiments/timeline-evidence'
 import { defaultConfig, MAX_COMMANDS, metrics, parseCommand, parseConfig, profileArrivals, runModel, same, type Command, type Config, type Profile, type State } from './model'
 export const overloadExercise = { kind: 'protocol' as const, id: 'overload', version: 1, title: '服务已经很慢，重试为什么让它更忙？', category: '过载与背压', difficulty: '基础', estimatedMinutes: 30, summary: '固定原始需求和处理能力，观察超时重试如何增加工作，比较退避、发送窗口、有限队列与截止期过后的无效工作。', flow: ['固定原始需求', '减速与超时', '控制重试和接纳', '核对完成与代价'] } as const
 export const scenarioLabels = { 'retry-storm': '减速后的重试放大', 'bounded-burst': '突发流量与有限队列', 'expired-work': '截止后仍在处理', manual: '自由实验' } as const
@@ -15,7 +16,7 @@ export function parseDraft(value: unknown): Draft {
 }
 export const scenarioCommands = (scenario: Exclude<Scenario, 'manual'>): Command[] => scenario === 'bounded-burst' ? [{ type: 'start' }, { type: 'advance', ms: 10000 }] : [{ type: 'slow' }, { type: 'start' }, { type: 'advance', ms: 600 }, { type: 'recover' }, { type: 'advance', ms: 9400 }]
 export function evaluate(d: Draft, s: State): Evaluation {
-  try { if (!same(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, status: 'inconclusive', messages: ['状态、采样与事件无法完整重算。'] } }
+  try { if (!sameTimelineEvidence(runModel(d.config, d.commands), s)) throw new Error('mismatch') } catch { return { evidence: false, task: false, explanation: false, status: 'inconclusive', messages: ['状态、采样与事件无法完整重算。'] } }
   const m = metrics(s)
   const conserved = m.attempts === m.completed + m.rejected + m.expired + m.queued + m.running
   const roots = s.roots.filter((r) => r.origin === 'workload')
@@ -43,4 +44,4 @@ export function evaluate(d: Draft, s: State): Evaluation {
   ] }
 }
 export function runAttempt(value: Draft): Attempt { const draft = parseDraft(value); const result = runModel(draft.config, draft.commands); return { id: crypto.randomUUID(), exerciseId: 'overload', exerciseVersion: 1, createdAt: Date.now(), draft: structuredClone(draft), result, evaluation: evaluate(draft, result) } }
-export function verifyAttempt(value: unknown): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== 'overload' || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const e = evaluate(parseDraft(a.draft), a.result); return e.evidence && same(e, a.evaluation) } catch { return false } }
+export function verifyAttempt(value: unknown): value is Attempt { try { const a = value as Attempt; if (a.exerciseId !== 'overload' || a.exerciseVersion !== 1 || typeof a.id !== 'string' || !Number.isFinite(a.createdAt)) return false; const e = evaluate(parseDraft(a.draft), a.result); return e.evidence && sameAssessment(e, a.evaluation) } catch { return false } }
