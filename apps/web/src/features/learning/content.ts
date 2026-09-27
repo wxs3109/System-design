@@ -4,9 +4,11 @@ import { reliableExecution } from './content/reliable-execution'
 import { coordination } from './content/coordination'
 import { workflowsRecovery } from './content/workflows-recovery'
 import { designFoundations } from './content/design-foundations'
+import { decisionPatterns } from './content/decision-patterns'
 
-export const conceptBodies: Readonly<Record<string, ConceptBody>> = { ...designFoundations, ...fundamentals, ...reliableExecution, ...coordination, ...workflowsRecovery }
+export const conceptBodies: Readonly<Record<string, ConceptBody>> = { ...designFoundations, ...decisionPatterns, ...fundamentals, ...reliableExecution, ...coordination, ...workflowsRecovery }
 export const readingSources: Readonly<Record<string, { title: string; url: string }>> = {
+  asyncRequestReply: { title: 'Azure Architecture Center · Asynchronous Request-Reply', url: 'https://learn.microsoft.com/en-us/azure/architecture/patterns/asynchronous-request-reply' },
   slo: { title: 'Google SRE · Service Level Objectives', url: 'https://sre.google/sre-book/service-level-objectives/' },
   ddia: { title: 'Designing Data-Intensive Applications · Fundamental ideas and trade-offs', url: 'https://dataintensive.net/' },
   indexes: { title: 'PostgreSQL · Introduction to indexes', url: 'https://www.postgresql.org/docs/current/indexes-intro.html' },
