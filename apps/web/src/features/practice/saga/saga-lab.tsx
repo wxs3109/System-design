@@ -1,7 +1,8 @@
 'use client'
 import Link from 'next/link'
+import { useExperiment } from '../../../components/experiments/use-experiment'
 import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 import { SagaSession } from './session'
 import { answersIdentity, identity, initialDraft, sagaExercise, scenarioCommands, scenarioLabels, type Draft, type Scenario } from './lesson'
@@ -11,9 +12,7 @@ import styles from '../retry-idempotency/retry-lab.module.css'
 const goals: Record<Scenario, string> = { 'response-lost': '发布被拒绝后进行补偿。释放配额已经生效，但响应丢失；重试同一步骤，防止重复返还。', 'coordinator-crash': '清理产物已成功，协调者在保存恢复进度之前崩溃。重启后根据日志重试，并安全完成后续补偿。', 'compensation-failure': '让清理产物持续失败。耗尽本轮预算后进入人工处理，修复服务并重新执行，不能把待处理直接标成成功。', manual: '自行注入正向或补偿故障，交错调用、响应、崩溃和恢复。自由实验保存记录，不自动计入挑战进度。' }
 const commandLabel = (c: Command) => ({ start: '创建流程', send: '发送当前步骤', 'deliver-request': '执行业务步骤', 'drop-request': '丢弃调用', 'deliver-response': '递送响应', 'drop-response': '丢弃响应', checkpoint: '保存进度', advance: '等待超时', crash: '协调者崩溃', restart: '重启协调者', block: '注入步骤故障', repair: '修复步骤故障', 'resume-review': '人工核查后恢复' })[c.type]
 export function SagaLab() {
-  const [session] = useState(() => new SagaSession())
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  const { session, state } = useExperiment(() => new SagaSession())
   const { draft: d } = state
   const [error, setError] = useState('')
   const frame = useMemo(() => { try { return { result: runModel(d.config, d.commands), error: '' } } catch (e) { return { result: null, error: e instanceof Error ? e.message : '状态无法恢复。' } } }, [d.config, d.commands])

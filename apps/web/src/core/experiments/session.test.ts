@@ -19,6 +19,16 @@ function memoryRepository(): ExperimentRepository<Draft, Attempt> {
   }
 }
 describe('storage-independent experiment sessions', () => {
+  it('stops accumulating results after repeated persistence failures without dropping unsaved work', async () => {
+    const repository = memoryRepository(); repository.save = async () => { throw new Error('quota') }
+    const session = new LabSession(repository); await session.load()
+    for (let i = 0; i < 20; i++) session.run()
+    expect(() => session.run()).toThrow('20 条未保存')
+    await session.save()
+    expect(session.getSnapshot().attempts).toHaveLength(20)
+    expect(session.recoverySnapshot().unsavedAttemptIds).toHaveLength(20)
+    expect(session.getSnapshot().executionError).toContain('20 条未保存')
+  })
   it('flushes a burst of edits once without dropping evidence or saving it repeatedly', async () => {
     const repository = memoryRepository(); const save = vi.spyOn(repository, 'save')
     const session = new LabSession(repository); await session.load()

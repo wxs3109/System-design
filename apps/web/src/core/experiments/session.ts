@@ -1,13 +1,14 @@
 import type { AttemptIdentity, ExperimentRepository } from './contracts'
 import { LabStorageError } from './errors'
 import { ExecutionCoordinator } from './execution'
-import type { BackupPreview } from './history'
+import { checkBackupSize, type BackupPreview } from './history'
 
 interface Editable<D> { draft: D; activeAttemptId: string | null }
 export interface LabSessionState<D, A> extends Editable<D> {
   attempts: A[]
   ready: boolean
   running: boolean
+  executionError: string
   storage: 'loading' | 'saving' | 'saved' | 'error'
   error: string
   errorKind: 'load' | 'save' | 'conflict' | null
@@ -31,7 +32,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   private scheduledSave: object | null = null
   private readonly execution = new ExecutionCoordinator()
   constructor(readonly repository: ExperimentRepository<D, A>) {
-    this.state = { draft: repository.contract.initial(), activeAttemptId: null, attempts: [], ready: false, running: false, storage: 'loading', error: '', errorKind: null, rejected: 0, retained: [], historyTotal: 0, undoCount: 0, redoCount: 0 }
+    this.state = { draft: repository.contract.initial(), activeAttemptId: null, attempts: [], ready: false, running: false, executionError: '', storage: 'loading', error: '', errorKind: null, rejected: 0, retained: [], historyTotal: 0, undoCount: 0, redoCount: 0 }
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   getSnapshot = () => this.state
@@ -48,7 +49,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     this.scheduledSave = null
     const revision = ++this.revision
     this.execution.cancel()
-    this.publish({ ready: false, running: false, storage: 'loading', error: '', errorKind: null })
+    this.publish({ ready: false, running: false, executionError: '', storage: 'loading', error: '', errorKind: null })
     this.loading = this.repository.load().then((saved) => {
       if (revision !== this.revision) return
       this.persistedAttempts = new Set(saved.attempts.map((attempt) => attempt.id))
@@ -65,7 +66,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     this.execution.cancel()
     this.past = [...this.past.slice(-99), { draft: this.state.draft, activeAttemptId: this.state.activeAttemptId }]
     this.future = []
-    this.publish({ draft: parsed, running: false })
+    this.publish({ draft: parsed, running: false, executionError: '' })
     this.scheduleSave()
   }
   undo() {
@@ -74,7 +75,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     if (!previous) return
     this.execution.cancel()
     this.future.push({ draft: this.state.draft, activeAttemptId: this.state.activeAttemptId })
-    this.publish({ ...previous, running: false })
+    this.publish({ ...previous, running: false, executionError: '' })
     this.scheduleSave()
   }
   redo() {
@@ -83,18 +84,21 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     if (!next) return
     this.execution.cancel()
     this.past.push({ draft: this.state.draft, activeAttemptId: this.state.activeAttemptId })
-    this.publish({ ...next, running: false })
+    this.publish({ ...next, running: false, executionError: '' })
     this.scheduleSave()
   }
   run() {
     if (!this.state.ready) return
     const lease = this.execution.begin()
+    this.publish({ executionError: '' })
     try {
+      if (this.state.attempts.filter(a => !this.persistedAttempts.has(a.id)).length >= 20) throw new Error('已有 20 条未保存结果，请先重试保存或导出恢复文件，再继续运行。')
       const attempt = this.repository.contract.runAttempt(structuredClone(this.state.draft))
       if (!lease.isCurrent()) return
       this.publish({ attempts: [attempt, ...this.state.attempts], activeAttemptId: attempt.id, running: false })
       this.scheduleSave()
-    } finally { lease.finish() }
+    } catch (cause) { this.publish({ executionError: cause instanceof Error ? cause.message : '实验计算失败。' }); throw cause }
+    finally { lease.finish() }
   }
   /** Async/worker adapters share the same ownership rule; stale completions cannot replace a newer draft. */
   async runAsync(execute: (draft: D, signal: AbortSignal) => Promise<A>) {
@@ -102,16 +106,18 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     const draft = structuredClone(this.state.draft)
     const key = JSON.stringify(draft)
     const lease = this.execution.begin(() => this.state.ready && JSON.stringify(this.state.draft) === key)
-    this.publish({ running: true })
+    this.publish({ running: true, executionError: '' })
     try {
+      if (this.state.attempts.filter(a => !this.persistedAttempts.has(a.id)).length >= 20) throw new Error('已有 20 条未保存结果，请先重试保存或导出恢复文件，再继续运行。')
       const attempt = await execute(draft, lease.signal)
       if (!lease.isCurrent()) return
-      if (JSON.stringify(attempt.draft) !== key || !this.repository.contract.verifyAttempt(attempt)) throw new Error('执行适配器返回的证据与输入不匹配。')
+      if (JSON.stringify(attempt.draft) !== key || !(this.repository.contract.verifyAttemptAsync ? await this.repository.contract.verifyAttemptAsync(attempt, lease.signal) : this.repository.contract.verifyAttempt(attempt))) throw new Error('执行适配器返回的证据与输入不匹配。')
+      if (!lease.isCurrent()) return
       const savedAttempt = structuredClone(attempt)
       this.publish({ attempts: [savedAttempt, ...this.state.attempts], activeAttemptId: savedAttempt.id })
       await this.save()
       return structuredClone(savedAttempt)
-    } catch (cause) { if (lease.isCurrent()) throw cause }
+    } catch (cause) { if (lease.isCurrent()) { this.publish({ executionError: cause instanceof Error ? cause.message : '实验计算失败。' }); throw cause } }
     finally { if (lease.owns()) this.publish({ running: false }); lease.finish() }
   }
   cancel() { this.execution.cancel(); this.publish({ running: false }) }
@@ -138,8 +144,9 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     const pending = this.state.attempts.filter((attempt) => !this.persistedAttempts.has(attempt.id))
     try {
       await this.repository.save(this.state.draft, this.state.activeAttemptId, pending)
+      const added = pending.filter(attempt => !this.persistedAttempts.has(attempt.id)).length
       pending.forEach((attempt) => this.persistedAttempts.add(attempt.id))
-      if (revision === this.revision) this.publish({ storage: 'saved', errorKind: null })
+      this.publish({ attempts: this.state.attempts.filter((a, index) => index < 20 || a.id === this.state.activeAttemptId || !this.persistedAttempts.has(a.id)), historyTotal: this.state.historyTotal + added, ...(revision === this.revision ? { storage: 'saved' as const, errorKind: null } : {}) })
     } catch (error) {
       if (revision === this.revision) {
         const errorKind = error instanceof LabStorageError ? error.kind : 'save'
@@ -164,7 +171,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   async archiveHistory(id: string, archived: boolean) {
     await this.save(); if (!this.state.ready || this.state.storage === 'error') throw new Error('请先解决保存问题。')
     await this.repository.archiveHistory?.(id, archived)
-    this.publish({ attempts: this.state.attempts.filter(a => a.id !== id) })
+    this.publish({ attempts: this.state.attempts.filter(a => a.id !== id), historyTotal: (await this.historyPage(0, false)).total })
   }
   async deleteHistory(id: string) {
     await this.save(); if (!this.state.ready || this.state.storage === 'error') throw new Error('请先解决保存问题。')
@@ -175,7 +182,14 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
     const records = await this.repository.exportRecords?.() ?? []
     const byId = new Map(records.map(record => [(record as { id: string }).id, record]))
     for (const attempt of this.state.attempts) if (!byId.has(attempt.id)) byId.set(attempt.id, { id: attempt.id, scope: this.repository.scope, storageVersion: 2, versions: this.repository.contract.versions, attempt })
-    return structuredClone({ ...this.recoverySnapshot(), version: 2, draftVersion: this.repository.contract.draftVersion ?? 1, versions: this.repository.contract.versions, records: [...byId.values()] })
+    const backup = { ...this.recoverySnapshot(), version: 2, draftVersion: this.repository.contract.draftVersion ?? 1, versions: this.repository.contract.versions, records: [...byId.values()] }
+    checkBackupSize(backup); return structuredClone(backup)
+  }
+  async exportHistory(id: string) {
+    if (!this.repository.exportRecords) throw new Error('此存储不支持历史导出。')
+    const records = await this.repository.exportRecords([id])
+    const backup = { format: 'system-design-lab-recovery', version: 2, scope: this.repository.scope, draftVersion: this.repository.contract.draftVersion ?? 1, versions: this.repository.contract.versions, draft: this.state.draft, activeAttemptId: null, records }
+    checkBackupSize(backup); return backup
   }
   previewRecovery(value: unknown) { if (!this.repository.previewRecovery) throw new Error('此存储不支持备份导入。'); return this.repository.previewRecovery(value) }
   async importRecovery(preview: BackupPreview) {

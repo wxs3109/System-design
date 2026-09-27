@@ -9,6 +9,7 @@ export interface HistoryRecovery {
   archiveHistory(id: string, archived: boolean): Promise<void>
   deleteHistory(id: string): Promise<void>
   exportRecovery(): Promise<unknown>
+  exportHistory?(id: string): Promise<unknown>
   previewRecovery(value: unknown): Promise<BackupPreview>
   importRecovery(preview: BackupPreview): Promise<void>
 }

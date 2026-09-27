@@ -19,6 +19,7 @@ interface ActiveRun {
   reject: (error: Error) => void
   removeAbortListener?: () => void
   onProgress?: (progress: SimulationProgress) => void
+  timeout?: ReturnType<typeof setTimeout>
 }
 
 export class SimulationWorkerClient {
@@ -29,8 +30,10 @@ export class SimulationWorkerClient {
 
   get activeRunId() { return this.active?.id ?? null }
 
-  run(scenario: Scenario | ProjectFileV2 | ProjectFile, options: { signal?: AbortSignal; runId?: string; onProgress?: (progress: SimulationProgress) => void } = {}): Promise<SimulationResult> {
+  run(scenario: Scenario | ProjectFileV2 | ProjectFile, options: { signal?: AbortSignal; runId?: string; onProgress?: (progress: SimulationProgress) => void; timeoutMs?: number } = {}): Promise<SimulationResult> {
     if (this.disposed) return Promise.reject(new Error('Simulation worker client is disposed.'))
+    const timeoutMs = options.timeoutMs ?? 30000
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 30000) return Promise.reject(new Error('Invalid simulation wall-clock budget.'))
     if (this.active) this.cancelActive()
     if (options.signal?.aborted) return Promise.reject(abortError())
 
@@ -41,6 +44,7 @@ export class SimulationWorkerClient {
         const current = this.active
         if (!current || current.id !== id || current.worker !== worker) return false
         current.removeAbortListener?.()
+        clearTimeout(current.timeout)
         worker.onmessage = null
         worker.onerror = null
         worker.terminate()
@@ -72,6 +76,9 @@ export class SimulationWorkerClient {
         : undefined
       options.signal?.addEventListener('abort', onAbort, { once: true })
       this.active = { id, worker, reject, ...(removeAbortListener ? { removeAbortListener } : {}), ...(options.onProgress ? { onProgress: options.onProgress } : {}) }
+      this.active.timeout = setTimeout(() => {
+        if (cleanup()) reject(new Error('Simulation exceeded its wall-clock budget. Input is preserved; reduce the workload and retry.'))
+      }, timeoutMs)
       try {
         worker.postMessage({ type: 'run', id, scenario })
       } catch (cause) {
@@ -89,6 +96,7 @@ export class SimulationWorkerClient {
     const active = this.active
     if (!active) return false
     active.removeAbortListener?.()
+    clearTimeout(active.timeout)
     active.worker.onmessage = null
     active.worker.onerror = null
     active.worker.terminate()
@@ -102,6 +110,7 @@ export class SimulationWorkerClient {
     const active = this.active
     if (active) {
       active.removeAbortListener?.()
+      clearTimeout(active.timeout)
       active.worker.onmessage = null
       active.worker.onerror = null
       active.worker.terminate()

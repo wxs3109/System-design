@@ -17,6 +17,28 @@ const databases: AlgorithmDatabase[] = []
 function create(scope = 'history-test:v1') { const db = new AlgorithmDatabase(`history-${crypto.randomUUID()}`); databases.push(db); return new LabRepository(db, scope, contract) }
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map(db => db.delete())) })
 describe('bounded history and recovery', () => {
+  it('retries a verifier outage without classifying original records as invalid or starting more workers', async () => {
+    const base = create(); const a = contract.runAttempt({ value: 7 }); await base.save(a.draft, a.id, [a])
+    const verify = vi.fn(async () => { throw new Error('worker temporarily unavailable') })
+    const repository = new LabRepository(base.database, base.scope, { ...contract, verifyAttemptAsync: verify })
+    const session = new LabSession(repository); await session.load()
+    expect(session.getSnapshot()).toMatchObject({ ready: false, errorKind: 'load', rejected: 0 })
+    expect(verify).toHaveBeenCalledOnce()
+    expect((await base.database.attempts.get(a.id))?.attempt).toEqual(a)
+    repository.contract.verifyAttemptAsync = async v => contract.verifyAttempt(v)
+    await session.load(); expect(session.getSnapshot().attempts).toEqual([a])
+  })
+  it('bounds the loaded working set without deleting persisted attempts', async () => {
+    const repo = create(); const session = new LabSession(repo); await session.load()
+    for (let i = 0; i < 32; i++) { session.edit({ value: i }); session.run(); await session.save() }
+    expect(session.getSnapshot().attempts).toHaveLength(20)
+    expect(session.getSnapshot().historyTotal).toBe(32)
+    expect(await repo.database.attempts.count()).toBe(32)
+    const row = (await repo.historyPage(2, false)).entries[0]!
+    const backup = await session.exportHistory(row.id)
+    expect(backup.records).toHaveLength(1)
+    expect((await session.previewRecovery(JSON.parse(JSON.stringify(backup)))).records).toBe(1)
+  })
   it('opens only ten of a thousand records and pages index summaries without replaying models', async () => {
     const repo = create(); const verify = vi.spyOn(repo.contract, 'verifyAttempt')
     await repo.database.attempts.bulkAdd(Array.from({ length: 1000 }, (_, i) => ({ id: `record-${i}`, scope: repo.scope, attempt: { id: `record-${i}`, createdAt: i, draft: { value: i }, result: i * 2 } })))

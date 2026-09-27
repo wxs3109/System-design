@@ -720,11 +720,14 @@ test('loads and runs the complete generic order-system vertical slice', async ({
 
 test('labels connections and focuses the exact path for a selected interaction', async ({ page }) => {
   await page.goto('/')
+  // File injection and dispatchEvent bypass native actionability, including the restore lock.
+  await expect(page.getByTestId('workbench-editing-surface')).not.toHaveAttribute('inert')
   await page.locator('input[type=file]').setInputFiles({
     name: 'connection-labels.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(createOrderSystemContractFixture())),
   })
   await page.getByTestId('rf__edge-client-to-orders').dispatchEvent('click')
   await page.getByLabel('Connection name').fill('Public API request')
+  await expect(page.getByLabel('Connection name')).toHaveValue('Public API request')
   await expect(page.getByTestId('rf__edge-client-to-orders')).toContainText('Public API request')
 
   await page.getByRole('button', { name: 'Definitions' }).click()

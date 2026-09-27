@@ -4,7 +4,7 @@ import { same } from './equality'
 import { LabStorageError } from './errors'
 import { migrateDraft } from './draft-codec'
 import { sameVersions, validVersions, type ExperimentVersions } from './versions'
-import { HISTORY_PAGE_SIZE, checkBackupSize, recoveryObject, type BackupPreview } from './history'
+import { HISTORY_PAGE_SIZE, MAX_BACKUP_BYTES, checkBackupSize, recoveryObject, type BackupPreview } from './history'
 export { LabStorageError } from './errors'
 
 const queues = new Map<string, Promise<unknown>>()
@@ -66,11 +66,14 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
     }
     return { page, total: indexed + missing, entries }
   }
-  private supported(row: SavedAttempt): row is SavedAttempt & { attempt: A } {
-    try { return row.scope === this.scope && (row.attempt as AttemptIdentity)?.id === row.id && (row.storageVersion === undefined || row.storageVersion === 2)
+  private async supported(row: SavedAttempt): Promise<boolean> {
+    const supported = row.scope === this.scope && (row.attempt as AttemptIdentity)?.id === row.id && (row.storageVersion === undefined || row.storageVersion === 2)
       && (row.versions === undefined || validVersions(row.versions))
       && (!this.contract.versions || (row.versions ? sameVersions(row.versions, this.contract.versions) : this.contract.versions.definition === 1 && this.contract.versions.assessment === 1))
-      && this.contract.verifyAttempt(row.attempt) } catch { return false }
+    if (!supported) return false
+    // A worker outage is a retryable read failure, not evidence that stored data is corrupt.
+    if (this.contract.verifyAttemptAsync) return this.contract.verifyAttemptAsync(row.attempt)
+    try { return this.contract.verifyAttempt(row.attempt) } catch { return false }
   }
   async load() {
     await queues.get(`${this.database.name}:${this.scope}`)?.catch(() => undefined)
@@ -99,10 +102,8 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
     this.pendingBackup = session && (session.version === 1 || sourceVersion !== targetVersion) ? { draftVersion: sourceVersion, versions: session.versions ?? null, draft: structuredClone(session.draft), revision: session.revision ?? 0 } : null
     const attempts: A[] = []; const retained: unknown[] = []
     for (const row of rows) {
-      try {
-        if (this.supported(row)) attempts.push(row.attempt)
-        else retained.push(structuredClone(row))
-      } catch { retained.push(structuredClone(row)) }
+      if (await this.supported(row)) attempts.push(row.attempt as A)
+      else retained.push(structuredClone(row))
     }
     attempts.sort((a,b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
     this.expectedRevision = storedRevision(current)
@@ -117,6 +118,8 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
     const key = `${this.database.name}:${this.scope}`
     const pending = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
       if (this.loadFailed) throw new LabStorageError('load', '尚未成功读取原记录，已阻止保存；请先重试读取。')
+      // Worker validation must finish before opening an IndexedDB write transaction.
+      for (const attempt of copies) if (!(this.contract.verifyAttemptAsync ? await this.contract.verifyAttemptAsync(attempt) : this.contract.verifyAttempt(attempt))) throw new Error('运行证据无效，无法保存。')
       const revision = await this.database.transaction('rw', this.database.drafts, this.database.sessions, this.database.attempts, async () => {
         const current = await this.database.drafts.get(this.scope)
         const legacy = current ? undefined : await this.database.sessions.get(this.scope)
@@ -129,7 +132,6 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
           if (existing) {
             if (existing.scope !== this.scope || !same(existing.attempt, attempt)) throw new Error('历史尝试不能被覆盖。')
           } else {
-            if (!this.contract.verifyAttempt(attempt)) throw new Error('运行证据无效，无法保存。')
             await this.database.attempts.add({ id: attempt.id, scope: this.scope, storageVersion: 2, ...(this.contract.versions ? { versions: { ...this.contract.versions } } : {}), attempt })
           }
         }
@@ -148,8 +150,8 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
   recoveryData() { return structuredClone({ loaded: this.sourceSnapshot, draftBackups: this.draftBackups }) }
   async inspectHistory(id: string): Promise<A> {
     const row = await this.database.attempts.get(id)
-    if (!row || !this.supported(row)) throw new Error('这条历史无法通过当前版本核验，原记录已保留，可导出备份。')
-    return structuredClone(row.attempt)
+    if (!row || !await this.supported(row)) throw new Error('这条历史无法通过当前版本核验，原记录已保留，可导出备份。')
+    return structuredClone(row.attempt) as A
   }
   private changeHistory(change: (current: SavedSession | undefined) => Promise<void>) {
     const key = `${this.database.name}:${this.scope}`
@@ -184,7 +186,20 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
       await this.database.attempts.delete(id)
     })
   }
-  async exportRecords() { await queues.get(`${this.database.name}:${this.scope}`)?.catch(() => undefined); return this.database.attempts.where('scope').equals(this.scope).toArray() }
+  async exportRecords(selected?: string[]) {
+    await queues.get(`${this.database.name}:${this.scope}`)?.catch(() => undefined)
+    const ids = selected ?? await this.database.attempts.where('scope').equals(this.scope).primaryKeys()
+    if (ids.length > 10000) throw new Error('历史过多，请使用列表中的单条导出。')
+    const rows: SavedAttempt[] = []; let bytes = 0
+    for (const id of ids) {
+      const row = await this.database.attempts.get(id)
+      if (!row || row.scope !== this.scope) throw new Error('导出时历史已改变，请刷新后重试。')
+      bytes += new TextEncoder().encode(JSON.stringify(row)).byteLength
+      if (bytes > MAX_BACKUP_BYTES / 2) throw new Error('历史备份超过单文件预算，请使用列表中的单条导出。')
+      rows.push(row)
+    }
+    return rows
+  }
   async previewRecovery(value: unknown): Promise<BackupPreview> {
     checkBackupSize(value)
     const data = recoveryObject(value)
@@ -205,7 +220,7 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
       const previous = rows.get(row.id)
       if (previous && !same(previous.attempt, row.attempt)) throw new Error('备份内存在同名但内容不同的历史。')
       if (previous) continue
-      if (!this.supported(row)) retained++
+      if (!await this.supported(row)) retained++
       rows.set(row.id, structuredClone(row))
       if (rows.size % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0))
     }

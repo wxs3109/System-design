@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useExperiment } from '../../../components/experiments/use-experiment'
 import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, FlaskConical, Play, RotateCcw, Undo2, Redo2 } from 'lucide-react'
 import { AlgorithmSession } from './session'
 import { challenge, experimentIdentity, hashingExercise, learningProgress, responseIdentity, type Draft, type Mode } from './lesson'
@@ -21,9 +22,7 @@ const cases = [
 ]
 
 export function HashingLab() {
-  const [session] = useState(() => new AlgorithmSession())
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  const { session, state } = useExperiment(() => new AlgorithmSession())
   const { draft } = state
   const [seed, setSeed] = useState('my-experiment')
   const [count, setCount] = useState(1024)

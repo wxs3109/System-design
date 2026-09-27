@@ -30,6 +30,7 @@ import { createWorkbenchSession, type CompletedWorkbenchRun, type WorkbenchSessi
 import { useWorkbenchSession } from '@/lib/use-workbench-session'
 import { StorageNotice } from './experiments/storage-notice'
 import { BackupTools } from './experiments/backup-tools'
+import { useRecoveryResource } from './experiments/recovery-boundary'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology, type CanvasNodeDimensions } from '@/lib/canvas-layout'
 import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount, type CanvasEdgeMetric } from '@/lib/canvas-metrics'
@@ -823,8 +824,8 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
   )
 }
 
-export function Workbench({ session: providedSession, onRunCompleted, embedded, sidebar, defaultPanels }: WorkbenchProps = {}) {
-  const [ownedSession] = useState(() => providedSession ?? createWorkbenchSession({ id: 'active' }))
-  const session = providedSession ?? ownedSession
+function WorkbenchHost({ session: providedSession, onRunCompleted, embedded, sidebar, defaultPanels }: WorkbenchProps) {
+  const session = useRecoveryResource(`workbench:${providedSession?.id ?? 'active'}`, () => providedSession ?? createWorkbenchSession({ id: 'active' }), session => ({ scope: session.id, label: '工作台输入', snapshot: () => ({ format: 'system-design-workbench-recovery', version: 1, scope: session.id, project: session.store.getState().project, revisions: [], runs: [] }), export: async () => { if (!session.history?.exportBackup) throw new Error('存储暂不可用。'); return session.history.exportBackup(session.store.getState().project) }, reload: async () => { const saved = await session.history?.loadActiveProject(); if (!saved) throw new Error('尚无已保存的工作台，当前输入仍保留。'); session.store.getState().restoreProject(saved.project) }, cancel: () => session.cancel() }))
   return <WorkbenchStoreProvider store={session.store}><ReactFlowProvider><WorkbenchInner key={session.id} session={session} {...(onRunCompleted ? { onRunCompleted } : {})} {...(embedded === undefined ? {} : { embedded })} {...(sidebar ? { sidebar } : {})} {...(defaultPanels ? { defaultPanels } : {})} /></ReactFlowProvider></WorkbenchStoreProvider>
 }
+export function Workbench(props: WorkbenchProps = {}) { return <WorkbenchHost key={props.session?.id ?? 'active'} {...props} /> }

@@ -10,6 +10,7 @@ export interface LabContract<D, A extends AttemptIdentity> {
   parseDraft: (value: unknown) => D
   runAttempt: (draft: D) => A
   verifyAttempt: (value: unknown) => value is A
+  verifyAttemptAsync?: (value: unknown, signal?: AbortSignal) => Promise<boolean>
 }
 
 /** Storage implementations own transactions; the session only depends on this port. */
@@ -23,7 +24,7 @@ export interface ExperimentRepository<D, A extends AttemptIdentity> {
   inspectHistory?(id: string): Promise<A>
   archiveHistory?(id: string, archived: boolean): Promise<void>
   deleteHistory?(id: string): Promise<void>
-  exportRecords?(): Promise<unknown[]>
+  exportRecords?(ids?: string[]): Promise<unknown[]>
   previewRecovery?(value: unknown): Promise<BackupPreview>
   importRecovery?(preview: BackupPreview, currentDraft: D): Promise<void>
 }

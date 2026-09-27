@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useExperiment } from '../../../components/experiments/use-experiment'
 import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, FlaskConical, RotateCcw, Undo2, Redo2 } from 'lucide-react'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 import { RetrySession } from './session'
@@ -33,9 +34,7 @@ const goals: Record<Scenario, string> = {
 }
 
 export function RetryIdempotencyLab() {
-  const [session] = useState(() => new RetrySession())
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  const { session, state } = useExperiment(() => new RetrySession())
   const { draft } = state
   const [error, setError] = useState('')
   const [comparison, setComparison] = useState<{ fingerprint: string; scenario: string; runs: { strategy: RetryConfig['strategy']; result: ProtocolState }[] } | null>(null)

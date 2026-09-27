@@ -1,7 +1,8 @@
 'use client'
 import Link from 'next/link'
+import { useExperiment } from '../../../components/experiments/use-experiment'
 import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 import { CoordinationSession } from './session'
 import { answersIdentity, identity, initialDraft, exercises, scenarioCommands, scenarioLabels, scenariosFor, type Draft, type LabId, type Scenario } from './lesson'
@@ -14,9 +15,7 @@ const commandLabel = (c: Command) => ({ advance: '推进时间', 'send-heartbeat
 
 export function CoordinationLab({ labId }: { labId: LabId }) { return <Experiment key={labId} labId={labId} /> }
 function Experiment({ labId }: { labId: LabId }) {
-  const [session] = useState(() => new CoordinationSession(labId))
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  const { session, state } = useExperiment(() => new CoordinationSession(labId))
   const { draft: d } = state
   const [error, setError] = useState('')
   const frame = useMemo(() => { try { return { result: runModel(d.config, d.commands), error: '' } } catch (e) { return { result: null, error: e instanceof Error ? e.message : '状态无法恢复。' } } }, [d.config, d.commands])

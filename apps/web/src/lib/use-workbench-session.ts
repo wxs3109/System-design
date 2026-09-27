@@ -30,18 +30,25 @@ export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (ru
     if (mounted.current && token === lifecycle.current && session.store.getState().project.id === projectId) { setRevisions(savedRevisions); setRuns(savedRuns); setStorage(current => ({ ...current, retained: history.retainedRecords?.() ?? [] })) }
   }, [session])
 
-  const restore = useCallback(async () => {
+  const restore = useCallback(async (force = false) => {
     const token = ++readGeneration.current; saveGeneration.current++
     readyRef.current = false; setReady(false); session.cancel()
     setStorage({ error: '', errorKind: null, retained: [] })
     const initial = session.store.getState().project
     try {
+      if (session.recovered && !force) {
+        await refreshHistory(initial.id)
+        if (!mounted.current || token !== readGeneration.current) return
+        persistedFingerprint.current = session.persistedFingerprint
+        readyRef.current = true; setReady(true); return
+      }
       const saved = await session.history?.loadActiveProject()
       if (!mounted.current || token !== readGeneration.current) return
       if (saved && session.restoreOnMount && session.store.getState().project === initial) session.store.getState().restoreProject(saved.project)
       await refreshHistory(session.store.getState().project.id)
       if (!mounted.current || token !== readGeneration.current) return
       persistedFingerprint.current = saved ? JSON.stringify(session.restoreOnMount ? session.store.getState().project : saved.project) : null
+      session.noteRestored(persistedFingerprint.current)
       readyRef.current = true; setReady(true)
     } catch (cause) {
       if (mounted.current && token === readGeneration.current) setStorage({ error: cause instanceof Error ? cause.message : '无法读取原工作台。', errorKind: 'load', retained: [] })
@@ -58,6 +65,7 @@ export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (ru
       await history.saveProjectRevision(input)
       if (!mounted.current || life !== lifecycle.current || token !== saveGeneration.current) return
       persistedFingerprint.current = JSON.stringify(input)
+      session.noteSaved(persistedFingerprint.current)
       setStorage({ error: '', errorKind: null, retained: [] })
       await refreshHistory(session.store.getState().project.id)
     } catch (cause) {
@@ -101,7 +109,7 @@ export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (ru
   }, [session, refreshHistory, setError])
 
   const recovery = {
-    load: restore, reload: restore, save: () => save(),
+    load: () => restore(true), reload: () => restore(true), save: () => save(),
     recoverySnapshot: () => structuredClone({ format: 'system-design-workbench-recovery', version: 1, scope: session.id, capturedAt: new Date().toISOString(), project: session.store.getState().project, result: session.store.getState().result, revisions, runs, persistedSource: session.history?.recoveryData?.() ?? null }),
     exportRecovery: async () => { if (!session.history?.exportBackup) throw new Error('此存储不支持备份。'); return session.history.exportBackup(session.store.getState().project) },
     previewRecovery: async (value: unknown) => { if (!session.history?.previewBackup) throw new Error('此存储不支持备份。'); const preview = await session.history.previewBackup(value); if (session.id !== 'active' && (preview.draft as ProjectFile).id !== session.store.getState().project.id) throw new Error('备份不属于本练习。'); return preview },
@@ -111,6 +119,7 @@ export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (ru
       try {
         const project = await session.history.importBackup(preview, session.store.getState().project)
         session.store.getState().restoreProject(project); persistedFingerprint.current = JSON.stringify(project)
+        session.noteSaved(persistedFingerprint.current)
         await refreshHistory(project.id); readyRef.current = true; setReady(true)
       } catch (cause) { readyRef.current = true; setReady(true); throw cause }
     },

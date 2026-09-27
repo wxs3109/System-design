@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useExperiment } from '../../../components/experiments/use-experiment'
 import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, FlaskConical, Play, Undo2, Redo2, RotateCcw } from 'lucide-react'
 import { HotSession } from './session'
 import { caseLabels, hotChallenge, hotIdentity, hotKeyExercise, hotProgress, hotResponses, stageLabels, type HotDraft, type Stage } from './lesson'
@@ -13,10 +14,8 @@ import hot from './hot-key.module.css'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 
 export function HotKeyLab() {
-  const [session] = useState(() => new HotSession())
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
+  const { session, state } = useExperiment(() => new HotSession())
   const [error, setError] = useState('')
-  useEffect(() => { void session.load() }, [session])
   const { draft } = state
   const attempt = state.attempts.find((item) => item.id === state.activeAttemptId)
   const stale = !!attempt && hotIdentity(attempt.draft) !== hotIdentity(draft)
@@ -25,7 +24,7 @@ export function HotKeyLab() {
   const edit = (next: HotDraft) => { try { session.edit(next); setError('') } catch (cause) { setError(cause instanceof Error ? cause.message : '输入无效。') } }
   const answer = (field: 'keyAnswer' | 'requestAnswer' | 'ownerAnswer' | 'backendAnswer' | 'meaning' | 'caseId' | 'caseMeaning' | 'reflection', value: string) => edit({ ...draft, [field]: value })
   const run = () => { try { session.run(); setError('') } catch (cause) { setError(cause instanceof Error ? cause.message : '本次运行无法验证。') } }
-  const canRun = state.ready && (draft.stage === 'explore' || !!draft.prediction)
+  const canRun = state.ready && !state.running && (draft.stage === 'explore' || !!draft.prediction)
   return <main className={styles.lab}>
     <nav className={styles.nav} aria-label="练习导航"><Link href="/practice"><ArrowLeft size={16} />全部练习</Link><span><FlaskConical size={17} />System Design Lab</span><Link href="/practice/consistent-hashing">一致性哈希 <ArrowRight size={15} /></Link></nav>
     <header className={styles.hero}><div><span className={styles.eyebrow}>READ DISTRIBUTION / HOT KEY</span><h1>{hotKeyExercise.title}</h1><p>固定同一批请求，观察一个热门 key，再验证缓存改变了哪些访问。</p></div><div className={styles.progress} aria-label="热点学习进度"><strong>{progress.length === 3 ? '热点与缓存挑战已完成' : `${progress.length} / 3 步骤已验证`}</strong><span>预测 → 操作 → 证据 → 复盘</span></div></header>

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createEmptyScenario, type SimulationResult } from '@system-design/model'
 import { SimulationWorkerClient, type WorkerLike } from './client'
 import type { SimulationWorkerRequest, SimulationWorkerResponse } from './protocol'
@@ -21,6 +21,17 @@ const result = (): SimulationResult => ({
 })
 
 describe('SimulationWorkerClient', () => {
+  it('terminates a stalled worker when its wall-clock budget expires', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new FakeWorker(); const client = new SimulationWorkerClient(() => worker)
+      const pending = client.run(createEmptyScenario(), { timeoutMs: 100 })
+      const rejected = expect(pending).rejects.toThrow('wall-clock budget')
+      await vi.advanceTimersByTimeAsync(100); await rejected
+      expect(worker.terminated).toBe(true); expect(client.activeRunId).toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
   it('terminates on cancel, ignores stale messages and runs again', async () => {
     const workers: FakeWorker[] = []
     const client = new SimulationWorkerClient(() => { const worker = new FakeWorker(); workers.push(worker); return worker })

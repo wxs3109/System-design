@@ -698,3 +698,5 @@ button { color: inherit; }
 .experiment-history-tools button:disabled { opacity: .5; cursor: default; }
 .experiment-history-tools label { display: block; margin: 8px 0; }
 .experiment-history-tools input[type=file] { max-width: 100%; }
+.experiment-recovery { max-width: 800px; margin: 40px auto; padding: 24px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow-wrap: anywhere; }
+.experiment-recovery button { margin: 8px; padding: 10px; background: var(--panel-raised); color: var(--text); border: 1px solid var(--border-bright); border-radius: 6px; cursor: pointer; }

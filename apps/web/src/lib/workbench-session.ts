@@ -34,6 +34,13 @@ export class WorkbenchSession {
   readonly store
   readonly id: string
   readonly restoreOnMount: boolean
+  /** Survives a rendering retry together with the writer's conflict cursor. */
+  private restored = false
+  private savedFingerprint: string | null = null
+  get recovered() { return this.restored }
+  get persistedFingerprint() { return this.savedFingerprint }
+  noteRestored(fingerprint: string | null) { this.restored = true; this.savedFingerprint = fingerprint }
+  noteSaved(fingerprint: string) { this.savedFingerprint = fingerprint }
   private readonly initialProject: ProjectFile
   private readonly historyOverride: WorkbenchHistory | null | undefined
   private readonly createRunner: () => WorkbenchRunner

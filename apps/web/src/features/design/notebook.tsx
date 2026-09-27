@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useExperiment } from '../../components/experiments/use-experiment'
 import { AlgorithmDatabase, LabRepository } from '../../core/experiments/repository'
 import { LabSession } from '../../core/experiments/session'
 import { StorageNotice, storageLabel } from '../../components/experiments/storage-notice'
@@ -13,14 +13,12 @@ function parse(value: unknown): Notes {
   return { requirements: n.requirements, decision: n.decision, reflection: n.reflection }
 }
 export function DesignNotebook({ exerciseId }: { exerciseId: string }) {
-  const [session] = useState(() => new LabSession(new LabRepository<Notes, { id: string; exerciseId: string; exerciseVersion: number; createdAt: number; draft: Notes }>(new AlgorithmDatabase(), `${exerciseId}:notes:v1`, {
+  const { session, state } = useExperiment(() => new LabSession(new LabRepository<Notes, { id: string; exerciseId: string; exerciseVersion: number; createdAt: number; draft: Notes }>(new AlgorithmDatabase(), `${exerciseId}:notes:v1`, {
     versions: { model: 'design-notebook-v1', definition: 1, assessment: 1 }, draftVersion: 1,
     initial: empty, parseDraft: parse, runAttempt: () => { throw new Error('笔记不自动评分。') }, verifyAttempt: (value): value is never => { void value; return false },
-  })))
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  })), 'notes')
   return <section aria-label="设计笔记"><h2>设计笔记</h2><p>记录自己的推理；文字不参与自动评分。{storageLabel(state)}</p>
-    <StorageNotice state={state} session={session} saveLabel="重试保存笔记" />
+    <StorageNotice state={state} session={session} saveLabel="重试保存笔记" historyLabel="笔记备份与恢复" />
     {([{ key: 'requirements', label: '需求澄清：要解决什么，不解决什么？' }, { key: 'decision', label: '设计决策：为何选这些组件和连接？' }, { key: 'reflection', label: '复盘：哪条证据支持结论，还缺什么？' }] as const).map(({ key, label }) => <label key={key}>{label}<textarea maxLength={4000} disabled={!state.ready} value={state.draft[key]} onChange={(e) => session.edit({ ...state.draft, [key]: e.target.value })} /></label>)}
   </section>
 }
