@@ -20,7 +20,7 @@ export interface ConceptBody {
   counterexample: string
   check: { question: string; answer: string }
   sourceIds: readonly string[]
-  decisionGuide?: readonly { when: string; consider: string; tradeoff: string }[]
+  decisionGuide?: readonly { when: string; consider: string; tradeoff: string; labIds?: readonly string[] }[]
 }
 export interface LearningPath {
   id: string

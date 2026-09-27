@@ -17,7 +17,10 @@ describe('learning publication contracts', () => {
       expect(body.mechanism.length).toBeGreaterThan(0)
       expect(body.conditions.length).toBeGreaterThan(0)
       for (const id of body.sourceIds) { expect(readingSources[id]).toBeDefined(); expect(new URL(readingSources[id]!.url).protocol).toBe('https:') }
-      for (const guide of body.decisionGuide ?? []) for (const text of [guide.when, guide.consider, guide.tradeoff]) expect(text.trim().length).toBeGreaterThan(0)
+      for (const guide of body.decisionGuide ?? []) {
+        for (const text of [guide.when, guide.consider, guide.tradeoff]) expect(text.trim().length).toBeGreaterThan(0)
+        for (const id of guide.labIds ?? []) { expect(concept.labIds).toContain(id); expect(practiceCatalog.some(lab => lab.id === id)).toBe(true) }
+      }
     }
   })
   it('has valid, acyclic prerequisite references without gating access', () => {

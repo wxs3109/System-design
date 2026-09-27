@@ -1,0 +1,16 @@
+import { expect,test } from '@playwright/test'
+test('routes different requirements to existing mechanisms without inventing a universal guarantee',async({page})=>{
+  await page.goto('/learn/choosing-guarantees')
+  const decisions=page.getByRole('region',{name:'从需求选择机制',exact:true})
+  const contention=decisions.getByRole('heading',{name:'两个不同操作争抢同一份资源',exact:true}).locator('..')
+  await contention.locator('a[href="/practice/concurrent-update"]').click()
+  await expect(page.getByRole('heading',{level:1})).toContainText('两个任务争抢名额')
+  await page.goto('/learn/failure-recovery-design')
+  const recovery=page.getByRole('region',{name:'从需求选择机制',exact:true}).getByRole('heading',{name:'需要恢复已经确认的数据',exact:true}).locator('..')
+  await recovery.locator('a[href="/practice/durability-recovery"]').click()
+  await expect(page).toHaveURL(/practice\/durability-recovery$/)
+  await page.goto('/learn?path=design-foundations')
+  const path=page.getByRole('region',{name:'基础设计决策学习顺序',exact:true})
+  await expect(path.locator('a[href="/learn/choosing-guarantees"]')).toBeVisible()
+  await expect(path.locator('a[href="/learn/failure-recovery-design"]')).toBeVisible()
+})

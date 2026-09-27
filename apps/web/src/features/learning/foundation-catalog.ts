@@ -7,6 +7,8 @@ export const foundationConcepts: readonly Concept[] = [
   { id: 'storage-access-patterns', groupId: 'foundations', title: '从访问模式选择数据模型与存储', aliases: ['Database selection', 'SQL', 'NoSQL', 'Key value', 'Document', 'Index', '数据库选型', '关系型', '文档', '对象存储', '索引'], question: '数据要怎样读取和修改，才决定该用什么存储？', summary: '从查询、更新和事务边界出发，比较模型及索引的维护代价。', prerequisiteIds: ['quality-goals'], capabilityIds: ['API-02', 'DATA-01', 'DATA-04', 'DATA-07'], labIds: ['data-access-paths', 'database-bottleneck', 'concurrent-update'], caseIds: [] },
   { id: 'state-and-scaling', groupId: 'foundations', title: '状态放在哪里，决定怎样扩展', aliases: ['Stateless', 'Stateful', 'Replication', 'Partitioning', 'Horizontal scaling', 'Vertical scaling', '无状态', '有状态', '横向扩展', '纵向扩展', '复制', '分片'], question: '把一台服务变成两台，哪些状态和故障问题会出现？', summary: '区分服务实例、数据所有权、副本和分片，检查扩容后的依赖与故障域。', prerequisiteIds: ['quality-goals', 'storage-access-patterns'], capabilityIds: ['API-05', 'SCALE-03', 'SCALE-05', 'NET-01', 'REL-04'], labIds: ['state-placement', 'quality-goals', 'consistent-hashing', 'replica-consistency'], caseIds: [] },
   { id: 'sync-async-boundaries', groupId: 'foundations', title: '何时等待结果，何时异步处理？', aliases: ['Synchronous', 'Asynchronous', '异步处理', '同步调用', '任务状态', '202'], question: '快速返回受理后，谁负责把工作真正完成？', summary: '从业务等待要求选择调用边界，并检查状态、积压、重试与取消。', prerequisiteIds: ['quality-goals', 'resource-constraints'], capabilityIds: ['API-01', 'MSG-01', 'MSG-05'], labIds: ['ack-checkpoint', 'transactional-outbox', 'overload', 'retry-idempotency'], caseIds: [] },
+  { id: 'choosing-guarantees', groupId: 'foundations', title: '幂等、事务和一致性分别保护什么？', aliases: ['Guarantee selection', '正确性', '保证边界', '机制选择'], question: '同一个流程为什么可能需要多种不同的保证？', summary: '从重复、竞争、双写和旧读出发，找到保护相应事实的机制。', prerequisiteIds: ['transactions', 'idempotency', 'replication-consistency'], capabilityIds: ['DATA-04', 'DATA-05', 'CONS-01', 'CONS-04', 'REL-02'], labIds: ['retry-idempotency', 'concurrent-update', 'transactional-outbox', 'replica-consistency', 'quorum-reads', 'cache-coherence', 'saga-recovery', 'two-phase-commit'], caseIds: [] },
+  { id: 'failure-recovery-design', groupId: 'foundations', title: '从故障范围设计冗余与恢复', aliases: ['Failure domains', 'Recovery design', 'Safety', 'Liveness', '冗余', '恢复演练'], question: '切换成功后，服务、状态和业务都恢复了吗？', summary: '联合检查检测、接管、剩余能力与数据恢复，区分安全性和进展。', prerequisiteIds: ['quality-goals', 'state-and-scaling', 'timeouts-retries', 'durability-recovery'], capabilityIds: ['REL-01', 'REL-03', 'REL-04', 'REL-05', 'OPS-02'], labIds: ['quality-goals', 'state-placement', 'heartbeat', 'retry-idempotency', 'overload', 'lease-fencing', 'durability-recovery'], caseIds: [] },
 ]
 
 export const foundationPath: LearningPath = {
@@ -18,6 +20,6 @@ export const foundationPath: LearningPath = {
     { question: '确认状态归属，再讨论扩展', conceptIds: ['state-and-scaling', 'consistent-hashing', 'replication-consistency'] },
     { question: '选择缓存并解释新鲜度代价', conceptIds: ['caching', 'hot-keys'] },
     { question: '选择异步边界并控制积压', conceptIds: ['sync-async-boundaries', 'success-boundaries', 'acknowledgements', 'overload-control'] },
-    { question: '保护并发效果并验证恢复', conceptIds: ['concurrency-control', 'idempotency', 'durability-recovery'] },
+    { question: '保护并发效果并验证恢复', conceptIds: ['choosing-guarantees', 'concurrency-control', 'idempotency', 'failure-recovery-design', 'durability-recovery'] },
   ],
 }
