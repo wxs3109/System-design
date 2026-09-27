@@ -1,151 +1,13 @@
-import { ObjectReplicas } from './object-replicas'
-import { check, choice, type DesignConfig, type DesignEvent, type ProductDesign, type ProductResult } from './product-types'
+import { check, choice, type DesignConfig, type ProductDesign, type ProductResult } from './product-types'
+import { runCloudDrive } from './models/cloud-drive'
+import { presentCloudDrive } from './presentation/cloud-drive'
+export { runCloudDrive } from './models/cloud-drive'
 
-export function runCloudDrive(config: DesignConfig, commands: readonly string[]): ProductResult {
-  interface File { id: string; parent: string; name: string; revision: number; blob: string; deleted: boolean }
-  interface Change { sequence: number; file: File }
-  interface Edit { fileId: string; operationId: string; baseRevision: number; blob: string; content: string }
-  interface Device { files: Map<string, File>; cursor: number; pending?: Change; edit?: Edit; edits: number }
-  const blobs = new ObjectReplicas(); blobs.write('initial-blob', 'initial content', 2)
-  const initial: File = { id: 'f1', parent: 'docs', name: 'report.txt', revision: 1, blob: 'initial-blob', deleted: false }
-  const files = new Map([['f1', { ...initial }]])
-  const folders = new Map([['root', { name: '/', parent: '—' }], ['docs', { name: 'docs', parent: 'root' }]])
-  const devices: Record<string, Device> = { A: { files: new Map([['f1', { ...initial }]]), cursor: 0, edits: 0 }, B: { files: new Map([['f1', { ...initial }]]), cursor: 0, edits: 0 } }
-  const changes: Change[] = []; const history: File[] = [{ ...initial }]
-  const versionIndex = new Map<string, File[]>([['f1', [{ ...initial }]]])
-  const completed = new Map<string, string>(); const effects: { operation: string; file: string }[] = []
-  const responses: (string | number)[][] = []; const downloads: (string | number)[][] = []; const events: DesignEvent[] = []
-  // Observer history is not consulted to reconstruct missing server metadata or bytes.
-  const retired = new Set<string>()
-  let online = true; let step = 0; let lastMutation = 0; let share = false; let bearer = false
-  let missingRejected = 0; let danglingReads = 0; let conflicts = 0; let conflictCopies = 0; let silentOverwrites = 0; let commitGaps = 0; let replays = 0; let deviceCrashes = 0; let deletes = 0; let restores = 0; let resurrections = 0; let grants = 0; let revocations = 0; let guestAllowed = 0; let guestDeniedAfterRevoke = 0; let leaks = 0; let moved = 0; let editAttempts = 0
-  let lastDownload: { file: File; body: string; step: number } | undefined
-  let previousDownloads = 0; let versionRestores = 0
-  let deletedWriteRejected = 0; let bVersionConflicts = 0; let crashesWithPending = 0
-  const install = (file: File, gap = false) => {
-    files.set(file.id, { ...file }); history.push({ ...file }); lastMutation = step
-    versionIndex.set(file.id, [...(versionIndex.get(file.id) ?? []), { ...file }])
-    if (config.changefeed === 'atomic' || !gap) changes.push({ sequence: changes.length + 1, file: { ...file } })
-  }
-  const receive = (device: Device) => {
-    if (!online || device.pending) return
-    const entry = changes.find((c) => c.sequence > device.cursor)
-    if (!entry) return
-    device.pending = structuredClone(entry)
-    if (config.checkpoint === 'early') device.cursor = entry.sequence
-  }
-  const apply = (device: Device) => {
-    if (!device.pending) return
-    const entry = device.pending; const current = device.files.get(entry.file.id)
-    if (!current || entry.file.revision > current.revision) device.files.set(entry.file.id, { ...entry.file })
-    device.cursor = Math.max(device.cursor, entry.sequence); delete device.pending
-  }
-  const sync = (device: Device) => {
-    let count = 0
-    for (let i = 0; i < 256; i++) { receive(device); if (!device.pending) break; apply(device); count++ }
-    return count
-  }
-  for (const [index, command] of commands.entries()) {
-    step = index + 1; let detail = ''
-    if (!online && ['create-folder', 'rename-move', 'delete', 'restore', 'restore-previous', 'share', 'revoke', 'guest-get'].includes(command)) {
-      if (command === 'guest-get') downloads.push(['Guest', '503：授权服务不可用', '—'])
-      events.push({ step, action: command, detail: '元数据/授权进程不可用，未执行该操作；这不是业务成功或权限撤销的证明。' })
-      continue
-    }
-    if (command === 'prepare-a' || command === 'prepare-b' || command === 'prepare-new-a') {
-      const name = command.endsWith('a') ? 'A' : 'B'; const device = devices[name]!; const view = device.files.get('f1')
-      const creating = command === 'prepare-new-a'
-      if ((!creating && (!view || view.deleted)) || device.edits >= 6) detail = '本地没有可编辑文件，或达到该设备 6 次编辑上限。'
-      else { const number = ++device.edits; device.edit = { fileId: creating ? 'f2' : 'f1', operationId: `${name}-${number}`, baseRevision: creating ? 0 : view!.revision, blob: `edit-${name}-${number}`, content: `${name} edit ${number}` }; detail = `${name} ${creating ? '准备新文件 notes.txt' : `从本地 v${view!.revision} 编辑`}，operationId=${device.edit.operationId}；内容尚未上传。` }
-    } else if (command === 'upload-a' || command === 'upload-b') {
-      const name = command.endsWith('a') ? 'A' : 'B'; const edit = devices[name]!.edit
-      if (!edit) detail = '请先在设备上准备编辑。'
-      else { blobs.write(edit.blob, edit.content, 2); detail = `${edit.operationId} 的不可变内容已写入两份物理副本，尚未更新文件指针。` }
-    } else if (command === 'commit-a' || command === 'commit-b' || command === 'commit-a-gap') {
-      const name = command === 'commit-b' ? 'B' : 'A'; const edit = devices[name]!.edit; const current = edit ? files.get(edit.fileId) : undefined
-      editAttempts++
-      if (!online || !edit) detail = '元数据进程不可用或缺少编辑操作。'
-      else if (config.idempotency === 'key' && completed.has(edit.operationId)) { replays++; responses.push([edit.operationId, '返回原提交', completed.get(edit.operationId)!]); detail = `${edit.operationId} 返回持久记录的原提交结果，未再次改变文件版本。` }
-      else if (current?.deleted) { conflicts++; deletedWriteRejected++; responses.push([edit.operationId, '文件已删除，拒绝旧写', edit.fileId]); detail = '删除标记拒绝离线旧版本，必须显式恢复或另存新文件。' }
-      else if (config.publication === 'durable' && blobs.read(edit.blob) === undefined) { missingRejected++; responses.push([edit.operationId, '拒绝：内容未保存', 'f1']); detail = '拒绝发布指向缺失内容的元数据。' }
-      else if (current && current.revision !== edit.baseRevision && config.conflict === 'reject') { conflicts++; if (name === 'B') bVersionConflicts++; responses.push([edit.operationId, '409：版本冲突', edit.fileId]); detail = `当前 v${current.revision} 不等于 base v${edit.baseRevision}，保留服务器版本与客户端未合并内容。` }
-      else {
-        const conflict = !!current && current.revision !== edit.baseRevision
-        const copy = conflict && config.conflict === 'copy'
-        const id = copy ? `${edit.fileId}-conflict-${edit.operationId}` : edit.fileId
-        const file: File = { id, parent: current?.parent ?? 'docs', name: copy ? `report (conflict ${edit.operationId}).txt` : current?.name ?? (edit.fileId === 'f2' ? 'notes.txt' : 'report.txt'), revision: copy ? 1 : (current?.revision ?? edit.baseRevision) + 1, blob: edit.blob, deleted: false }
-        if (copy) { conflicts++; conflictCopies++; if (name === 'B') bVersionConflicts++ }
-        else if (conflict) silentOverwrites++
-        if (!current && retired.has(edit.fileId)) resurrections++
-        const gap = command === 'commit-a-gap'
-        install(file, gap); completed.set(edit.operationId, `${id} v${file.revision}`); effects.push({ operation: edit.operationId, file: id })
-        if (gap) { online = false; commitGaps++; responses.push([edit.operationId, '响应丢失', id]); detail = `文件 ${id} v${file.revision} 已提交，进程在通知前崩溃；${config.changefeed === 'atomic' ? '持久变更日志仍存在' : '变更日志缺失'}。` }
-        else { responses.push([edit.operationId, copy ? '冲突另存' : '提交成功', `${id} v${file.revision}`]); detail = `${id} 发布 v${file.revision}${copy ? '，显式保留冲突分支' : conflict ? '，旧 base 盲写覆盖了另一设备的内容' : ''}。` }
-      }
-    } else if (command === 'restart-server') { online = true; detail = '元数据进程恢复；文件、提交身份与已有变更日志保留。' }
-    else if (command === 'sync-a' || command === 'sync-b') {
-      const name = command.endsWith('a') ? 'A' : 'B'; const count = sync(devices[name]!); detail = `${name} 应用 ${count} 条真实变更日志，cursor=${devices[name]!.cursor}。缺失日志不会由期望状态补造。`
-    } else if (command === 'receive-b') { receive(devices.B!); detail = devices.B!.pending ? `B 收到 seq=${devices.B!.pending.sequence}，尚未应用；cursor=${devices.B!.cursor}。` : '没有可接收的变更。' }
-    else if (command === 'apply-b') { apply(devices.B!); detail = `B 应用已收到变更并保存 cursor=${devices.B!.cursor}。` }
-    else if (command === 'crash-b') { if (devices.B!.pending) crashesWithPending++; delete devices.B!.pending; deviceCrashes++; detail = 'B 崩溃丢失未应用消息；已保存的文件和 cursor 保留。后续同步从该 cursor 重启。' }
-    else if (command === 'download-b' || command === 'download-new-b') {
-      const fileId = command === 'download-b' ? 'f1' : 'f2'
-      const file = devices.B!.files.get(fileId); const authoritative = files.get(fileId)
-      if (!file || file.deleted || !authoritative || authoritative.deleted) { downloads.push(['B', '404：文件不可见', '—']); lastDownload = undefined; detail = '文件已删除或尚未同步到设备。' }
-      else { const body = blobs.read(file.blob); if (body === undefined) { danglingReads++; lastDownload = undefined; downloads.push(['B', '503：元数据指向缺失内容', file.blob]); detail = '存在文件条目，却无法读取它引用的真实对象。' } else { lastDownload = { file: { ...file }, body, step }; downloads.push(['B', `v${file.revision}`, body]); detail = `B 按已同步 v${file.revision} 下载，实际内容为「${body}」。` } }
-    } else if (command === 'download-previous' || command === 'restore-previous') {
-      const current = files.get('f1')
-      const previous = current && !current.deleted ? versionIndex.get('f1')?.filter((f) => !f.deleted && f.blob !== current.blob).at(-1) : undefined
-      const body = previous ? blobs.read(previous.blob) : undefined
-      if (!online || !previous || body === undefined || !current) detail = '没有可用的不同内容旧版本；观察账本不能代替已保存版本索引或对象。'
-      else if (command === 'download-previous') { previousDownloads++; downloads.push(['B', `历史 v${previous.revision}`, body]); detail = `通过保存的版本索引读取 v${previous.revision}，真实内容「${body}」。` }
-      else { install({ ...current, blob: previous.blob, revision: current.revision + 1 }); versionRestores++; detail = `用户显式恢复旧内容引用 ${previous.blob}，产生新版本，保留当前目录与名称。` }
-    } else if (command === 'create-folder') { if (!folders.has('archive')) folders.set('archive', { name: 'archive', parent: 'root' }); detail = '已确保存在 /archive；同一父目录的同名文件夹不重复创建。' }
-    else if (command === 'rename-move') {
-      const file = files.get('f1')
-      if (!online || !file || file.deleted || !folders.has('archive')) detail = '需要在线元数据服务、可见文件与目标文件夹 /archive。'
-      else { install({ ...file, parent: 'archive', name: 'report-final.txt', revision: file.revision + 1 }); moved++; detail = '只修改文件父目录、名字与版本；不重新上传内容。' }
-    } else if (command === 'delete') {
-      const file = files.get('f1')
-      if (!online || !file || file.deleted) detail = '没有可删除的在线文件。'
-      else { install({ ...file, deleted: true, revision: file.revision + 1 }); if (config.deletion === 'forget') { files.delete('f1'); versionIndex.delete('f1') }; retired.add('f1'); deletes++; detail = config.deletion === 'tombstone' ? '保存删除标记和回收站引用，向同步日志追加删除变更。' : '移除文件/版本索引并忘记删除身份；离线旧写可能被当成新文件。' }
-    } else if (command === 'restore') {
-      const file = files.get('f1')
-      if (!online || !file?.deleted) detail = '回收站没有可恢复的文件记录。'
-      else { install({ ...file, deleted: false, revision: file.revision + 1 }); retired.delete('f1'); restores++; detail = '用户显式从回收站恢复原引用，产生新元数据版本和同步变更。' }
-    } else if (command === 'share') { share = true; bearer = true; grants++; detail = '授予访客读取 f1 的权限，并保存一个分享链接。' }
-    else if (command === 'revoke') { share = false; revocations++; detail = '服务端已撤销分享授权；访客手里仍保留旧链接。' }
-    else if (command === 'guest-get') {
-      const file = files.get('f1'); const allowed = share || (config.sharing === 'bearer' && bearer)
-      const body = file && !file.deleted && allowed ? blobs.read(file.blob) : undefined
-      if (body !== undefined) { guestAllowed++; if (!share) leaks++; downloads.push(['Guest', share ? '授权下载' : '撤销后仍泄露', body]); detail = `${share ? '获授权访客' : '已撤销访客'}读取实际内容「${body}」。` }
-      else { if (revocations > 0 && !share && !allowed && file && !file.deleted && blobs.read(file.blob) !== undefined) guestDeniedAfterRevoke++; downloads.push(['Guest', '拒绝下载', '—']); detail = '拒绝新的访客下载；已下载到访客设备的内容无法被远程抹除。' }
-    } else throw new Error(`Unknown drive action: ${command}`)
-    events.push({ step, action: command, detail })
-  }
-  const visible = (entries: Map<string, File>) => JSON.stringify([...entries.values()].filter((f) => !f.deleted).sort((a, b) => a.id.localeCompare(b.id)))
-  const current = files.get('f1'); const currentBody = current && !current.deleted ? blobs.read(current.blob) : undefined
-  const downloadedFile = lastDownload ? files.get(lastDownload.file.id) : undefined
-  const downloadCurrent = !!lastDownload && !!downloadedFile && lastDownload.step >= lastMutation && JSON.stringify(lastDownload.file) === JSON.stringify(downloadedFile) && lastDownload.body === blobs.read(downloadedFile.blob)
-  const namespaceUnique = new Set([...files.values()].filter((f) => !f.deleted).map((f) => `${f.parent}/${f.name}`)).size === [...files.values()].filter((f) => !f.deleted).length
-  const wrongReferences = [...files.values()].filter((f) => !f.deleted && blobs.read(f.blob) === undefined).length
-  return { events, metrics: { missingRejected, danglingReads, conflicts, conflictCopies, silentOverwrites, commitGaps, replays, deviceCrashes, crashesWithPending, bVersionConflicts, deletedWriteRejected, deletes, restores, resurrections, grants, revocations, guestAllowed, guestDeniedAfterRevoke, leaks, moved, editAttempts, previousDownloads, versionRestores, newFileDownloaded: Number(downloadCurrent && lastDownload?.file.id === 'f2' && lastDownload.body === devices.A!.edit?.content), editEffects: effects.length, duplicateEffects: effects.length - new Set(effects.map((e) => e.operation)).size, changes: changes.length, versions: history.length, fileCount: [...files.values()].filter((f) => !f.deleted).length, wrongReferences, namespaceUnique: Number(namespaceUnique), deviceACurrent: Number(visible(devices.A!.files) === visible(files)), deviceBCurrent: Number(visible(devices.B!.files) === visible(files)), downloadCurrent: Number(downloadCurrent), canonicalDownloaded: Number(downloadCurrent && lastDownload?.file.id === 'f1'), canonicalMatchesA: Number(!!devices.A!.edit && currentBody === devices.A!.edit.content), canonicalDeleted: Number(!current || current.deleted), archivePath: Number(current?.parent === 'archive' && current.name === 'report-final.txt' && !current.deleted), cursorB: devices.B!.cursor }, tables: [
-    { title: '文件夹', columns: ['ID', '名字', '父目录'], rows: [...folders].map(([id, f]) => [id, f.name, f.parent]) },
-    { title: '服务器文件元数据', columns: ['File ID', '路径', '版本', '对象引用', '状态'], rows: [...files.values()].map((f) => [f.id, `/${folders.get(f.parent)?.name}/${f.name}`, f.revision, f.blob, f.deleted ? '回收站 / Tombstone' : '可见']) },
-    { title: '元数据版本记录（观察账本）', columns: ['File ID', '版本', '对象引用', '删除'], rows: history.map((f) => [f.id, f.revision, f.blob, f.deleted ? '是' : '否']) },
-    { title: '持久变更日志', columns: ['Seq', 'File ID', '版本', '类型'], rows: changes.map((c) => [c.sequence, c.file.id, c.file.revision, c.file.deleted ? '删除' : '更新']) },
-    { title: '设备同步与本地副本', columns: ['设备', 'Cursor', '未应用 Seq', '文件快照'], rows: Object.entries(devices).map(([id, d]) => [id, d.cursor, d.pending?.sequence ?? '无', [...d.files.values()].map((f) => `${f.id} v${f.revision}${f.deleted ? ' 已删除' : ''}`).join('; ')]) },
-    { title: '设备保留的编辑意图', columns: ['设备', 'Operation ID', 'Base 版本', '本地内容'], rows: Object.entries(devices).flatMap(([id, d]) => d.edit ? [[id, d.edit.operationId, d.edit.baseRevision, d.edit.content]] : []) },
-    { title: '可读取版本索引', columns: ['File ID', '版本', '对象引用'], rows: [...versionIndex.values()].flat().map((f) => [f.id, f.revision, f.blob]) },
-    { title: '提交响应', columns: ['Operation ID', '结果', '文件 / 提交版本'], rows: responses },
-    { title: '真实下载内容', columns: ['调用者', '状态/版本', '响应内容'], rows: downloads },
-    { title: '内容存储节点', columns: ['节点', '状态', '对象数', '实际对象'], rows: blobs.rows() },
-  ] }
-}
 
 const safe: DesignConfig = { publication: 'durable', conflict: 'reject', changefeed: 'atomic', checkpoint: 'atomic', deletion: 'tombstone', sharing: 'recheck', idempotency: 'key' }
 const consistent = (r: ProductResult) => [check('文件引用与命名空间有效', r.metrics.wrongReferences === 0 && r.metrics.namespaceUnique === 1, `${r.metrics.wrongReferences} 个缺失内容引用；同一父目录下名称唯一。`), check('设备 B 收敛到当前元数据', r.metrics.deviceBCurrent === 1, '必须消费实际日志并应用文件变化，不根据服务器期望状态伪造同步。')]
 export const cloudDriveDesign: ProductDesign = {
+  versions: { model: 'cloud-drive-v1', definition: 1, assessment: 1 },
   id: 'design-cloud-drive', kind: 'product-design', category: '综合设计', difficulty: '综合', estimatedMinutes: 60, title: '云盘设计：文件、同步、冲突与分享', summary: '串起不可变内容、目录元数据、并发编辑、同步进度、离线删除、回收站和分享撤销，验证完整的有限用户流程。',
   pains: ['上传内容与发布文件条目跨越两个存储边界，半成功会产生打不开的文件。', '两台设备从同一个旧版本编辑，不能静默覆盖另一台设备的修改。', '同步通知丢失或 checkpoint 提前推进，会让设备长期停在旧状态。', '离线设备带着旧文件回来，可能复活已删除文件；旧分享链接也可能绕过撤销。'],
   requirements: ['同一账户的 A/B 两台设备、一个初始文件、docs/archive 两级目录；实际上传与下载内容。', '内容保存后才发布引用；用 baseRevision 检查并发，显式拒绝或另存冲突分支。', '元数据修改和变更日志一致；同步文件效果与 cursor 一起持久化。', '保留删除标记，支持用户显式回收站恢复；撤销分享后拒绝新的访客下载。', '支持重命名、移动、旧版本下载与恢复；每个确认的操作身份只产生一次编辑效果。'],
@@ -179,4 +41,5 @@ export const cloudDriveDesign: ProductDesign = {
   alternatives: [{ title: '条件提交，冲突明确拒绝', config: safe }, { title: '条件提交，冲突另存副本', config: { ...safe, conflict: 'copy' } }],
   architecture: (c) => ['设备编辑 → 不可变内容上传 → 对象副本', `Commit API → ${c.conflict === 'overwrite' ? '覆盖文件指针' : 'baseRevision 条件提交'} → ${c.changefeed === 'atomic' ? '元数据 + 持久变更日志' : '稍后通知'}`, `设备同步 → ${c.checkpoint === 'atomic' ? '文件与 cursor 同时保存' : '提前保存 cursor'} → 版本下载`, `删除/分享 API → ${c.deletion === 'tombstone' ? '删除身份与回收站' : '移除索引'} / ${c.sharing === 'recheck' ? '当前权限校验' : '永久旧链接'}`],
   run: runCloudDrive,
+  present: (result) => presentCloudDrive(result as ReturnType<typeof runCloudDrive>),
 }

@@ -1,12 +1,87 @@
-import { check, choice, type ProductDesign, type ProductResult } from './product-types'
-import { runNewsFeed } from './models/news-feed'
-import { presentNewsFeed } from './presentation/news-feed'
-export { runNewsFeed } from './models/news-feed'
+import { check, choice, type DesignConfig, type DesignEvent, type ProductDesign, type ProductResult } from './product-types'
 
+export function runNewsFeed(config: DesignConfig, commands: readonly string[]): ProductResult {
+  interface Post { id: string; author: string; sequence: number; deleted: boolean }
+  const posts: Post[] = []
+  const followers: Record<string, string[]> = { friend: ['u1', 'u2'], celebrity: Array.from({ length: 12 }, (_, i) => `u${i + 1}`) }
+  const inbox = Object.fromEntries(followers.celebrity!.map((id) => [id, [] as string[]]))
+  const intents: string[] = []
+  const jobs: { postId: string; cursor: number }[] = []
+  const reads: { reader: string; actual: string[]; expected: string[]; step: number }[] = []
+  const events: DesignEvent[] = []
+  let online = true; let writes = 0; let examined = 0; let attempts = 0; let duplicateSkips = 0; let deleted = 0; let commitGaps = 0; let redeliveries = 0
+  let lastMutation = 0
+  const isPushed = (post: Post) => config.strategy === 'push' || (config.strategy === 'hybrid' && followers[post.author]!.length <= 4)
+  const deliver = (budget: number) => {
+    let work = 0
+    while (jobs.length && work < budget) {
+      const job = jobs[0]!; const post = posts.find((p) => p.id === job.postId)!
+      const audience = followers[post.author]!
+      const reader = audience[job.cursor++]!
+      attempts++; work++
+      if (config.dedup === 'on' && inbox[reader]!.includes(post.id)) duplicateSkips++
+      else { inbox[reader]!.push(post.id); writes++ }
+      if (job.cursor >= audience.length) jobs.shift()
+    }
+    return work
+  }
+  for (const [index, command] of commands.entries()) {
+    if (command !== 'read' && command !== 'read-outsider') lastMutation = index + 1
+    let detail = ''
+    if (command === 'publish-friend' || command === 'publish-celebrity' || command === 'publish-gap') {
+      if (!online || posts.length >= 16) detail = '写入服务不可用或达到 16 篇上限；未产生帖子。'
+      else {
+        const author = command === 'publish-celebrity' ? 'celebrity' : 'friend'
+        const post: Post = { id: `p${posts.length + 1}`, author, sequence: posts.length + 1, deleted: false }
+        posts.push(post)
+        if (isPushed(post) && config.outbox === 'atomic') intents.push(post.id)
+        if (command === 'publish-gap') { online = false; commitGaps++; detail = `${post.id} 已提交到作者日志，进程在发布前崩溃；${intents.includes(post.id) ? '持久发送意图仍存在' : '没有发送意图'}。` }
+        else { if (isPushed(post) && config.outbox === 'direct') jobs.push({ postId: post.id, cursor: 0 }); detail = `${post.id} 已发布；${isPushed(post) ? `需要向 ${followers[author]!.length} 个收件箱分发` : '读取时合并作者日志'}。` }
+      }
+    } else if (command === 'restart') { online = true; detail = '写入进程恢复；不会凭空补出缺失的发送意图。' }
+    else if (command === 'relay') {
+      const count = intents.length
+      for (const id of intents.splice(0)) jobs.push({ postId: id, cursor: 0 })
+      detail = `独立发布器读取持久 Outbox，发送 ${count} 个分发任务。本步假设 broker 确认成功。`
+    } else if (command === 'deliver' || command === 'drain') detail = `消费 ${deliver(command === 'deliver' ? 4 : 192)} 个收件人工作项；剩余 ${jobs.length} 个帖子分发任务。`
+    else if (command === 'redeliver') {
+      const post = posts.filter(isPushed).at(-1)
+      redeliveries++
+      if (post) { jobs.push({ postId: post.id, cursor: 0 }); detail = `${post.id} 同一业务事件再次投递，保留原 postId。` }
+      else detail = '当前方案没有需要分发的帖子；没有伪造分发任务。'
+    } else if (command === 'delete-friend') {
+      const post = posts.find((p) => p.author === 'friend' && !p.deleted)
+      if (post) { post.deleted = true; deleted++; detail = `${post.id} 在作者存储中标记删除，收件箱中的旧 ID 尚未清理。` } else detail = '没有可删除的普通作者帖子。'
+    } else if (command === 'read' || command === 'read-outsider') {
+      const reader = command === 'read' ? 'u1' : 'u12'
+      const followed = Object.keys(followers).filter((author) => followers[author]!.includes(reader))
+      const pushed = inbox[reader]!.map((id) => posts.find((p) => p.id === id)!)
+      const pulled = posts.filter((p) => followed.includes(p.author) && !isPushed(p) && !p.deleted)
+      examined += pushed.length + posts.filter((p) => followed.includes(p.author) && !isPushed(p)).length
+      const candidates = [...pushed, ...pulled].filter((p) => config.hydrate !== 'source' || (!p.deleted && followed.includes(p.author)))
+      const actual = candidates.sort((a, b) => b.sequence - a.sequence).map((p) => p.id)
+      const expected = posts.filter((p) => !p.deleted && followed.includes(p.author)).sort((a, b) => b.sequence - a.sequence).map((p) => p.id)
+      reads.push({ reader, actual, expected, step: index + 1 }); detail = `${reader} 读取 [${actual.join(', ')}]；当前作者日志与关注关系对应 [${expected.join(', ')}]。`
+    } else throw new Error(`Unknown feed action: ${command}`)
+    events.push({ step: index + 1, action: command, detail })
+  }
+  const last = reads.filter((r) => r.reader === 'u1').at(-1)
+  const outsider = reads.filter((r) => r.reader === 'u12').at(-1)
+  const correct = (read: typeof last) => !!read && read.step >= lastMutation && JSON.stringify(read.actual) === JSON.stringify(read.expected)
+  return {
+    events,
+    metrics: { posts: posts.length, celebrityPosts: posts.filter((p) => p.author === 'celebrity').length, ordinaryPosts: posts.filter((p) => p.author === 'friend').length, fanoutWrites: writes, deliveryAttempts: attempts, duplicateSkips, readExamined: examined, pending: jobs.reduce((sum, j) => sum + followers[posts.find((p) => p.id === j.postId)!.author]!.length - j.cursor, 0) + intents.length, reads: reads.length, correctRead: Number(correct(last)), correctOutsider: Number(correct(outsider)), deleted, commitGaps, redeliveries },
+    tables: [
+      { title: '作者日志（权威数据）', columns: ['Post ID', '作者', '版本顺序', '删除'], rows: posts.map((p) => [p.id, p.author, p.sequence, p.deleted ? '是' : '否']) },
+      { title: '物化收件箱', columns: ['用户', 'Post IDs'], rows: Object.entries(inbox).map(([user, ids]) => [user, ids.join(', ') || '空']) },
+      { title: '分发任务', columns: ['来源', 'Post ID', '进度'], rows: [...intents.map((id) => ['Outbox', id, '未发布']), ...jobs.map((j) => ['队列', j.postId, j.cursor])] },
+      { title: '读取证据', columns: ['用户', '实际结果', '对照结果'], rows: reads.map((r) => [r.reader, r.actual.join(', ') || '空', r.expected.join(', ') || '空']) },
+    ],
+  }
+}
 
 const settled = (r: ProductResult) => [check('读结果正确', r.metrics.correctRead === 1, '最后一次 u1 读取必须与当时作者日志、关注关系、删除状态和顺序一致。'), check('待处理工作排空', r.metrics.pending === 0, `剩余 ${r.metrics.pending} 项；不能只读到局部结果便结束。`)]
 export const newsFeedDesign: ProductDesign = {
-  versions: { model: 'news-feed-v1', definition: 1, assessment: 1 },
   id: 'design-news-feed', kind: 'product-design', category: '综合设计', difficulty: '进阶', estimatedMinutes: 40,
   title: 'News Feed 设计：分发与名人热点', summary: '实际发布帖子、分发收件箱并读取 Feed，比较推、拉和混合策略，重现双写中断与重复投递。',
   pains: ['普通用户和名人的粉丝数差异巨大，统一推送会制造写放大。', '帖子提交和分发事件发送之间崩溃，可能让关注者永远看不到帖子。', '重投可能造成重复内容；只读旧收件箱还可能展示已经删除的帖子。'],
@@ -37,5 +112,4 @@ export const newsFeedDesign: ProductDesign = {
   ],
   architecture: (c) => c.strategy === 'pull' ? ['作者 API → 作者日志', 'Feed API → 关注关系 → 拉取作者日志 → 合并排序'] : ['作者 API → 作者日志' + (c.outbox === 'atomic' ? ' + Outbox' : ''), '发布器 → 分发队列 → 收件箱', `Feed API → 收件箱${c.strategy === 'hybrid' ? ' + 名人作者日志' : ''} → ${c.hydrate === 'source' ? '校验可见性 → ' : ''}合并排序`],
   run: runNewsFeed,
-  present: (result) => presentNewsFeed(result as ReturnType<typeof runNewsFeed>),
 }

@@ -1,0 +1,14 @@
+{
+  "origin": "3c2105f",
+  "files": {
+    "attempt.ts": "b90278868d5adce5246afaf2619aa2bdf8270cf3d3db0b0c951f9fa1acc5f019",
+    "cloud-drive.ts": "40ceda87f03181c4ee8217b1c115d46719b8918aee1f5c509838d5712fbb5276",
+    "dispatch.ts": "d1bb2dea2378171308844a41c9581603cd000b0b4d3ffb34f6cd691b2059f24e",
+    "geography.ts": "eec8505b211ebc7c92689473bd8eac8734e7f3b9820bc34a6846bda4d3c706a3",
+    "maps.ts": "23ba68c7c4462dd3cc671b9666b7619646a1ceaa7c2596f9f7d40dc187caf36e",
+    "news-feed.ts": "a68dc0bd9672f7b9ebb8f566ef76de4e757705f3a610ad85efe6bf93ab08c8ca",
+    "object-replicas.ts": "09ff465bf002e655bc24d7f108a184785bb1de6b3e1fea16f5491eb9047f060a",
+    "object-storage.ts": "bccf1d58e1c21e679dc63a65efad244360b865240b777690675835d9853cc908",
+    "product-types.ts": "d8abe7848e6aff44926d88305390e737e4e77156420ee322e9d8f684405e2d67"
+  }
+}

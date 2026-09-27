@@ -28,7 +28,7 @@ describe('object storage product model', () => {
   it('retransmits a part without creating an extra part and rejects missing manifests', () => {
     const partial = runObjectStorage(safe, ['begin', 'part1', 'part1', 'complete', 'get'])
     expect(partial.metrics).toMatchObject({ versions: 0, rejected: 1, lastCorrect: 0 })
-    expect(partial.tables[0]!.rows).toHaveLength(1)
+    expect(Object.keys(partial.state.uploads[0]!.parts)).toHaveLength(1)
     const complete = runObjectStorage(safe, ['begin', 'part1', 'part1', 'part2', 'complete', 'part2-corrupt', 'get'])
     expect(complete.metrics).toMatchObject({ versions: 1, lastCorrect: 1, corruptParts: 0 })
   })
@@ -42,7 +42,8 @@ describe('object storage product model', () => {
     const lesson = productLesson(objectStorageDesign)
     const attempt = lesson.runAttempt({ ...lesson.initial(), config: safe, commands: [...objectStorageDesign.scenarios[0]!.script] })
     expect(lesson.verifyAttempt(attempt)).toBe(true)
-    attempt.result.tables[1]!.rows = []
+    const state = attempt.result.state as ReturnType<typeof runObjectStorage>['state']
+    state.versions = []
     expect(lesson.verifyAttempt(attempt)).toBe(false)
   })
 })

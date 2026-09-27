@@ -16,7 +16,7 @@ export class ObjectReplicas {
   recover(node: string) { if (this.stores.has(node)) this.online.add(node) }
   copies(key: string) { return [...this.online].filter((node) => this.stores.get(node)!.has(key)).length }
   repair(key: string, copies: number): boolean { const bytes = this.read(key); return bytes !== undefined && this.write(key, bytes, copies) }
-  snapshot() { return [...this.stores].map(([id, objects]) => ({ id, online: this.online.has(id), objects: [...objects].map(([key, data]) => ({ key, data })) })) }
+  rows(): (string | number)[][] { return [...this.stores].map(([node, values]) => [node, this.online.has(node) ? '在线' : '数据丢失 / 离线', values.size, [...values.keys()].join(', ') || '空']) }
 }
 export function teachingChecksum(text: string): string {
   let hash = 2166136261

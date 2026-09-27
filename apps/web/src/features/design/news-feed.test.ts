@@ -28,12 +28,12 @@ describe('News Feed product model', () => {
   it('deduplicates the same post while preserving distinct business publications', () => {
     const result = runNewsFeed(safe, ['publish-friend', 'publish-friend', 'relay', 'drain', 'redeliver', 'drain', 'read'])
     expect(result.metrics).toMatchObject({ posts: 2, fanoutWrites: 4, duplicateSkips: 2, correctRead: 1 })
-    expect(result.tables.at(-1)!.rows[0]).toEqual(['u1', 'p2, p1', 'p2, p1'])
+    expect(result.state.reads[0]).toMatchObject({ reader: 'u1', actual: ['p2', 'p1'], expected: ['p2', 'p1'] })
   })
   it('checks current reads rather than forgiving stale deleted content', () => {
     const result = runNewsFeed({ ...safe, hydrate: 'timeline' }, ['publish-friend', 'relay', 'drain', 'delete-friend', 'read'])
     expect(result.metrics.correctRead).toBe(0)
-    expect(result.tables.at(-1)!.rows[0]).toEqual(['u1', 'p1', '空'])
+    expect(result.state.reads[0]).toMatchObject({ reader: 'u1', actual: ['p1'], expected: [] })
   })
   it('requires actual scenario evidence and detects altered saved results or invalid configs', () => {
     const lesson = productLesson(newsFeedDesign)

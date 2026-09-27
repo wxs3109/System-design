@@ -23,23 +23,23 @@ describe('cloud drive end-to-end product model', () => {
     const scenario = cloudDriveDesign.scenarios.find((s) => s.id === 'concurrent')!
     const result = runCloudDrive({ ...safe, conflict: 'copy' }, scenario.script)
     expect(result.metrics).toMatchObject({ fileCount: 2, conflictCopies: 1, silentOverwrites: 0, canonicalMatchesA: 1 })
-    expect(result.tables.find((t) => t.title === '设备保留的编辑意图')!.rows.map((r) => r[3])).toEqual(['A edit 1', 'B edit 1'])
+    expect(Object.values(result.state.devices).map((d) => d.edit!.content)).toEqual(['A edit 1', 'B edit 1'])
   })
   it('retains a stable receipt when an older successful operation is retried after a later edit', () => {
     const result = runCloudDrive(safe, ['prepare-a', 'upload-a', 'commit-a', 'sync-b', 'prepare-b', 'upload-b', 'commit-b', 'commit-a'])
     expect(result.metrics).toMatchObject({ replays: 1, editEffects: 2, duplicateEffects: 0 })
-    expect(result.tables.find((t) => t.title === '提交响应')!.rows.at(-1)).toEqual(['A-1', '返回原提交', 'f1 v2'])
+    expect(result.state.responses.at(-1)).toEqual({ operationId: 'A-1', status: 'replayed', fileId: 'f1', revision: 2 })
   })
   it('does not mutate folders or grants while the metadata process is crashed', () => {
     const result = runCloudDrive(safe, ['prepare-a', 'upload-a', 'commit-a-gap', 'create-folder', 'share', 'revoke', 'guest-get'])
     expect(result.metrics).toMatchObject({ grants: 0, revocations: 0, guestAllowed: 0, guestDeniedAfterRevoke: 0 })
-    expect(result.tables.find((t) => t.title === '文件夹')!.rows).toHaveLength(2)
+    expect(Object.keys(result.state.folders)).toHaveLength(2)
   })
   it('cannot reconstruct forgotten trash or prior versions from its observer history', () => {
     const result = runCloudDrive({ ...safe, deletion: 'forget' }, ['prepare-a', 'upload-a', 'commit-a', 'delete', 'restore', 'restore-previous', 'download-previous'])
     expect(result.metrics).toMatchObject({ restores: 0, versionRestores: 0, previousDownloads: 0, canonicalDeleted: 1 })
-    expect(result.tables.find((t) => t.title === '元数据版本记录（观察账本）')!.rows.length).toBeGreaterThan(0)
-    expect(result.tables.find((t) => t.title === '可读取版本索引')!.rows).toHaveLength(0)
+    expect(result.state.history.length).toBeGreaterThan(0)
+    expect(result.state.versionIndex).toHaveLength(0)
   })
   it('requires actual revocation and actual denied downloads, not just a revoke button click', () => {
     const scenario = cloudDriveDesign.scenarios.find((s) => s.id === 'sharing')!
@@ -57,7 +57,8 @@ describe('cloud drive end-to-end product model', () => {
     const lesson = productLesson(cloudDriveDesign)
     const attempt = lesson.runAttempt({ ...lesson.initial(), config: safe, commands: [...cloudDriveDesign.scenarios[0]!.script] })
     expect(lesson.verifyAttempt(attempt)).toBe(true)
-    attempt.result.tables.find((t) => t.title === '真实下载内容')!.rows = []
+    const state = attempt.result.state as ReturnType<typeof runCloudDrive>['state']
+    state.downloads = []
     expect(lesson.verifyAttempt(attempt)).toBe(false)
     expect(() => lesson.parseDraft({ ...lesson.initial(), commands: ['delete-everything'] })).toThrow()
   })

@@ -1,9 +1,9 @@
-import type { DesignConfig, ProductResult } from './model-contracts'
-import type { ExperimentVersions } from '../../core/experiments/versions'
-export type { DesignConfig, DesignEvent, ProductResult } from './model-contracts'
+export type DesignConfig = Record<string, string>
+export interface DesignEvent { step: number; action: string; detail: string }
 export interface DesignCheck { label: string; pass: boolean; detail: string }
-export interface ProductView {
-  events: { step: number; action: string; detail: string }[]
+export interface ProductResult {
+  events: DesignEvent[]
+  metrics: Record<string, number>
   tables: { title: string; columns: string[]; rows: (string | number)[][] }[]
   diagrams?: ProductDiagram[]
 }
@@ -19,7 +19,6 @@ export interface ProductScenario {
   check: (result: ProductResult) => DesignCheck[]
 }
 export interface ProductDesign {
-  versions: ExperimentVersions
   id: string; kind: 'product-design'; title: string; summary: string; category: string; difficulty: string; estimatedMinutes: number
   pains: readonly string[]; requirements: readonly string[]; contracts: readonly { name: string; description: string }[]
   decisions: readonly string[]; boundary: readonly string[]; relatedLabs: readonly { id: string; title: string }[]
@@ -31,7 +30,6 @@ export interface ProductDesign {
   alternatives: readonly { title: string; config: DesignConfig }[]
   architecture: (config: DesignConfig) => readonly string[]
   run: (config: DesignConfig, commands: readonly string[]) => ProductResult
-  present: (result: ProductResult) => ProductView
 }
 export const check = (label: string, pass: boolean, detail: string): DesignCheck => ({ label, pass, detail })
 export const choice = (value: string, label: string) => ({ value, label })

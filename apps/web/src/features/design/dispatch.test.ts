@@ -10,7 +10,7 @@ describe('dispatch product model', () => {
   it('records both effects of unguarded competition instead of overwriting the evidence', () => {
     const result = runDispatch(dispatchDesign.initialConfig, ['lookup-r1', 'lookup-r2', 'offer-r1', 'offer-r2', 'confirm-r1', 'confirm-r2'])
     expect(result.metrics).toMatchObject({ matchedTrips: 2, driverDuplicates: 1, assignments: 2 })
-    expect(result.tables[3]!.rows.map((row) => row[1])).toEqual(['D1', 'D1'])
+    expect(result.state.assignments.map((row) => row.driver)).toEqual(['D1', 'D1'])
   })
   it('checks freshness at reservation too, and treats exact lease expiry as expired', () => {
     const stale = runDispatch(safe, ['lookup-r1', 'tick', 'offer-r1', 'confirm-r1'])
@@ -22,7 +22,7 @@ describe('dispatch product model', () => {
     const result = runDispatch(safe, ['move-d1', 'lookup-r1', 'offer-r1', 'confirm-r1'])
     expect(result.metrics.staleAccepted).toBe(0)
     expect(result.metrics.outOfRange).toBe(1)
-    expect(result.tables[3]!.rows[0]![1]).toBe('D1')
+    expect(result.state.assignments[0]!.driver).toBe('D1')
   })
   it('exposes the availability tradeoff between 500 ms and 1000 ms policies', () => {
     const commands = ['tick-half', 'lookup-r1', 'offer-r1', 'confirm-r1']
