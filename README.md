@@ -83,6 +83,7 @@ node .tools/lint-content.mjs
 | [容量规划候选计划](docs/roadmap/demand-capacity-planning/README.md) | 容量规划目标、里程碑、依赖和各部分 spec，尚未实现 |
 | [容量规划共享合同](docs/roadmap/demand-capacity-planning/shared-contracts.md) | 学习模型边界、公式、运行证据和验收规则 |
 | [学习能力矩阵](docs/roadmap/learning-capability-matrix.md) | 能力、候选练习、前置知识、验收证据、模型缺口与学习路径 |
+| [基础设计决策顶层设计](docs/roadmap/foundation-design-decisions.md) | 从目标、资源、数据和状态约束到机制选择的教学分层、复用边界和分批规格 |
 | [基础概念与平台接入](docs/roadmap/failure-recovery-foundations.md) | 知识入口、六个故障恢复 Lab 的模型合同与剩余范围 |
 | [数据分布与 Hot Key Lab 计划](docs/roadmap/data-distribution-hot-key-labs.md) | 一致性哈希与热点只读缓存实验的模型合同、实现和验收 |
 | [综合设计练习交付计划](docs/roadmap/practice-design-exercises.md) | 短链接可执行读取题，以及 News Feed、S3、地图、派单、云盘的逐题交付范围 |
