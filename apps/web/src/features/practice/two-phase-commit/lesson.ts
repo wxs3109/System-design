@@ -1,4 +1,4 @@
-import { createProtocolLesson } from '../protocol/lesson'
+import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
 import { canDeliver, defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, type Command, type Config, type Message } from './model'
 export const exercise = { kind: 'protocol' as const, id: 'two-phase-commit', version: 1, title: '已经投了 YES，超时后还能自行退出吗？', category: '两阶段提交', difficulty: '进阶', estimatedMinutes: 30, summary: '观察准备记录、资源锁、持久决议与业务提交的不同阶段；让协调者或参与者崩溃，再从各自日志恢复。', flow: ['准备与投票', '持久决议', '故障与阻塞', '恢复与确认'] } as const
 export const scenarios = { blocking: '准备后协调者崩溃', 'decision-gap': '决议只到达一个参与者', 'participant-recovery': '参与者恢复与重复决议', rejection: '参与者拒绝准备', manual: '自由实验' }

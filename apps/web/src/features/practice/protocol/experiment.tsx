@@ -1,8 +1,8 @@
 'use client'
 import Link from 'next/link'
-import { StorageNotice, storageLabel } from '../algorithm/storage-notice'
+import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
-import type { LabSession } from '../algorithm/session'
+import type { LabSession } from '../../../core/experiments/session'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 import styles from '../retry-idempotency/retry-lab.module.css'
 

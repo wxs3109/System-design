@@ -29,7 +29,8 @@ export interface Comparison {
   transfers: { from: string; to: string; count: number }[]
 }
 export const asciiCompare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0
-export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+import { same } from '../../../core/experiments/equality'
+export { same } from '../../../core/experiments/equality'
 const rotate = (n: number, bits: number) => (n << bits) | (n >>> (32 - bits))
 
 /** MurmurHash3 x86_32, seed 0, UTF-8 and little-endian blocks.

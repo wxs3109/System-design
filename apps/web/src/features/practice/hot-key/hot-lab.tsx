@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { StorageNotice, storageLabel } from '../algorithm/storage-notice'
+import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { ArrowLeft, ArrowRight, FlaskConical, Play, Undo2, Redo2, RotateCcw } from 'lucide-react'
 import { HotSession } from './session'

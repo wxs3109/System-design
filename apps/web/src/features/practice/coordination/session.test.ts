@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { afterEach, expect, it } from 'vitest'
-import { AlgorithmDatabase } from '../algorithm/repository'
+import { AlgorithmDatabase } from '../../../core/experiments/repository'
 import { CoordinationRepository, CoordinationSession } from './session'
 import { initialDraft, scenarioCommands } from './lesson'
 const databases: AlgorithmDatabase[] = []

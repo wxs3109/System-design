@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { StorageNotice, storageLabel } from '../algorithm/storage-notice'
+import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 import { CoordinationSession } from './session'

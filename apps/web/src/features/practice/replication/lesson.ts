@@ -1,4 +1,4 @@
-import { createProtocolLesson } from '../protocol/lesson'
+import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
 import { checkRegisterHistory } from './history'
 import { canDeliver, defaultConfig, MAX_COMMANDS, nodes, parseCommand, parseConfig, runModel, type Command, type Config, type Message, type State } from './model'
 export type LabId = 'replica-consistency' | 'quorum-reads'

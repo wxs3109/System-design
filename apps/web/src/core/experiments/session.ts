@@ -1,5 +1,5 @@
-import type { AttemptIdentity } from './contracts'
-import { LabRepository, LabStorageError } from './repository'
+import type { AttemptIdentity, ExperimentRepository } from './contracts'
+import { LabStorageError } from './errors'
 
 interface Editable<D> { draft: D; activeAttemptId: string | null }
 export interface LabSessionState<D, A> extends Editable<D> {
@@ -23,7 +23,7 @@ export class LabSession<D, A extends AttemptIdentity & { draft: D }> {
   private revision = 0
   private persistedAttempts = new Set<string>()
   private loading: Promise<void> | null = null
-  constructor(readonly repository: LabRepository<D, A>) {
+  constructor(readonly repository: ExperimentRepository<D, A>) {
     this.state = { draft: repository.contract.initial(), activeAttemptId: null, attempts: [], ready: false, storage: 'loading', error: '', errorKind: null, rejected: 0, undoCount: 0, redoCount: 0 }
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }

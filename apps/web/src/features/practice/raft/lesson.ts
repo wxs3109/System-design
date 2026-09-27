@@ -1,4 +1,4 @@
-import { createProtocolLesson } from '../protocol/lesson'
+import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
 import { canDeliver, defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, type Command, type Config, type Message, type NodeId } from './model'
 export const exercise = { kind: 'protocol' as const, id: 'raft-consensus', version: 1, title: '选出 Leader 以后，哪些日志真的提交了？', category: 'Raft 选举与日志安全', difficulty: '进阶', estimatedMinutes: 40, summary: '手动触发选举、递送投票与 AppendEntries，观察分票、少数派旧 Leader、冲突后缀，以及旧任期多数副本为何不能直接提交。', flow: ['触发选举', '逐条复制日志', '分区与恢复', '核对安全性和进展'] } as const
 export const scenarios = { 'split-vote': '分票后重新选举', minority: '少数派旧 Leader', 'conflict-repair': '恢复冲突日志', 'old-term': '旧任期已有多数副本', manual: '自由实验' }

@@ -50,7 +50,7 @@
 | 现有 simulation 类 Lab | 继续承载容量、队列和瓶颈实验，复用 Workbench/SimulationResult；不把容量指标当成业务正确性的证明 |
 | 现有 algorithm 类 Lab | 继续承载哈希、热点等纯计算实验及专用视图 |
 | protocol 类 Lab | 已使用请求、消息、协调和 Saga 四套版本化模型表达六讲实验；共享保存与事件展示，业务语义各自声明，不从容量仿真推断协议保证 |
-| [公共算法会话](../../apps/web/src/features/practice/algorithm/session.ts)与[保存合同](../../apps/web/src/features/practice/algorithm/contracts.ts) | 复用尝试身份、版本、保存、撤销和失效规则；请求协议以独立命令日志重放状态，操作中途刷新也可恢复，未把自由工作台改成单步协议引擎 |
+| [公共算法会话](../../apps/web/src/core/experiments/session.ts)与[保存合同](../../apps/web/src/core/experiments/contracts.ts) | 复用尝试身份、版本、保存、撤销和失效规则；请求协议以独立命令日志重放状态，操作中途刷新也可恢复，未把自由工作台改成单步协议引擎 |
 
 知识内容、运行模型、评分判据分别维护：知识页可以解释尚未实现的机制，但明确实验状态；Lab 的“通过”必须来自实际模型证据。当前所有组件仍是学习模型，不部署真实数据库、队列或分布式锁服务。
 
@@ -93,7 +93,7 @@ ACK 与 checkpoint 会经常一起出现，但分别回答“对谁确认了哪�
 1. **阅读路径已在 `/learn?path=failure-recovery` 接入**，从 `/practice` 可进入知识索引，与容量和状态正确性路径并列。相关概念与六讲实验均已接入，每个 Lab 可独立进入，不强制顺序解锁。
 2. **可选热身**：先做现有 `service-queue-replicas` 和 `database-bottleneck`，观察等待与瓶颈。已有五题继续可独立进入，不要求先通关哈希或 Hot Key 才能学故障恢复。
 3. **沿用学习闭环**：预测 → 注入故障 → 观察证据 → 改一个策略 → 换故障时刻重试。六题按各自语义显示网络消息、参与者局部状态、稳定账本和事件时序；支持步骤引导、自由操作、故障恢复与复盘。
-4. **复用已完成的基础设施**：目录、题目版本、尝试记录、撤销、失效反馈、[算法会话与保存](../../apps/web/src/features/practice/algorithm/session.ts)。新增独立的版本化协议状态模型与渲染入口，记录逻辑消息、计时器、临时/稳定状态、业务效果和恢复步骤；不要伪造 `SimulationResult` 或让用例名称进入通用仿真内核。
+4. **复用已完成的基础设施**：目录、题目版本、尝试记录、撤销、失效反馈、[算法会话与保存](../../apps/web/src/core/experiments/session.ts)。新增独立的版本化协议状态模型与渲染入口，记录逻辑消息、计时器、临时/稳定状态、业务效果和恢复步骤；不要伪造 `SimulationResult` 或让用例名称进入通用仿真内核。
 5. **证据按保证评分**：把重试次数、消息交付次数、业务效果次数、ACK、checkpoint、当前权限分别展示。未完成/证据不足单独报告；不能因“没做任何事”而通过不重复检查，也不能以“一次运行没出错”声称普遍正确。通过后必须解释它仍没解决什么。
 
 现状边界：共享仿真已有边级超时/重试、Topic 的部分 ACK，以及单次 run 内的 Workflow 去重、checkpoint 和补偿。独立协议 Lab 已有有界消息重投、消费调度、Outbox、本地故障检测、租约与资源 fencing，以及 Saga 恢复；它们没有改写共享 Queue/Workflow 语义，也不提供完整 broker、数据库或共识实现。共享引擎以[当前说明](../model-assumptions.md)为准；浏览器保存实验记录不等于业务持久性已被证明。
@@ -166,7 +166,7 @@ ACK 与 checkpoint 会经常一起出现，但分别回答“对谁确认了哪�
 
 ## 复制、共识、原子提交与持久恢复
 
-以下五个 Lab 接入同一目录、知识页、保存合同及 [ProtocolExperiment](../../apps/web/src/features/practice/protocol/experiment.tsx)。共同的[版本化题目合同](../../apps/web/src/features/practice/protocol/lesson.ts)只负责完整重算、作答和保存核验；协议状态转换与判据仍属于各自模型。每题都提供步骤引导、自由调度、策略比较及可恢复的中间状态。
+以下五个 Lab 接入同一目录、知识页、保存合同及 [ProtocolExperiment](../../apps/web/src/features/practice/protocol/experiment.tsx)。共同的[版本化题目合同](../../apps/web/src/core/experiments/protocol-lesson.ts)只负责完整重算、作答和保存核验；协议状态转换与判据仍属于各自模型。每题都提供步骤引导、自由调度、策略比较及可恢复的中间状态。
 
 | Lab / 入口 | 可操作挑战 | 验收依据 |
 |---|---|---|

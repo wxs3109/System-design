@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AlgorithmDatabase } from '../algorithm/repository'
+import { AlgorithmDatabase } from '../../../core/experiments/repository'
 import { ConcurrentRepository, ConcurrentSession } from '../concurrent-update/session'
 import { OverloadRepository, OverloadSession } from '../overload/session'
 import { CoordinationRepository } from '../coordination/session'

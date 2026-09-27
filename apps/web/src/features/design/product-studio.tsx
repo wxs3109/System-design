@@ -6,7 +6,7 @@ import { getProductDesign } from './product-catalog'
 import { PRODUCT_COMMAND_LIMIT, productLesson } from './product-lesson'
 import { DesignNotebook } from './notebook'
 import { Diagram } from './product-diagram'
-import { StorageNotice, storageLabel } from '../practice/algorithm/storage-notice'
+import { StorageNotice, storageLabel } from '../../components/experiments/storage-notice'
 import type { ProductDesign } from './product-types'
 import styles from './product.module.css'
 

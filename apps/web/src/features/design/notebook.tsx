@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { AlgorithmDatabase, LabRepository } from '../practice/algorithm/repository'
-import { LabSession } from '../practice/algorithm/session'
-import { StorageNotice, storageLabel } from '../practice/algorithm/storage-notice'
+import { AlgorithmDatabase, LabRepository } from '../../core/experiments/repository'
+import { LabSession } from '../../core/experiments/session'
+import { StorageNotice, storageLabel } from '../../components/experiments/storage-notice'
 
 interface Notes { requirements: string; decision: string; reflection: string }
 const empty = (): Notes => ({ requirements: '', decision: '', reflection: '' })

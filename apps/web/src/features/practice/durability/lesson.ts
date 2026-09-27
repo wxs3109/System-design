@@ -1,4 +1,4 @@
-import { createProtocolLesson } from '../protocol/lesson'
+import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
 import { defaultConfig, MAX_COMMANDS, parseCommand, parseConfig, runModel, type Command, type Config } from './model'
 export const exercise = { kind: 'protocol' as const, id: 'durability-recovery', version: 1, title: '进程重启了，已经确认的数据还在吗？', category: 'WAL、检查点与恢复', difficulty: '进阶', estimatedMinutes: 30, summary: '区分内存、稳定日志、数据页、备份和归档；亲手刷盘、崩溃、重放，并从指定提交边界或损坏材料中恢复。', flow: ['提交与确认', '刷盘与快照', '故障', '核对恢复边界'] } as const
 export const scenarios = { 'ack-loss': '确认之后进程崩溃', uncommitted: '日志有更新但没有提交', checkpoint: '检查点之后的日志重放', 'point-in-time': '恢复到较早提交边界', 'damaged-archive': '归档损坏与备用副本', manual: '自由实验' }

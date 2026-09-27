@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
-import { AlgorithmDatabase } from '../practice/algorithm/repository'
+import { AlgorithmDatabase } from '../../core/experiments/repository'
 import { productDesigns } from './product-catalog'
 import { productLesson } from './product-lesson'
 

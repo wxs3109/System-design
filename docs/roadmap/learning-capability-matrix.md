@@ -261,7 +261,7 @@ SCALE-03/SCALE-04 的首批范围见[数据分布与 Hot Key Lab 计划](./data-
 | 事务调度与符号恢复 | DATA、REL-02/REL-05、Outbox/2PC | 独立 Lab 已有本地提交边界、临时/稳定状态及恢复；单行并发、2PC 与 redo/备份恢复均有独立实验；多行隔离、MVCC 和物理存储仍待补，与资源成本分开呈现 |
 | 运行证据、诊断与迁移阶段 | OPS、综合应用 | 复用历史和 Trace；补证据选择、分阶段决策、兼容性和复盘，不把诊断规则输出当因果证明 |
 
-统一目录、前置导航、尝试身份、保存和反馈；不同领域使用适合的模型与视图。[ExerciseDefinition](../../apps/web/src/features/practice/exercise-types.ts)继续服务容量仿真；算法和协议 Lab 复用 [LabContract](../../apps/web/src/features/practice/algorithm/contracts.ts) 与独立作用域保存，各自核验有界结果，不强迫状态模型伪装成拓扑节点。
+统一目录、前置导航、尝试身份、保存和反馈；不同领域使用适合的模型与视图。[ExerciseDefinition](../../apps/web/src/features/practice/exercise-types.ts)继续服务容量仿真；算法和协议 Lab 复用 [LabContract](../../apps/web/src/core/experiments/contracts.ts) 与独立作用域保存，各自核验有界结果，不强迫状态模型伪装成拓扑节点。
 
 教学反馈需要区分：本次设计是否满足所选条件、是否使用提示、能否说明证据、能否迁移到新条件。一次点击得到通过不等于掌握整个能力。完整课程编排、账号、付费和托管协作不属于本矩阵的实现范围。
 

@@ -1,9 +1,10 @@
-import { AlgorithmDatabase, LabRepository } from '../algorithm/repository'
-import { LabSession } from '../algorithm/session'
+import { AlgorithmDatabase, LabRepository } from './repository'
+import { LabSession } from './session'
 export interface ProtocolDraft<C, Cmd> { scenario: string; config: C; commands: Cmd[]; prediction: string; answers: Record<string, string>; reflection: string }
 export interface ProtocolVerdict { evidence: boolean; task: boolean; explanation: boolean; status: 'pass' | 'fail' | 'inconclusive'; messages: string[] }
 export interface ProtocolAttempt<C, Cmd, S> { id: string; exerciseId: string; exerciseVersion: 1; createdAt: number; draft: ProtocolDraft<C, Cmd>; result: S; evaluation: ProtocolVerdict }
-export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+import { same } from './equality'
+export { same } from './equality'
 export function createProtocolLesson<C, Cmd, S>(options: {
   id: string; initialConfig: () => C; scenarios: Record<string, string>; maxCommands: number
   parseConfig: (value: unknown) => C; parseCommand: (value: unknown) => Cmd; runModel: (config: C, commands: readonly Cmd[]) => S

@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AlgorithmDatabase } from '../algorithm/repository'
+import { AlgorithmDatabase } from '../../../core/experiments/repository'
 import { MessageRepository } from '../message-flow/session'
 import { SagaRepository, SagaSession } from './session'
 import { initialDraft, scenarioCommands } from './lesson'

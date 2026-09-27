@@ -168,7 +168,7 @@ Token 按 `(hash, nodeId, vnodeIndex)` 排成全序；同 hash 位置保留全�
 - [模型](../../apps/web/src/features/practice/hot-key/model.ts)生成并核验完整读取序列，执行顺序只读缓存；[证据视图](../../apps/web/src/features/practice/hot-key/hot-evidence.tsx)并列显示 key、请求和后端读取，以分页表覆盖所有 key 和请求，展示每次 expiry、hit/miss、fill、eviction 与原始采样值。
 - 节点的 `requests` 是按 key owner 归属的缓存前读取需求，`backendReads` 才是到达该 owner 的实际模型访问；缓存命中不能被解释成节点处理了一次读取。视图明确区分两者及统计分母。
 - [评分](../../apps/web/src/features/practice/hot-key/lesson.ts)分别核对证据、固定条件下的操作和解释；要求识别实际热门 key、读取次数、owner、后端次数及案例边界。错误初始预测不会阻止通过；自由文字只保存，不自动判理解正确。
-- 两个算法 Lab 复用[会话](../../apps/web/src/features/practice/algorithm/session.ts)与[保存实现](../../apps/web/src/features/practice/algorithm/repository.ts)，通过各自合同解析、运行和核验。原 `system-design-algorithm-labs` 数据库表结构与一致性哈希记录格式保持兼容；Hot Key 使用 `hot-key:v1` scope，原题使用 `consistent-hashing:v1`，不触碰 LocalHistory。
+- 两个算法 Lab 复用[会话](../../apps/web/src/core/experiments/session.ts)与[保存实现](../../apps/web/src/core/experiments/repository.ts)，通过各自合同解析、运行和核验。原 `system-design-algorithm-labs` 数据库表结构与一致性哈希记录格式保持兼容；Hot Key 使用 `hot-key:v1` scope，原题使用 `consistent-hashing:v1`，不触碰 LocalHistory。
 - [模型测试](../../apps/web/src/features/practice/hot-key/model.test.ts)使用独立数组 LRU 参考、逐条计数及反例；[评分测试](../../apps/web/src/features/practice/hot-key/lesson.test.ts)检查固定基线、完整证据、错误解释、迁移边界与最大输入；[保存测试](../../apps/web/src/features/practice/hot-key/session.test.ts)检查跨题/版本隔离、不可变尝试、撤销、恢复及写入失败；[浏览器测试](../../apps/web/tests/hot-key.spec.ts)覆盖完整三步、反例、明确的 4,096 keys / 20,000 reads 最大输入、窄屏、键盘与历史。
 
 ### 维护规则

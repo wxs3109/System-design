@@ -1,12 +1,12 @@
 import 'fake-indexeddb/auto'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AlgorithmDatabase } from '../algorithm/repository'
+import { AlgorithmDatabase } from '../../../core/experiments/repository'
 import { replicaLesson, quorumLesson, scenarioCommands as replicaCommands } from '../replication/lesson'
 import { lesson as raft, scenarioCommands as raftCommands } from '../raft/lesson'
 import { lesson as commit, scenarioCommands as commitCommands } from '../two-phase-commit/lesson'
 import { lesson as durability, scenarioCommands as durabilityCommands } from '../durability/lesson'
-import type { LabContract } from '../algorithm/contracts'
-import { LabRepository } from '../algorithm/repository'
+import type { LabContract } from '../../../core/experiments/contracts'
+import { LabRepository } from '../../../core/experiments/repository'
 const databases: AlgorithmDatabase[] = []
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(databases.splice(0).map((db) => db.delete())) })
 it('keeps all five new scopes separate and preserves executable evidence', async () => {

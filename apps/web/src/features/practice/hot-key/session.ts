@@ -1,5 +1,5 @@
-import { AlgorithmDatabase, LabRepository } from '../algorithm/repository'
-import { LabSession } from '../algorithm/session'
+import { AlgorithmDatabase, LabRepository } from '../../../core/experiments/repository'
+import { LabSession } from '../../../core/experiments/session'
 import { hotChallenge, parseHotDraft, runHotAttempt, verifyHotAttempt, type HotAttempt, type HotDraft } from './lesson'
 
 export const hotContract = { initial: hotChallenge, parseDraft: parseHotDraft, runAttempt: runHotAttempt, verifyAttempt: verifyHotAttempt }

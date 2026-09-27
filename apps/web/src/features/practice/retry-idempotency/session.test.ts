@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AlgorithmDatabase } from '../algorithm/repository'
+import { AlgorithmDatabase } from '../../../core/experiments/repository'
 import { AlgorithmRepository } from '../distribution/repository'
 import { initialDraft, runAttempt, scenarioCommands } from './lesson'
 import { RetryRepository, RetrySession } from './session'

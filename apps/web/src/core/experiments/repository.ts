@@ -1,12 +1,11 @@
 import Dexie, { type Table } from 'dexie'
-import type { AttemptIdentity, LabContract } from './contracts'
-import { same } from '../distribution/model'
+import type { AttemptIdentity, ExperimentRepository, LabContract } from './contracts'
+import { same } from './equality'
+import { LabStorageError } from './errors'
+export { LabStorageError } from './errors'
 
 const queues = new Map<string, Promise<unknown>>()
 export interface SavedSession { scope: string; version: 1; revision?: number; draft: unknown; activeAttemptId: string | null }
-export class LabStorageError extends Error {
-  constructor(readonly kind: 'load' | 'conflict', message: string) { super(message); this.name = 'LabStorageError' }
-}
 function storedRevision(session: SavedSession | undefined): number {
   if (session && session.version !== 1) throw new LabStorageError('load', '保存的会话版本未知，无法恢复；已有记录仍保留。')
   const revision = session?.revision ?? 0
@@ -27,7 +26,7 @@ export class AlgorithmDatabase extends Dexie {
     })
   }
 }
-export class LabRepository<D, A extends AttemptIdentity> {
+export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRepository<D, A> {
   private expectedRevision: number | undefined
   private loadFailed = false
   private legacySnapshot: string | undefined

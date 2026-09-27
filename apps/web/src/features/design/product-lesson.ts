@@ -1,4 +1,4 @@
-import { createProtocolLesson } from '../practice/protocol/lesson'
+import { createProtocolLesson } from '../../core/experiments/protocol-lesson'
 import type { DesignConfig, ProductDesign } from './product-types'
 
 export const PRODUCT_COMMAND_LIMIT = 120

@@ -1,5 +1,5 @@
-import { AlgorithmDatabase, LabRepository } from '../algorithm/repository'
-import { LabSession } from '../algorithm/session'
+import { AlgorithmDatabase, LabRepository } from '../../../core/experiments/repository'
+import { LabSession } from '../../../core/experiments/session'
 import { initialDraft, parseDraft, runAttempt, verifyAttempt, type Attempt, type Draft, type LabId } from './lesson'
 
 export class MessageRepository extends LabRepository<Draft, Attempt> {

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import type { AttemptIdentity } from './contracts'
-import type { LabSession, LabSessionState } from './session'
+import type { AttemptIdentity } from '../../core/experiments/contracts'
+import type { LabSession, LabSessionState } from '../../core/experiments/session'
 
 export function storageLabel(state: { storage: 'loading' | 'saving' | 'saved' | 'error'; errorKind: 'load' | 'save' | 'conflict' | null }, saved = '当前操作已保存') {
   if (state.storage === 'error' && state.errorKind === 'load') return '读取失败 · 原记录已保留'

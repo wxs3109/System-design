@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { afterEach, expect, it, vi } from 'vitest'
-import { AlgorithmDatabase } from './repository'
+import { AlgorithmDatabase } from '../../../core/experiments/repository'
 import { ConcurrentRepository, ConcurrentSession } from '../concurrent-update/session'
 import { initialDraft, runAttempt } from '../concurrent-update/lesson'
 const databases: Dexie[] = []
