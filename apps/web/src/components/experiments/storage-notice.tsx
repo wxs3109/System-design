@@ -1,7 +1,12 @@
 'use client'
 import { useState } from 'react'
-import type { AttemptIdentity } from '../../core/experiments/contracts'
-import type { LabSession, LabSessionState } from '../../core/experiments/session'
+export interface PersistenceRecovery {
+  load(): Promise<unknown>
+  reload(): Promise<unknown>
+  save(): Promise<unknown>
+  recoverySnapshot(): { scope: string }
+}
+export interface PersistenceNoticeState { error: string; errorKind: 'load' | 'save' | 'conflict' | null; retained: readonly unknown[] }
 
 export function storageLabel(state: { storage: 'loading' | 'saving' | 'saved' | 'error'; errorKind: 'load' | 'save' | 'conflict' | null }, saved = '当前操作已保存') {
   if (state.storage === 'error' && state.errorKind === 'load') return '读取失败 · 原记录已保留'
@@ -9,7 +14,7 @@ export function storageLabel(state: { storage: 'loading' | 'saving' | 'saved' | 
   return ({ loading: '正在恢复…', saving: '正在保存…', saved, error: '未保存 · 结果暂留内存' })[state.storage]
 }
 
-export function StorageNotice<D, A extends AttemptIdentity & { draft: D }>({ state, session, className, saveLabel }: { state: LabSessionState<D, A>; session: LabSession<D, A>; className?: string | undefined; saveLabel: string }) {
+export function StorageNotice({ state, session, className, saveLabel }: { state: PersistenceNoticeState; session: PersistenceRecovery; className?: string | undefined; saveLabel: string }) {
   const [exportError, setExportError] = useState('')
   if (!state.error && !state.retained.length) return null
   const exportLocal = () => {

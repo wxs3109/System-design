@@ -1,7 +1,9 @@
 'use client'
 import Link from 'next/link'
 import { StorageNotice, storageLabel } from '../../../components/experiments/storage-notice'
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { ModelPreview } from '../../../core/experiments/execution'
+import { useExperiment } from '../../../components/experiments/use-experiment'
 import type { LabSession } from '../../../core/experiments/session'
 import { LabConceptLinks } from '../../learning/lab-concept-links'
 import styles from '../retry-idempotency/retry-lab.module.css'
@@ -24,21 +26,20 @@ const answerKey = <C, Cmd,>(d: ExperimentDraft<C, Cmd>) => JSON.stringify(Object
 
 /** Shared learning/session UI. Execution and grading remain owned by each lab's contract. */
 export function ProtocolExperiment<C, Cmd, D extends ExperimentDraft<C, Cmd>, S, A extends ExperimentAttempt<D>>(props: Props<C, Cmd, D, S, A>) {
-  const [session] = useState(props.createSession)
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  const { session, state } = useExperiment(props.createSession)
   const { draft: d } = state
   const { runModel } = props
   const [error, setError] = useState('')
   const [comparison, setComparison] = useState<{ key: string; result: Comparison } | null>(null)
-  const frame = useMemo(() => { try { return { result: runModel(d.config, d.commands), error: '' } } catch (e) { return { result: null, error: e instanceof Error ? e.message : '实验状态无法恢复。' } } }, [runModel, d.config, d.commands])
+  const preview = useMemo(() => new ModelPreview((input: { config: C; commands: readonly Cmd[] }) => runModel(input.config, input.commands)), [runModel])
+  const frame = useMemo(() => { try { return { result: preview.read({ config: d.config, commands: d.commands }), error: '' } } catch (e) { return { result: null, error: e instanceof Error ? e.message : '实验状态无法恢复。' } } }, [preview, d.config, d.commands])
   const guide = props.guide(d)
   const next = JSON.stringify(d.commands) === JSON.stringify(guide.slice(0, d.commands.length)) ? guide[d.commands.length] : undefined
   const completed = state.attempts.find((a) => a.id === state.activeAttemptId)
   const stale = !!completed && executionKey(completed.draft) !== executionKey(d)
   const changedAnswers = !!completed && answerKey(completed.draft) !== answerKey(d)
   const finished = new Set(state.attempts.filter((a) => a.evaluation.task && a.evaluation.explanation && a.draft.scenario !== 'manual').map((a) => a.draft.scenario))
-  const edit = (value: D) => { try { props.runModel(value.config, value.commands); session.edit(value); setError('') } catch (e) { setError(e instanceof Error ? e.message : '操作无效。') } }
+  const edit = (value: D) => { try { preview.read({ config: value.config, commands: value.commands }); session.edit(value); setError('') } catch (e) { setError(e instanceof Error ? e.message : '操作无效。') } }
   const act = (command: Cmd) => edit({ ...d, commands: [...d.commands, command] })
   const disabled = !state.ready || frame.result === null || d.commands.length >= props.maxCommands
   const compare = () => { try { setComparison({ key: JSON.stringify([d.scenario, d.config]), result: props.compare(d) }); setError('') } catch (e) { setError(e instanceof Error ? e.message : '无法比较。') } }

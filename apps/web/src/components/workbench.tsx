@@ -28,6 +28,7 @@ import { projectToEdges, projectToNodes, redoProject, undoProject, type ProjectN
 import { WorkbenchStoreProvider, useCanRedo, useCanUndo, useWorkbenchStore, useWorkbenchStoreApi } from '@/lib/workbench-store-provider'
 import { createWorkbenchSession, type CompletedWorkbenchRun, type WorkbenchSession } from '@/lib/workbench-session'
 import { useWorkbenchSession } from '@/lib/use-workbench-session'
+import { StorageNotice } from './experiments/storage-notice'
 import { localizedValue, useI18n, type Translate } from '@/lib/i18n'
 import { layoutTopology, type CanvasNodeDimensions } from '@/lib/canvas-layout'
 import { buildCanvasMetricProjection, formatCanvasBytes, formatCanvasCount, type CanvasEdgeMetric } from '@/lib/canvas-metrics'
@@ -420,7 +421,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
   const [clipboardNode, setClipboardNode] = useState<ProjectNode | null>(null)
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
   const [resultsView, setResultsView] = useState<'run' | 'compare'>('run')
-  const { ready: historyReady, progress, revisions, runs, refreshHistory, run } = useWorkbenchSession(session, (completed) => {
+  const { ready: historyReady, progress, revisions, runs, refreshHistory, run, storage, recovery } = useWorkbenchSession(session, (completed) => {
     setResultsView('run')
     onRunCompleted?.(completed)
   })
@@ -501,6 +502,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!historyReady) return
       if (!(event.target instanceof Node) || !workbenchRef.current?.contains(event.target)) return
       if (event.key === 'Escape') setContextMenu(null)
       if (!(event.ctrlKey || event.metaKey) || event.altKey || running) return
@@ -511,7 +513,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [canRedo, canUndo, running, store])
+  }, [canRedo, canUndo, running, store, historyReady])
 
   const addCatalogAtCenter = useCallback((selection: CatalogSelection) => {
     const viewport = reactFlow.getViewport()
@@ -705,7 +707,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
         <ReactFlow className={workspaceView === 'definitions' ? 'is-definitions-mode' : ''}
           nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={handleNodesChange} onEdgesChange={onEdgesChange}
           onConnect={onConnect} onNodeClick={(_, node) => { closeContextMenu(); selectNode(node.id) }} onNodeContextMenu={openNodeContextMenu} onEdgeClick={(_, edge) => { closeContextMenu(); selectEdge(edge.id) }} onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)} onEdgeMouseLeave={() => setHoveredEdgeId(null)} onPaneClick={() => { closeContextMenu(); selectNode(null); selectEdge(null); selectFault(null) }} onPaneContextMenu={openPaneContextMenu} onMoveStart={() => { closeContextMenu(); setHoveredEdgeId(null) }}
-          deleteKeyCode={["Backspace", "Delete"]} fitView={!embedded} minZoom={0.2} maxZoom={2}
+          deleteKeyCode={historyReady ? ["Backspace", "Delete"] : null} nodesDraggable={historyReady} nodesConnectable={historyReady} elementsSelectable={historyReady} fitView={!embedded} minZoom={0.2} maxZoom={2}
           defaultEdgeOptions={{ type: 'smoothstep', animated: true }} proOptions={{ hideAttribution: false }}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
@@ -764,6 +766,8 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
         const target = event.target
         if (target instanceof Element && !target.closest('input, textarea, select, button, a, [contenteditable="true"]')) workbenchRef.current?.focus({ preventScroll: true })
       }}>
+      {storage.error || storage.retained.length ? <div className="workbench-storage-banner"><StorageNotice state={storage} session={recovery} saveLabel="重试保存工作台" /></div> : null}
+      <div style={{ display: 'contents' }} inert={!historyReady} data-testid="workbench-editing-surface">
       <header className="topbar">
         {embedded ? <>
           <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>{t('Topology')}</strong><span>{t('Local simulation')}</span></div></div>
@@ -810,6 +814,7 @@ function WorkbenchInner({ session, onRunCompleted, embedded = false, sidebar, de
         layoutId={session.id === 'active' ? 'system-design' : `system-design:${session.id}`}
       />
       {formatDialog ? <FormatDialog kind={formatDialog} selection={selectedDefinition} onClose={() => setFormatDialog(null)} onSelectionChange={setSelectedDefinition} /> : null}
+      </div>
     </main>
   )
 }

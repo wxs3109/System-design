@@ -2,11 +2,12 @@ import { componentPresetRegistry, componentRegistry } from '@system-design/compo
 import type { ProjectFile, SimulationProgress, SimulationResult } from '@system-design/model'
 import { validateScenarioForSimulation } from '@system-design/simulation'
 import { SimulationWorkerClient } from '@system-design/simulation/client'
-import { getLocalHistoryRepository, type LocalHistoryRepository } from './local-history'
+import { createLocalHistoryRepository, type LocalHistoryRepository } from './local-history'
+import { ExecutionCoordinator } from '../core/experiments/execution'
 import { createWorkbenchStore } from './store'
 
 export type WorkbenchHistory = Pick<LocalHistoryRepository,
-  'saveProjectRevision' | 'loadActiveProject' | 'listProjectRevisions' | 'loadProjectRevision' | 'saveSimulationRun' | 'listSimulationRuns'>
+  'saveProjectRevision' | 'loadActiveProject' | 'listProjectRevisions' | 'loadProjectRevision' | 'saveSimulationRun' | 'listSimulationRuns'> & Partial<Pick<LocalHistoryRepository, 'recoveryData' | 'retainedRecords'>>
 
 export interface CompletedWorkbenchRun {
   project: ProjectFile
@@ -37,7 +38,8 @@ export class WorkbenchSession {
   private readonly historyOverride: WorkbenchHistory | null | undefined
   private readonly createRunner: () => WorkbenchRunner
   private runner: WorkbenchRunner | null = null
-  private generation = 0
+  private readonly execution = new ExecutionCoordinator()
+  private defaultHistory: WorkbenchHistory | undefined
 
   constructor(options: WorkbenchSessionOptions) {
     if (!options.id.trim()) throw new Error('A workbench session needs an ID.')
@@ -50,7 +52,7 @@ export class WorkbenchSession {
   }
 
   get history(): WorkbenchHistory | null {
-    return this.historyOverride === undefined ? getLocalHistoryRepository(this.id) : this.historyOverride
+    return this.historyOverride === undefined ? this.defaultHistory ??= createLocalHistoryRepository(this.id) : this.historyOverride
   }
 
   reset() {
@@ -59,7 +61,7 @@ export class WorkbenchSession {
   }
 
   cancel() {
-    this.generation += 1
+    this.execution.cancel()
     this.runner?.cancelActive()
     this.store.getState().setRunning(false)
   }
@@ -73,7 +75,6 @@ export class WorkbenchSession {
 
   async run(onProgress?: (progress: SimulationProgress) => void): Promise<CompletedWorkbenchRun | undefined> {
     this.cancel()
-    const generation = this.generation
     const state = this.store.getState()
     let project: ProjectFile
     try {
@@ -85,12 +86,13 @@ export class WorkbenchSession {
       return undefined
     }
     const fingerprint = JSON.stringify(project)
-    const isCurrent = () => generation === this.generation && JSON.stringify(this.store.getState().project) === fingerprint
+    const lease = this.execution.begin(() => JSON.stringify(this.store.getState().project) === fingerprint)
+    const isCurrent = lease.isCurrent
     state.setRunning(true)
     state.setError(null)
     state.setResult(null)
     const unsubscribe = this.store.subscribe((current, previous) => {
-      if (generation === this.generation && current.project !== previous.project && !isCurrent()) this.cancel()
+      if (!lease.signal.aborted && current.project !== previous.project && !isCurrent()) this.cancel()
     })
     try {
       this.runner ??= this.createRunner()
@@ -111,13 +113,14 @@ export class WorkbenchSession {
       }
       return isCurrent() ? completed : undefined
     } catch (cause) {
-      if (generation === this.generation && !(cause instanceof DOMException && cause.name === 'AbortError')) {
+      if (isCurrent() && !(cause instanceof DOMException && cause.name === 'AbortError')) {
         this.store.getState().setError(cause instanceof Error ? cause.message : 'Simulation failed.')
       }
       return undefined
     } finally {
       unsubscribe()
-      if (generation === this.generation) this.store.getState().setRunning(false)
+      if (lease.owns()) this.store.getState().setRunning(false)
+      lease.finish()
     }
   }
 }

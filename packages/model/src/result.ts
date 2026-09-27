@@ -64,6 +64,8 @@ export interface ActionMetrics {
 }
 
 export interface SimulationResult {
+  /** Compatibility version of the shared engine's execution semantics; absent on legacy v1 runs. */
+  engineVersion?: number
   /** Canonical input identity for evidence freshness; older saved runs may omit it. */
   inputSignature?: string
   runId: string

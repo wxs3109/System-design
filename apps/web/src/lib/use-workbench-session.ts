@@ -1,86 +1,107 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { SimulationProgress } from '@system-design/model'
+import type { ProjectFile, SimulationProgress } from '@system-design/model'
 import type { ProjectRevisionRecord, SimulationRunRecord } from './local-history'
 import type { CompletedWorkbenchRun, WorkbenchSession } from './workbench-session'
 import { useWorkbenchStore } from './workbench-store-provider'
+import { LabStorageError } from '../core/experiments/errors'
 
 export function useWorkbenchSession(session: WorkbenchSession, onCompleted?: (run: CompletedWorkbenchRun) => void) {
-  const project = useWorkbenchStore((state) => state.project)
-  const setError = useWorkbenchStore((state) => state.setError)
+  const project = useWorkbenchStore(state => state.project)
+  const setError = useWorkbenchStore(state => state.setError)
   const [ready, setReady] = useState(false)
+  const [storage, setStorage] = useState<{ error: string; errorKind: 'load' | 'save' | 'conflict' | null; retained: unknown[] }>({ error: '', errorKind: null, retained: [] })
   const [progress, setProgress] = useState<SimulationProgress | null>(null)
   const [revisions, setRevisions] = useState<ProjectRevisionRecord[]>([])
   const [runs, setRuns] = useState<SimulationRunRecord[]>([])
-  const mounted = useRef(false)
-  const lifecycle = useRef(0)
-  const readyRef = useRef(false)
+  const mounted = useRef(false); const lifecycle = useRef(0); const readyRef = useRef(false)
+  const readGeneration = useRef(0); const saveGeneration = useRef(0)
+  const persistedFingerprint = useRef<string | null>(null)
   const completionRef = useRef(onCompleted)
   useEffect(() => { completionRef.current = onCompleted }, [onCompleted])
+  const invalidate = useCallback(() => { lifecycle.current++; readGeneration.current++; saveGeneration.current++ }, [])
 
   const refreshHistory = useCallback(async (projectId: string) => {
-    const currentLifecycle = lifecycle.current
-    const history = session.history
+    const token = lifecycle.current; const history = session.history
     if (!history) return
     const [savedRevisions, savedRuns] = await Promise.all([history.listProjectRevisions(projectId), history.listSimulationRuns(projectId)])
-    if (mounted.current && currentLifecycle === lifecycle.current && session.store.getState().project.id === projectId) {
-      setRevisions(savedRevisions)
-      setRuns(savedRuns)
-    }
+    if (mounted.current && token === lifecycle.current && session.store.getState().project.id === projectId) { setRevisions(savedRevisions); setRuns(savedRuns); setStorage(current => ({ ...current, retained: history.retainedRecords?.() ?? [] })) }
   }, [session])
 
-  useEffect(() => {
-    let active = true
-    mounted.current = true
-    lifecycle.current += 1
-    readyRef.current = false
+  const restore = useCallback(async () => {
+    const token = ++readGeneration.current; saveGeneration.current++
+    readyRef.current = false; setReady(false); session.cancel()
+    setStorage({ error: '', errorKind: null, retained: [] })
     const initial = session.store.getState().project
-    void (async () => {
-      try {
-        const history = session.history
-        const saved = session.restoreOnMount ? await history?.loadActiveProject() : undefined
-        if (!active) return
-        if (saved && session.store.getState().project === initial) session.store.getState().restoreProject(saved.project)
-        await refreshHistory(session.store.getState().project.id)
-      } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Could not restore local project.')
-      } finally {
-        if (active) { readyRef.current = true; setReady(true) }
-      }
-    })()
-    return () => {
-      active = false
-      mounted.current = false
-      lifecycle.current += 1
-      if (readyRef.current) {
-        // Flush the last edit on navigation, even inside the autosave debounce.
-        void session.history?.saveProjectRevision(session.store.getState().project).catch(() => { /* The closed view cannot report a save error. */ })
-      }
-      readyRef.current = false
-      session.dispose()
+    try {
+      const saved = await session.history?.loadActiveProject()
+      if (!mounted.current || token !== readGeneration.current) return
+      if (saved && session.restoreOnMount && session.store.getState().project === initial) session.store.getState().restoreProject(saved.project)
+      await refreshHistory(session.store.getState().project.id)
+      if (!mounted.current || token !== readGeneration.current) return
+      persistedFingerprint.current = saved ? JSON.stringify(session.restoreOnMount ? session.store.getState().project : saved.project) : null
+      readyRef.current = true; setReady(true)
+    } catch (cause) {
+      if (mounted.current && token === readGeneration.current) setStorage({ error: cause instanceof Error ? cause.message : '无法读取原工作台。', errorKind: 'load', retained: [] })
     }
-  }, [session, refreshHistory, setError])
+  }, [session, refreshHistory])
+
+  const save = useCallback(async (snapshot?: ProjectFile) => {
+    if (!readyRef.current) return
+    const history = session.history
+    if (!history) return
+    const input = structuredClone(snapshot ?? session.store.getState().project)
+    const token = ++saveGeneration.current; const life = lifecycle.current
+    try {
+      await history.saveProjectRevision(input)
+      if (!mounted.current || life !== lifecycle.current || token !== saveGeneration.current) return
+      persistedFingerprint.current = JSON.stringify(input)
+      setStorage({ error: '', errorKind: null, retained: [] })
+      await refreshHistory(session.store.getState().project.id)
+    } catch (cause) {
+      if (!mounted.current || life !== lifecycle.current || token !== saveGeneration.current) return
+      const kind = cause instanceof LabStorageError ? cause.kind : 'save'
+      if (kind !== 'save') { readyRef.current = false; setReady(false); session.cancel() }
+      setStorage({ error: cause instanceof Error ? cause.message : '无法保存工作台，本页修改仍保留。', errorKind: kind, retained: [] })
+    }
+  }, [session, refreshHistory])
 
   useEffect(() => {
-    if (!ready || !session.history) return
-    const timer = window.setTimeout(() => {
-      void session.history?.saveProjectRevision(project).then(() => refreshHistory(project.id))
-        .catch((cause) => { if (mounted.current) setError(cause instanceof Error ? `Could not save local revision: ${cause.message}` : 'Could not save local revision.') })
-    }, 350)
+    mounted.current = true; lifecycle.current++
+    const life = lifecycle.current
+    void Promise.resolve().then(() => { if (mounted.current && life === lifecycle.current) return restore() })
+    return () => {
+      mounted.current = false; invalidate()
+      if (readyRef.current) {
+        const current = session.store.getState().project
+        if (JSON.stringify(current) !== persistedFingerprint.current) void session.history?.saveProjectRevision(current).catch(() => { /* Original data remains protected by the storage transaction. */ })
+      }
+      readyRef.current = false; session.dispose()
+    }
+  }, [session, restore, invalidate])
+
+  useEffect(() => {
+    if (!ready || !session.history || JSON.stringify(project) === persistedFingerprint.current) return
+    const timer = window.setTimeout(() => { void save(project) }, 350)
     return () => window.clearTimeout(timer)
-  }, [ready, project, session, refreshHistory, setError])
+  }, [ready, project, session, save])
 
   const run = useCallback(async () => {
-    const currentLifecycle = lifecycle.current
+    if (!readyRef.current) return
+    const token = lifecycle.current
     setProgress(null)
-    const completed = await session.run((next) => { if (mounted.current) setProgress(next) })
-    if (!completed || !mounted.current || currentLifecycle !== lifecycle.current) return
+    const completed = await session.run(next => { if (mounted.current && token === lifecycle.current) setProgress(next) })
+    if (!completed || !mounted.current || token !== lifecycle.current || !readyRef.current) return
     if (completed.persistenceError) setError(`Simulation completed, but saving failed: ${completed.persistenceError}`)
     completionRef.current?.(completed)
     try { await refreshHistory(completed.project.id) }
     catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : 'Could not refresh run history.') }
   }, [session, refreshHistory, setError])
 
-  return { ready, progress, revisions, runs, refreshHistory, run }
+  const recovery = {
+    load: restore, reload: restore, save: () => save(),
+    recoverySnapshot: () => structuredClone({ format: 'system-design-workbench-recovery', version: 1, scope: session.id, capturedAt: new Date().toISOString(), project: session.store.getState().project, result: session.store.getState().result, revisions, runs, persistedSource: session.history?.recoveryData?.() ?? null }),
+  }
+  return { ready, progress, revisions, runs, refreshHistory, run, storage, recovery }
 }

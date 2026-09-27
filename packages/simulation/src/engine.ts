@@ -38,7 +38,7 @@ export const runSimulation = async (input: unknown, runId: string = crypto.rando
   )
   await executeSimulation(simulation)
   simulation.eventSink.flush()
-  return { ...buildSimulationResult(simulation, scenario, runId, performance.now() - startedAt), inputSignature }
+  return { ...buildSimulationResult(simulation, scenario, runId, performance.now() - startedAt), inputSignature, engineVersion: simulationEngineInfo.version }
 }
 
 export const simulationEngineInfo = { scheduler: 'SimScript', version: 1, seedHash: seedToInteger } as const

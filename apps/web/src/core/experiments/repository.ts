@@ -47,7 +47,8 @@ export class LabRepository<D, A extends AttemptIdentity> implements ExperimentRe
       return { current, legacy: current ? undefined : await this.database.sessions.get(this.scope), rows: await this.database.attempts.where('scope').equals(this.scope).toArray() }
     })
     const session = current ?? legacy
-    this.sourceSnapshot = structuredClone({ session: session ?? null, attempts: rows })
+    // IndexedDB already detached these values. Clone only when exporting recovery data.
+    this.sourceSnapshot = { session: session ?? null, attempts: rows }
     storedRevision(session)
     if (session && (session.activeAttemptId !== null && session.activeAttemptId !== undefined && typeof session.activeAttemptId !== 'string' || session.versions !== undefined && !validVersions(session.versions))) throw new LabStorageError('load', '记录身份或版本信息无效，原记录已保留。')
     const sourceVersion = session?.draftVersion ?? 1; const targetVersion = this.contract.draftVersion ?? 1

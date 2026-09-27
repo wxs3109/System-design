@@ -1,22 +1,23 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
+import { ModelPreview } from '../../core/experiments/execution'
+import { useExperiment } from '../../components/experiments/use-experiment'
 import { getProductDesign } from './product-catalog'
 import { PRODUCT_COMMAND_LIMIT, productLesson, productFeedback, compatibleProductAttempt, isCurrentProductAttempt } from './product-lesson'
 import { DesignNotebook } from './notebook'
 import { Diagram } from './product-diagram'
 import { StorageNotice, storageLabel } from '../../components/experiments/storage-notice'
-import type { ProductDesign } from './product-types'
+import type { DesignConfig, ProductDesign } from './product-types'
 import styles from './product.module.css'
 
 function Studio({ design }: { design: ProductDesign }) {
   const [lesson] = useState(() => productLesson(design))
-  const [session] = useState(() => lesson.session())
-  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  useEffect(() => { void session.load() }, [session])
+  const { session, state } = useExperiment(() => lesson.session())
   const draft = state.draft
-  const result = useMemo(() => design.run(draft.config, draft.commands), [design, draft.config, draft.commands])
+  const preview = useMemo(() => new ModelPreview((input: { config: DesignConfig; commands: readonly string[] }) => design.run(input.config, input.commands)), [design])
+  const result = preview.read({ config: draft.config, commands: draft.commands })
   const view = useMemo(() => design.present(result), [design, result])
   const scenario = design.scenarios.find((s) => s.id === draft.scenario)
   const attempt = state.attempts.find((a) => a.id === state.activeAttemptId)
@@ -24,7 +25,7 @@ function Studio({ design }: { design: ProductDesign }) {
   const [action, setAction] = useState(Object.keys(design.actions)[0]!)
   const [error, setError] = useState('')
   const [comparison, setComparison] = useState<{ scenario: string; rows: { title: string; values: number[]; passed: boolean }[] } | null>(null)
-  const edit = (next: typeof draft) => { try { lesson.parseDraft(next); design.run(next.config, next.commands); session.edit(next); setError('') } catch (e) { setError(e instanceof Error ? e.message : '操作无法执行。') } }
+  const edit = (next: typeof draft) => { try { lesson.parseDraft(next); preview.read({ config: next.config, commands: next.commands }); session.edit(next); setError('') } catch (e) { setError(e instanceof Error ? e.message : '操作无法执行。') } }
   const act = (command: string) => edit({ ...draft, commands: [...draft.commands, command] })
   const next = scenario && JSON.stringify(draft.commands) === JSON.stringify(scenario.script.slice(0, draft.commands.length)) ? scenario.script[draft.commands.length] : undefined
   const verified = new Set(state.attempts.filter((a) => a.evaluation.task && compatibleProductAttempt(design, a)).map((a) => a.draft.scenario))
