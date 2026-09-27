@@ -5,9 +5,9 @@ import { concepts, caseContexts } from '../features/learning/catalog'
 
 describe('single experiment publication registry', () => {
   it('publishes all existing routes, case links and declared capabilities from one registration', () => {
-    expect(experiments.entries).toHaveLength(24)
+    expect(experiments.entries).toHaveLength(25)
     expect(experiments.entries.filter(e => e.caseId)).toHaveLength(6)
-    expect(new Set(experiments.entries.map(e => e.metadata.id)).size).toBe(24)
+    expect(new Set(experiments.entries.map(e => e.metadata.id)).size).toBe(25)
     for (const entry of experiments.entries) {
       expect(experiments.get(entry.metadata.id)).toBe(entry)
       expect(entry.definition.title).toBe(entry.metadata.title)

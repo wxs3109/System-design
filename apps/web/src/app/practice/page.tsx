@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, FlaskConical } from 'lucide-react'
 import { practiceCatalog } from '@/features/practice/catalog'
 import { LearningNav } from '@/features/learning/learning-nav'
+import { foundationPath } from '@/features/learning/foundation-catalog'
 import { designExercises } from '@/features/design/catalog'
 import { productDesigns } from '@/features/design/product-catalog'
 import styles from '@/features/practice/practice.module.css'
@@ -15,6 +16,7 @@ export default function PracticePage() {
       <span className={styles.eyebrow}><FlaskConical size={15} />练习 · 观察 · 解释</span>
       <h1>系统设计练习</h1>
       <p>先预测，再运行。用一个可以亲手调整的实验，弄清设计为什么有效。</p>
+      <p><Link className={styles.knowledgeEntry} href={`/learn?path=${foundationPath.id}`}>从基础设计决策开始：目标、资源、数据与状态 <ArrowRight size={15} /></Link></p>
       <p><Link className={styles.knowledgeEntry} href="/learn">先理解原理：浏览基础知识与学习路径 <ArrowRight size={15} /></Link></p>
       <div className={styles.journey}><span>01 读取约束</span><ArrowRight size={14} /><span>02 调整设计</span><ArrowRight size={14} /><span>03 用证据复盘</span></div>
     </section>

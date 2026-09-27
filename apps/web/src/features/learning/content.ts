@@ -3,9 +3,14 @@ import { fundamentals } from './content/fundamentals'
 import { reliableExecution } from './content/reliable-execution'
 import { coordination } from './content/coordination'
 import { workflowsRecovery } from './content/workflows-recovery'
+import { designFoundations } from './content/design-foundations'
 
-export const conceptBodies: Readonly<Record<string, ConceptBody>> = { ...fundamentals, ...reliableExecution, ...coordination, ...workflowsRecovery }
+export const conceptBodies: Readonly<Record<string, ConceptBody>> = { ...designFoundations, ...fundamentals, ...reliableExecution, ...coordination, ...workflowsRecovery }
 export const readingSources: Readonly<Record<string, { title: string; url: string }>> = {
+  slo: { title: 'Google SRE · Service Level Objectives', url: 'https://sre.google/sre-book/service-level-objectives/' },
+  ddia: { title: 'Designing Data-Intensive Applications · Fundamental ideas and trade-offs', url: 'https://dataintensive.net/' },
+  indexes: { title: 'PostgreSQL · Introduction to indexes', url: 'https://www.postgresql.org/docs/current/indexes-intro.html' },
+  stateless: { title: 'AWS Well-Architected · Make systems stateless where possible', url: 'https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_mitigate_interaction_failure_stateless.html' },
   idempotency: { title: 'AWS Builders’ Library · Making retries safe with idempotent APIs', url: 'https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/' },
   retries: { title: 'AWS Builders’ Library · Timeouts, retries, and backoff with jitter', url: 'https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/' },
   acknowledgements: { title: 'RabbitMQ · Consumer acknowledgements and publisher confirms', url: 'https://www.rabbitmq.com/docs/confirms' },

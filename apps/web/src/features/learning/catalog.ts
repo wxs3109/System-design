@@ -1,6 +1,8 @@
 import type { Concept, ConceptGroup, LearningPath } from './types'
+import { foundationConcepts, foundationPath } from './foundation-catalog'
 
 export const conceptGroups: readonly ConceptGroup[] = [
+  { id: 'foundations', title: '基础设计决策', question: '先理解目标、资源、数据与状态，再选择机制。' },
   { id: 'failure', title: '故障与正确性', question: '我们知道发生了什么，怎样判断成功？' },
   { id: 'capacity', title: '容量、分布与过载', question: '工作为什么积压，压力落在哪里？' },
   { id: 'requests', title: '请求可靠性', question: '没有收到结果，重试会不会重复做事？' },
@@ -14,6 +16,7 @@ export const conceptGroups: readonly ConceptGroup[] = [
 
 const concept = (id: string, groupId: string, title: string, aliases: string[], question: string, summary: string, prerequisiteIds: string[], capabilityIds: string[], labIds: string[] = [], caseIds: string[] = ['CASE-08']): Concept => ({ id, groupId, title, aliases, question, summary, prerequisiteIds, capabilityIds, labIds, caseIds })
 export const concepts: readonly Concept[] = [
+  ...foundationConcepts,
   concept('partial-failure', 'failure', '局部失败与结果未知', ['Partial failure', '网络分区', '暂停', '崩溃'], '没有响应，能断定对方没有执行吗？', '把观察到的超时与实际发生的故障分开。', [], ['REQ-01', 'COORD-01'], ['retry-idempotency']),
   concept('success-boundaries', 'failure', '成功边界与业务不变量', ['Safety', 'Liveness', '进展', '可观测性'], '请求被接收，等于业务完成了吗？', '明确接收、持久化、处理和可见性各自的含义。', ['partial-failure'], ['REQ-02', 'API-01', 'OPS-01'], ['retry-idempotency', 'concurrent-update', 'overload', 'two-phase-commit']),
   concept('capacity-and-queues', 'capacity', '容量、排队与瓶颈', ['Concurrency', '并发', 'Throughput', 'Latency', '吞吐'], '多加 API 副本，为什么延迟可能不变？', '从到达、处理与排队理解端到端瓶颈。', ['success-boundaries'], ['PERF-01', 'PERF-02'], ['service-queue-replicas', 'database-bottleneck', 'overload'], ['CASE-01', 'CASE-08']),
@@ -56,6 +59,7 @@ export const caseContexts = [
 export const plannedLabs: readonly { id: string; title: string; conceptIds: readonly string[] }[] = []
 
 export const learningPaths: readonly LearningPath[] = [
+  foundationPath,
   { id: 'failure-recovery', title: '故障与恢复', description: '用视频任务串起结果未知、消息重投、持有权与补偿。六个故障恢复 Lab 已可操作：超时与幂等、ACK/Checkpoint、Outbox、Heartbeat、Lease/Fencing 与 Saga。', steps: [
     { question: '没有响应，任务创建了吗？', conceptIds: ['partial-failure', 'success-boundaries', 'timeouts-retries', 'transactions', 'idempotency'] },
     { question: 'Worker 崩溃，从哪里继续？', conceptIds: ['acknowledgements', 'checkpoints', 'dead-letter'] },

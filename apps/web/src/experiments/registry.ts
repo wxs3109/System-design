@@ -1,6 +1,6 @@
 /** Application composition root. Client renderers import leaf definitions, never this catalog. */
 import { createElement, type ComponentType } from 'react'
-import { experimentRegistry, type ExperimentKind, type RegisteredExperiment } from '../core/experiments/registry'
+import { experimentRegistry, type ExperimentCapabilities, type ExperimentKind, type RegisteredExperiment } from '../core/experiments/registry'
 import { exercises } from '../features/practice/exercises'
 import { hashingExercise } from '../features/practice/distribution/lesson'
 import { hotKeyExercise } from '../features/practice/hot-key/lesson'
@@ -20,21 +20,23 @@ import { objectStorageDesign } from '../features/design/object-storage'
 import { mapsDesign } from '../features/design/maps'
 import { dispatchDesign } from '../features/design/dispatch'
 import { cloudDriveDesign } from '../features/design/cloud-drive'
+import { exercise as qualityGoalsExercise } from '../features/practice/quality-goals/lesson'
 
 export type ExperimentRenderer = ComponentType<{ exerciseId: string }>
 interface CardSource { id: string; title: string; summary: string; category: string; difficulty: string; estimatedMinutes: number; version?: number; versions?: { definition: number }; flow?: readonly string[] }
-function register<D extends CardSource, K extends ExperimentKind>(definition: D, kind: K, loadRenderer: () => Promise<ExperimentRenderer>, caseInfo?: { caseId: string; scope: string }, execution: 'worker' | 'local' = kind === 'simulation' || kind === 'design' ? 'worker' : 'local') {
+function register<D extends CardSource, K extends ExperimentKind>(definition: D, kind: K, loadRenderer: () => Promise<ExperimentRenderer>, caseInfo?: { caseId: string; scope: string }, capabilities: Partial<ExperimentCapabilities> = {}) {
   return {
     kind, definition,
     metadata: { id: definition.id, title: definition.title, summary: definition.summary, category: definition.category, difficulty: definition.difficulty, estimatedMinutes: definition.estimatedMinutes, kind, definitionVersion: definition.versions?.definition ?? definition.version ?? 1, flow: definition.flow ?? [] },
-    capabilities: { execution, step: kind === 'protocol' || kind === 'product-design', topology: kind === 'design', compare: true, restore: true },
+    capabilities: { execution: kind === 'simulation' || kind === 'design' ? 'worker' as const : 'local' as const, step: kind === 'protocol' || kind === 'product-design', topology: kind === 'design', compare: true, restore: true, ...capabilities },
     loadRenderer, ...caseInfo,
   } satisfies RegisteredExperiment<ExperimentRenderer> & { kind: K; definition: D }
 }
 export const experiments = experimentRegistry([
+  register(qualityGoalsExercise, 'algorithm', async () => (await import('../features/practice/quality-goals/quality-lab')).QualityGoalsLab, undefined, { step: true }),
   ...exercises.map(exercise => register(exercise, 'simulation', async () => (await import('../features/practice/practice-workbench')).PracticeWorkbench)),
   register(hashingExercise, 'algorithm', async () => (await import('../features/practice/distribution/hashing-lab')).HashingLab),
-  register(hotKeyExercise, 'algorithm', async () => (await import('../features/practice/hot-key/hot-lab')).HotKeyLab, undefined, 'worker'),
+  register(hotKeyExercise, 'algorithm', async () => (await import('../features/practice/hot-key/hot-lab')).HotKeyLab, undefined, { execution: 'worker' }),
   register(retryExercise, 'protocol', async () => (await import('../features/practice/retry-idempotency/retry-lab')).RetryIdempotencyLab),
   ...messageExercises.map(exercise => register(exercise, 'protocol', async () => { const { MessageLab } = await import('../features/practice/message-flow/message-lab'); return function MessageEntry() { return createElement(MessageLab, { labId: exercise.id }) } })),
   ...coordinationExercises.map(exercise => register(exercise, 'protocol', async () => { const { CoordinationLab } = await import('../features/practice/coordination/coordination-lab'); return function CoordinationEntry() { return createElement(CoordinationLab, { labId: exercise.id }) } })),

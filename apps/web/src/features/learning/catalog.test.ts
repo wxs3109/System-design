@@ -17,6 +17,7 @@ describe('learning publication contracts', () => {
       expect(body.mechanism.length).toBeGreaterThan(0)
       expect(body.conditions.length).toBeGreaterThan(0)
       for (const id of body.sourceIds) { expect(readingSources[id]).toBeDefined(); expect(new URL(readingSources[id]!.url).protocol).toBe('https:') }
+      for (const guide of body.decisionGuide ?? []) for (const text of [guide.when, guide.consider, guide.tradeoff]) expect(text.trim().length).toBeGreaterThan(0)
     }
   })
   it('has valid, acyclic prerequisite references without gating access', () => {
@@ -57,6 +58,9 @@ describe('learning publication contracts', () => {
     expect(filterConcepts('IDEMPOTENCY').map((item) => item.id)).toContain('idempotency')
     expect(filterConcepts('心跳').map((item) => item.id)).toContain('heartbeat')
     expect(filterConcepts('ACID').map((item) => item.id)).toEqual(['transactions'])
+    expect(filterConcepts('数据库选型').map(item => item.id)).toEqual(['storage-access-patterns'])
+    expect(filterConcepts('Stateless').map(item => item.id)).toEqual(['state-and-scaling'])
+    expect(filterConcepts('Availability').map(item => item.id)).toContain('quality-goals')
     expect(filterConcepts('Outbox', 'capacity')).toEqual([])
     expect(filterConcepts('', '', 'capacity-distribution').every((item) => ['capacity-and-queues', 'caching', 'consistent-hashing', 'hot-keys', 'overload-control'].includes(item.id))).toBe(true)
     expect(filterConcepts('  ')).toHaveLength(concepts.length)
