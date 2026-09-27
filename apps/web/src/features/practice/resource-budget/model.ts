@@ -10,11 +10,7 @@ export interface Request { id: number; arrival: number; read: boolean; responseB
 export interface State { modelVersion: 'resource-budget-v1'; estimate: Estimate | null; requests: Request[]; latencyP95Ms: number | null; completedInWindow: number; averageInFlight: number; maxWait: Record<Resource, number>; events: { index: number; at: number; kind: Command['type']; subject: string }[] }
 export const defaultConfig = (): Config => ({ modelVersion: 'resource-budget-v1', users: 8640, requestsPerDay: 10, peakFactor: 10, readPercent: 90, responseBytes: 1000000, retentionDays: 30, copies: 3, computeSlots: 1, storageSlots: 1, bandwidthMbps: 8 })
 export function parseConfig(value: unknown): Config {
-  const c = value as Config | null
-  if (!c || c.modelVersion !== 'resource-budget-v1') throw new Error('容量模型版本无效。')
-  const result = { modelVersion: c.modelVersion } as Config
-  for (const key of Object.keys(choices) as (keyof typeof choices)[]) { if (!(choices[key] as readonly number[]).includes(c[key])) throw new Error(`容量参数无效：${key}`); result[key] = c[key] }
-  return result
+  return parseChoiceConfig<Config>(value, { modelVersion: ['resource-budget-v1'], ...choices })
 }
 export function parseCommand(value: unknown): Command { const c = value as Command; if (!c || !['derive', 'sample'].includes(c.type)) throw new Error('未知容量操作。'); return { type: c.type } }
 export function derive(c: Config): Estimate {
@@ -56,3 +52,4 @@ export function runModel(value: Config, input: readonly Command[]): State {
   }
   return state
 }
+import { parseChoiceConfig } from '../../../core/experiments/choice-input'
