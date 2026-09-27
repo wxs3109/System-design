@@ -8,6 +8,8 @@ import { decisionPatterns } from './content/decision-patterns'
 
 export const conceptBodies: Readonly<Record<string, ConceptBody>> = { ...designFoundations, ...decisionPatterns, ...fundamentals, ...reliableExecution, ...coordination, ...workflowsRecovery }
 export const readingSources: Readonly<Record<string, { title: string; url: string }>> = {
+  authorization: { title: 'OWASP · Authorization Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html' },
+  canary: { title: 'Google SRE Workbook · Canarying Releases', url: 'https://sre.google/workbook/canarying-releases/' },
   asyncRequestReply: { title: 'Azure Architecture Center · Asynchronous Request-Reply', url: 'https://learn.microsoft.com/en-us/azure/architecture/patterns/asynchronous-request-reply' },
   slo: { title: 'Google SRE · Service Level Objectives', url: 'https://sre.google/sre-book/service-level-objectives/' },
   ddia: { title: 'Designing Data-Intensive Applications · Fundamental ideas and trade-offs', url: 'https://dataintensive.net/' },

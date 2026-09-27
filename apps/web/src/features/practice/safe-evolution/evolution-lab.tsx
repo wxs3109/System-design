@@ -1,0 +1,21 @@
+'use client'
+import { ProtocolExperiment } from '../protocol/experiment'
+import { ConfigurationFields } from '../protocol/configuration-fields'
+import { AnswerFields } from '../protocol/answer-fields'
+import { counts,MAX_COMMANDS,runModel,type Command } from './model'
+import { exercise,lesson,scenarios,script } from './lesson'
+import styles from '../retry-idempotency/retry-lab.module.css'
+const label=(c:Command)=>c.type==='deploy'?'切换默认代码到 v2':c.type==='rollback'?'回滚默认代码到 v1':c.type==='write'?`写入 ${c.id} = ${c.value}`:c.type==='migrate'?`迁移记录 ${c.id}`:c.type==='read'?`用 ${c.reader} 读者读取 ${c.id}`:''
+const manual:Command[]=[{type:'deploy'},{type:'write',id:'r2',value:'green'},{type:'read',id:'r1',reader:'old'},{type:'read',id:'r1',reader:'new'},{type:'migrate',id:'r1'},{type:'rollback'},{type:'read',id:'r2',reader:'active'}]
+export function SafeEvolutionLab(){return <ProtocolExperiment id={exercise.id} title={exercise.title} summary={exercise.summary} conceptId="safe-evolution-design" createSession={()=>lesson.session()} initial={lesson.initial} scenarios={scenarios}
+  goals={{mixed:'同一旧记录由旧读者访问八次、新读者访问两次。所有读取都应正确，不能只看总体比例。',rollback:'新代码写入 green，再回滚代码。新旧默认读者都必须实际读到 green，回滚本身不迁移数据。',migration:'对旧记录执行迁移后，新旧读者都要继续读到 blue。不能通过让旧读者不参与来通过。',manual:'逐条安排写入、读取、迁移与回滚；数据变化保留，代码切换不会替你修复。'}}
+  selectScenario={(d,scenario)=>({...lesson.initial(),scenario,config:d.config})} runModel={runModel} guide={d=>script(d.scenario)} commandLabel={label} maxCommands={MAX_COMMANDS}
+  renderConfig={(d,edit,disabled)=><ConfigurationFields config={d.config} disabled={disabled} change={config=>edit({...d,config,commands:[]})} fields={[
+    {key:'reader',label:'v2 读取兼容策略',choices:[{value:'strict',label:'只认 displayName'},{value:'compatible',label:'优先 displayName，兼容 name'}]},
+    {key:'writer',label:'v2 写入格式',choices:[{value:'renamed',label:'只写 displayName'},{value:'dual',label:'同时写 name 与 displayName'}]},
+    {key:'migration',label:'字段迁移策略',choices:[{value:'replace',label:'替换并移除 name'},{value:'expand',label:'增加 displayName，保留 name'}]},
+  ]} />}
+  renderLive={(_d,s,act,disabled)=>{const old=counts(s,1),next=counts(s,2);return <><section className={styles.metrics}><div><span>旧读者正确 / 总数</span><strong data-testid="evolution-old">{old.good} / {old.total}</strong></div><div><span>新读者正确 / 总数</span><strong data-testid="evolution-new">{next.good} / {next.total}</strong></div><div><span>总体成功</span><strong>{old.good+next.good} / {s.reads.length}</strong></div></section><section className={styles.panel}><h2>当前实际记录</h2><p>默认代码 v{s.activeVersion}；v1 只读取 name，v2 使用所选兼容规则。</p>{Object.entries(s.records).map(([id,row])=><p key={id}>{id}：{JSON.stringify(row)}</p>)}<div className={styles.faultActions}>{manual.map(c=><button disabled={disabled} key={label(c)} onClick={()=>act(c)}>{label(c)}</button>)}</div></section><section className={styles.panel}><h2>按版本核对读取</h2><div className={styles.tableScroll}><table aria-label="版本兼容账本"><thead><tr><th>读者 / 记录</th><th>实际字段</th><th>逻辑期望</th><th>实际返回</th><th>结果</th></tr></thead><tbody>{s.reads.map((r,i)=><tr key={i}><th>v{r.reader} / {r.id}</th><td>{JSON.stringify(r.wire)}</td><td>{r.expected??'无记录'}</td><td>{r.actual??'缺字段或无记录'}</td><td>{r.correct?'正确':'不兼容'}</td></tr>)}</tbody></table></div></section></>}}
+  renderAnswers={(d,edit,disabled)=><AnswerFields answers={d.answers} change={answers=>edit({...d,answers})} disabled={disabled} fields={[{id:'old',label:'旧读者正确次数'},{id:'oldTotal',label:'旧读者总次数'},{id:'next',label:'新读者正确次数'},{id:'nextTotal',label:'新读者总次数'},{id:'reason',label:'安全演进依据',options:[{value:'compatibility-before-rollback',label:'按版本核验真实数据兼容，回滚不撤销数据变更'},{value:'rollback',label:'回滚代码会自动恢复原数据格式'}]}]} />}
+  compare={d=>({headings:['旧读者正确 / 总数','新读者正确 / 总数'],rows:[{label:'当前策略',config:d.config},{label:'兼容读 + 双写 + 扩展迁移',config:{...d.config,reader:'compatible' as const,writer:'dual' as const,migration:'expand' as const}}].map(row=>{const s=runModel(row.config,script(d.scenario));const a=counts(s,1),b=counts(s,2);return {label:row.label,values:[`${a.good} / ${a.total}`,`${b.good} / ${b.total}`]}})})}
+  boundary={['safe-evolution-v1：两条以内实际 JSON 记录、两个字段格式和两种读者，最多 40 步。显式混合版本请求用于观察差异，不执行真实部署、网络路由、随机采样或生产 SLO 估计。', '迁移每次读取指定记录的实际字段，再增补或替换字段；逻辑期望账本不参与修复。代码回滚只切换默认读写版本，不自动逆转存储。', '写入按当前格式原子替换整条记录。兼容读、双写和扩展迁移只保护本例；旧写者的部分字段更新竞争、并发回填、语义变化和跨服务版本仍需各自合同。']} />}

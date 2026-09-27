@@ -1,0 +1,8 @@
+import { createProtocolLesson } from '../../../core/experiments/protocol-lesson'
+import { counts,defaultConfig,MAX_COMMANDS,parseCommand,parseConfig,runModel,type Command } from './model'
+export const exercise={id:'tenant-isolation',kind:'protocol' as const,version:1,title:'总吞吐正常，小租户为什么一直失败？',category:'安全与资源隔离',difficulty:'基础',estimatedMinutes:20,summary:'固定大租户突发与小租户请求，区分队列接纳、配额保护和服务次序，按租户检查实际结果。',flow:['固定原始需求','选择接纳规则','逐槽处理','按租户核对结果']}
+export const scenarios={admission:'突发挤满共享队列',latency:'接纳后仍可能等太久',manual:'自由提交'}
+export const script:Command[]=[{type:'submit',tenant:'A',count:8},{type:'submit',tenant:'B',count:2},...Array.from({length:6},()=>({type:'tick' as const}))]
+export const lesson=createProtocolLesson({id:exercise.id,versions:{model:'tenant-isolation-v1',definition:1,assessment:1},initialConfig:defaultConfig,scenarios,maxCommands:MAX_COMMANDS,parseConfig,parseCommand,runModel,
+  assess:(d,s)=>{const a=counts(s,'A'),b=counts(s,'B');const rejected=a.rejected+b.rejected;const fixed=d.scenario!=='manual'&&JSON.stringify(d.commands)===JSON.stringify(script);return {task:fixed&&a.offered===8&&b.offered===2&&b.completed===2&&a.completed>=1&&(d.scenario!=='latency'||b.onTime===2),expected:{a:String(a.completed),b:String(b.completed),rejected:String(rejected),reason:'admission-and-scheduling'},messages:[`A 完成 ${a.completed}/${a.offered}，拒绝 ${a.rejected}；B 完成 ${b.completed}/${b.offered}，拒绝 ${b.rejected}，40 ms 内完成 ${b.onTime}。`,`全部 ${s.jobs.length} 个原始作业保留在账本中；空闲槽时间 ${s.idleMs} ms。`,'配额决定谁能进入，调度决定已进入的工作何时执行。保护小租户可能降低总完成数，必须公开被拒绝的需求。',fixed?'保持 A 的 8 个与 B 的 2 个作业及相同六个处理槽。':'不能通过减少 A 的突发或省略 B 的请求来通过。']}}
+})

@@ -1,6 +1,6 @@
 # System Design 学习能力矩阵
 
-> 状态：覆盖规划，非实现承诺。更新于 2026-09-27；现有 23 个基础 Lab 和 6 个有明确模型边界的综合设计题。未明确标为“已上线”的条目仍是候选；“已上线”表示当前代码具备可运行入口，不表示覆盖整行的全部生产语义。
+> 状态：覆盖规划，非实现承诺。更新于 2026-09-27；现有 26 个基础 Lab 和 6 个有明确模型边界的综合设计题。未明确标为“已上线”的条目仍是候选；“已上线”表示当前代码具备可运行入口，不表示覆盖整行的全部生产语义。
 
 ## 用途与边界
 
@@ -28,7 +28,7 @@
 
 “当前基础”是候选练习的可行性盘点，不能替代当前模型文档。证据列描述应交付的验证能力，未上线行不表示这些证据现在已经存在。
 
-基础知识入口 `/learn` 已提供十组 32 篇讲解、四条阅读路径及与现有 23 个 Lab 的双向关联，见[内容目录](../../apps/web/src/features/learning/catalog.ts)。新增五篇基础设计决策讲解和 `quality-goals` Lab；讲解覆盖与可运行实验分别计数，各能力单元仍只覆盖明确声明的子目标。
+基础知识入口 `/learn` 已提供十组 34 篇讲解、四条阅读路径及与现有 26 个 Lab 的双向关联，见[内容目录](../../apps/web/src/features/learning/catalog.ts)。新增五篇基础设计决策讲解和 `quality-goals` Lab；讲解覆盖与可运行实验分别计数，各能力单元仍只覆盖明确声明的子目标。
 
 从需求和约束选择机制的补强工作，按[基础设计决策顶层设计](./foundation-design-decisions.md)推进。该计划组织已有能力 ID，优先复用现有知识、实验与工程底座，不另建课程运行系统。
 
@@ -36,6 +36,9 @@
 
 | 能力 ID | 实际练习 | 已验证的范围 |
 |---|---|---|
+| SEC-01 / SEC-04（部分） | [已经登录，就能读取这个对象吗？](../../apps/web/src/features/practice/authorization-boundaries/lesson.ts) · `authorization-boundaries-v1` | 两用户/两私有对象的真实数据返回、对象授权、缓存键与撤销；不实现身份验证服务、令牌或密码学 |
+| SEC-02（部分） | [总吞吐正常，小租户为什么一直失败？](../../apps/web/src/features/practice/tenant-isolation/lesson.ts) · `tenant-isolation-v1` | 两租户固定突发、共享/预留接纳和 FIFO/轮转，按租户记录拒绝及完成时限；单 Worker 固定作业时长，不含分布式公平性 |
+| API-05 / OPS-01 / OPS-04（部分） | [回滚了代码，数据也会回去吗？](../../apps/web/src/features/practice/safe-evolution/lesson.ts) · `safe-evolution-v1` | 实际字段格式、新旧读者、按版本统计、双写/单条迁移与代码回滚；不含真实部署或并发回填 |
 | SCALE-02（部分） | [缓存删了，为什么旧值还会回来？](../../apps/web/src/features/practice/cache-coherence/lesson.ts) · `cache-coherence-v1` | 单键源值/版本、TTL、写后失效、在途回填、版本兼容的请求合并；真实等待者和返回值；不覆盖多节点失效传播或缓存处理容量 |
 | API-05 / SCALE-05 / REL-04（部分） | [换一个实例，刚才的会话状态还在吗？](../../apps/web/src/features/practice/state-placement/lesson.ts) · `state-placement-v1` | 两用户/两实例的本地或共享状态、轮询/亲和、进程丢失和共享恢复；区分不可用与确认值丢失；不包含真实连接、服务发现或并发事务 |
 | API-02 / DATA-01 / SCALE-02（部分） | [同一批数据，为什么查询成本和结果不同？](../../apps/web/src/features/practice/data-access/lesson.ts) · `data-access-v1` | 16 条记录的点查、用户/时间范围、有序索引同步/延迟维护和载荷读取；与当时源快照对照；不实现通用 SQL、join 或厂商比较 |
