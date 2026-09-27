@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { getProductDesign } from './product-catalog'
 import { PRODUCT_COMMAND_LIMIT, productLesson } from './product-lesson'
 import { DesignNotebook } from './notebook'
+import { Diagram } from './product-diagram'
 import { StorageNotice, storageLabel } from '../practice/algorithm/storage-notice'
 import type { ProductDesign } from './product-types'
 import styles from './product.module.css'
@@ -46,6 +47,7 @@ function Studio({ design }: { design: ProductDesign }) {
           <div className={styles.manual}><label>手动操作<select aria-label="手动操作" disabled={!state.ready} value={action} onChange={(e) => setAction(e.target.value)}>{Object.entries(design.actions).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><button disabled={!state.ready || draft.commands.length >= PRODUCT_COMMAND_LIMIT} onClick={() => act(action)}>执行一步</button></div><p>{draft.commands.length} / {PRODUCT_COMMAND_LIMIT} 步 · <span data-testid="product-save-status">{storageLabel(state)}</span></p><StorageNotice state={state} session={session} saveLabel="重试保存设计" />{state.rejected ? <p role="alert">{state.rejected} 条历史无法重算验证，已排除评分；原记录保留。</p> : null}{error ? <p role="alert">{error}</p> : null}
         </section>
         <section className={styles.panel} aria-label="实际运行状态"><h2>3. 查看实际状态与证据</h2><dl className={styles.metrics}>{design.metricLabels.map((m) => <div key={m.key}><dt>{m.label}</dt><dd>{result.metrics[m.key] ?? '—'}</dd></div>)}</dl><div className={styles.tables}>{result.tables.map((table) => <div className={styles.table} key={table.title}><h3>{table.title}</h3><table aria-label={table.title}><thead><tr>{table.columns.map((c) => <th key={c}>{c}</th>)}</tr></thead><tbody>{table.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody></table>{!table.rows.length ? <p>尚无记录</p> : null}</div>)}</div>
+          {result.diagrams?.map((diagram) => <Diagram key={diagram.title} diagram={diagram} />)}
           <details open><summary>业务事件时间线（逻辑步骤）</summary><ol className={styles.events} data-testid="product-events">{result.events.map((e, i) => <li key={i}><strong>{e.step}. {design.actions[e.action] ?? e.action}</strong><span>{e.detail}</span></li>)}</ol></details>
           <button className={styles.primary} disabled={!state.ready || !draft.commands.length} onClick={() => { try { session.run(); setError('') } catch (e) { setError(e instanceof Error ? e.message : '证据验证失败。') } }}>核验并保存设计</button>
           <div className={styles.feedback} data-testid="product-feedback" aria-live="polite"><h3>{stale ? '设计或操作已改变，请重新核验' : !attempt ? '尚未核验' : attempt.evaluation.task ? '本关设计验证通过' : '本关目标尚未满足'}</h3>{attempt && !stale ? <ul>{attempt.evaluation.messages.filter((m) => !m.includes('边界解释') && !m.includes('观察结果与边界解释')).map((m) => <li key={m}>{m}</li>)}</ul> : <p>检查器重放全部操作、核对状态与事件，再按本关业务不变量判断。笔记不自动评分。</p>}</div>

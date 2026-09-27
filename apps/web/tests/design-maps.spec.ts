@@ -1,0 +1,30 @@
+import { expect, test } from '@playwright/test'
+
+test('finds boundary points and reroutes around real road changes, with diagrams and saved evidence', async ({ page }) => {
+  await page.goto('/practice/design-maps')
+  await expect(page.getByRole('button', { name: '执行本关场景', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '执行本关场景', exact: true }).click()
+  await page.getByRole('button', { name: '核验并保存设计', exact: true }).click()
+  await expect(page.getByTestId('product-feedback')).toContainText('本关目标尚未满足')
+  await page.getByLabel('空间候选策略', { exact: true }).selectOption('grid')
+  await page.getByLabel('空间精确过滤', { exact: true }).selectOption('distance')
+  await page.getByLabel('位置索引更新', { exact: true }).selectOption('eager')
+  await page.getByLabel('路线缓存', { exact: true }).selectOption('versioned')
+  for (const name of ['跨网格与精确过滤', '位置变更与旧索引', '关闭道路与拥堵变化', '无路可达']) {
+    await page.getByRole('button', { name, exact: true }).click()
+    await page.getByRole('button', { name: '执行本关场景', exact: true }).click()
+    await page.getByRole('button', { name: '核验并保存设计', exact: true }).click()
+    await expect(page.getByTestId('product-feedback')).toContainText('本关设计验证通过')
+  }
+  await expect(page.getByRole('table', { name: '路线与独立对照', exact: true })).toContainText('不可达')
+  await expect(page.getByRole('img', { name: /道路图/ })).toBeVisible()
+  await expect(page.getByTestId('product-save-status')).toHaveText('当前操作已保存')
+  await page.reload()
+  await expect(page.getByTestId('product-progress')).toContainText('4 / 4')
+  await page.getByRole('button', { name: '关闭道路与拥堵变化', exact: true }).click()
+  await page.getByRole('button', { name: '执行本关场景', exact: true }).click()
+  await page.getByRole('img', { name: /道路图/ }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: 'test-results/design-maps-desktop.png' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})

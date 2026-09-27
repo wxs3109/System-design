@@ -7,9 +7,10 @@ export function runNewsFeed(config: DesignConfig, commands: readonly string[]): 
   const inbox = Object.fromEntries(followers.celebrity!.map((id) => [id, [] as string[]]))
   const intents: string[] = []
   const jobs: { postId: string; cursor: number }[] = []
-  const reads: { reader: string; actual: string[]; expected: string[] }[] = []
+  const reads: { reader: string; actual: string[]; expected: string[]; step: number }[] = []
   const events: DesignEvent[] = []
   let online = true; let writes = 0; let examined = 0; let attempts = 0; let duplicateSkips = 0; let deleted = 0; let commitGaps = 0; let redeliveries = 0
+  let lastMutation = 0
   const isPushed = (post: Post) => config.strategy === 'push' || (config.strategy === 'hybrid' && followers[post.author]!.length <= 4)
   const deliver = (budget: number) => {
     let work = 0
@@ -25,6 +26,7 @@ export function runNewsFeed(config: DesignConfig, commands: readonly string[]): 
     return work
   }
   for (const [index, command] of commands.entries()) {
+    if (command !== 'read' && command !== 'read-outsider') lastMutation = index + 1
     let detail = ''
     if (command === 'publish-friend' || command === 'publish-celebrity' || command === 'publish-gap') {
       if (!online || posts.length >= 16) detail = '写入服务不可用或达到 16 篇上限；未产生帖子。'
@@ -59,13 +61,13 @@ export function runNewsFeed(config: DesignConfig, commands: readonly string[]): 
       const candidates = [...pushed, ...pulled].filter((p) => config.hydrate !== 'source' || (!p.deleted && followed.includes(p.author)))
       const actual = candidates.sort((a, b) => b.sequence - a.sequence).map((p) => p.id)
       const expected = posts.filter((p) => !p.deleted && followed.includes(p.author)).sort((a, b) => b.sequence - a.sequence).map((p) => p.id)
-      reads.push({ reader, actual, expected }); detail = `${reader} 读取 [${actual.join(', ')}]；当前作者日志与关注关系对应 [${expected.join(', ')}]。`
+      reads.push({ reader, actual, expected, step: index + 1 }); detail = `${reader} 读取 [${actual.join(', ')}]；当前作者日志与关注关系对应 [${expected.join(', ')}]。`
     } else throw new Error(`Unknown feed action: ${command}`)
     events.push({ step: index + 1, action: command, detail })
   }
   const last = reads.filter((r) => r.reader === 'u1').at(-1)
   const outsider = reads.filter((r) => r.reader === 'u12').at(-1)
-  const correct = (read: typeof last) => !!read && JSON.stringify(read.actual) === JSON.stringify(read.expected)
+  const correct = (read: typeof last) => !!read && read.step >= lastMutation && JSON.stringify(read.actual) === JSON.stringify(read.expected)
   return {
     events,
     metrics: { posts: posts.length, celebrityPosts: posts.filter((p) => p.author === 'celebrity').length, ordinaryPosts: posts.filter((p) => p.author === 'friend').length, fanoutWrites: writes, deliveryAttempts: attempts, duplicateSkips, readExamined: examined, pending: jobs.reduce((sum, j) => sum + followers[posts.find((p) => p.id === j.postId)!.author]!.length - j.cursor, 0) + intents.length, reads: reads.length, correctRead: Number(correct(last)), correctOutsider: Number(correct(outsider)), deleted, commitGaps, redeliveries },

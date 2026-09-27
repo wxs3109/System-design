@@ -5,6 +5,14 @@ export interface ProductResult {
   events: DesignEvent[]
   metrics: Record<string, number>
   tables: { title: string; columns: string[]; rows: (string | number)[][] }[]
+  diagrams?: ProductDiagram[]
+}
+export interface ProductDiagram {
+  title: string
+  nodes: { id: string; label: string; x: number; y: number; selected?: boolean }[]
+  edges: { from: string; to: string; label: string; closed?: boolean; selected?: boolean }[]
+  circle?: { x: number; y: number; radius: number }
+  grid?: { spacing: number; offsetX: number; offsetY: number }
 }
 export interface ProductScenario {
   id: string; title: string; goal: string; script: readonly string[]

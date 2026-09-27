@@ -10,9 +10,11 @@ export function runObjectStorage(config: DesignConfig, commands: readonly string
   const versions: Version[] = []; const events: DesignEvent[] = []; const reads: (string | number)[][] = []
   let nextVersion = 1; let online = true; let pinned = 0; let lostAcks = 0; let failures = 0; let rejected = 0; let corruptParts = 0; let beforeCommitReads = 0; let partialReads = 0; let corruptReads = 0; let unavailable = 0; let completedReads = 0; let correctAfterLoss = 0; let lastCorrect = 0; let pinnedCorrect = 0; let pinnedDistinct = 0; let restarts = 0; let deduped = 0
   const copies = Number(config.copies)
+  let lastMutation = 0; let lastReadStep = 0
   const intendedPart = (u: Upload, part: number) => part === 1 ? u.overwrite ? 'new ' : 'hello ' : 'world'
   const intendedObject = (id: string) => { const u = uploads.find((item) => item.id === id)!; return intendedPart(u, 1) + intendedPart(u, 2) }
   for (const [index, command] of commands.entries()) {
+    if (!['get', 'read-pinned', 'pin'].includes(command)) lastMutation = index + 1
     let detail = ''
     if (command === 'begin' || command === 'begin-overwrite') {
       if (!online || uploads.length >= 8) detail = '元数据服务不可用或达到 8 个上传会话上限。'
@@ -71,13 +73,14 @@ export function runObjectStorage(config: DesignConfig, commands: readonly string
         }
       }
       if (command === 'read-pinned') { pinnedCorrect = Number(good && version?.id === pinned); pinnedDistinct = Number(good && version && versions.at(-1) && version.id < versions.at(-1)!.id && body !== intendedObject(versions.at(-1)!.uploadId)) }
-      else lastCorrect = Number(good)
+      else { lastCorrect = Number(good); lastReadStep = index + 1 }
       reads.push([command === 'get' ? 'latest' : `pinned v${pinned}`, status, body || '无响应体'])
       detail = `${status}${body ? `，内容为「${body}」` : ''}。`
     } else throw new Error(`Unknown object action: ${command}`)
     events.push({ step: index + 1, action: command, detail })
   }
   const allParts = versions.flatMap((v) => v.parts)
+  if (lastReadStep < lastMutation) lastCorrect = 0
   return { events, metrics: { versions: versions.length, uploads: uploads.length, lostAcks, failures, rejected, corruptParts, beforeCommitReads, partialReads, corruptReads, unavailable, completedReads, correctAfterLoss, lastCorrect, pinnedCorrect, pinnedDistinct, restarts, deduped, minimumCopies: allParts.length ? Math.min(...allParts.map((p) => blobs.copies(p.key))) : 0 }, tables: [
     { title: '上传暂存片', columns: ['会话', '片号', '存储引用', '在线副本'], rows: uploads.flatMap((u) => Object.entries(u.parts).map(([number, p]) => [u.id, number, p.key, blobs.copies(p.key)])) },
     { title: '已发布对象版本', columns: ['版本', 'Upload ID', '不可变片集合'], rows: versions.map((v) => [v.id, v.uploadId, v.parts.map((p) => p.key).join(' + ')]) },
