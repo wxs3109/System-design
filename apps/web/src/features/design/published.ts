@@ -5,4 +5,5 @@ export const publishedDesigns: Readonly<Record<string, { id: string; scope: stri
   'CASE-03': { id: 'design-object-storage', scope: '分片提交、持久性与版本读取' },
   'CASE-04': { id: 'design-maps', scope: '附近查询、位置更新与道路寻路' },
   'CASE-05': { id: 'design-dispatch', scope: '位置新鲜度、竞争派单与迟到确认' },
+  'CASE-12': { id: 'design-cloud-drive', scope: '文件、目录、同步、冲突、删除与分享' },
 }

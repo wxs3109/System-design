@@ -1,6 +1,6 @@
 # 系统设计基础概念：覆盖范围与平台接入
 
-> 状态：本计划列出的基础实验已接入代码：共 18 个 Lab，包括故障恢复、并发/过载、副本读取、Quorum/Raft、2PC 和持久恢复。各模型的限定范围见下文；完整案例设计题属于后续独立计划。日期：2026-09-20。完整能力清单仍以[能力矩阵](./learning-capability-matrix.md)为准。
+> 状态：本计划列出的基础实验已接入代码：共 18 个 Lab，包括故障恢复、并发/过载、副本读取、Quorum/Raft、2PC 和持久恢复。各模型的限定范围见下文；6 个综合设计题的交付范围见[独立计划](./practice-design-exercises.md)。更新日期：2026-09-26。完整能力清单仍以[能力矩阵](./learning-capability-matrix.md)为准。
 
 ## 基础概念应该覆盖什么
 
@@ -60,7 +60,7 @@
 - [概念与路径索引](../../apps/web/src/features/learning/catalog.ts)维护九组、24 个稳定概念及“故障与恢复”“容量、分布与热点”“状态正确性与恢复”三条路径。路径只组织阅读引用，不是解锁门槛。
 - [正文](../../apps/web/src/features/learning/content/)按内容领域分文件，分别保存问题、例子、机制、条件、反例与自测；[来源索引](../../apps/web/src/features/learning/content.ts)提供继续阅读的原始资料。没有新增 Markdown 解析器或内容驱动的运行规则。
 - [目录页](../../apps/web/src/features/learning/learn-index.tsx)、[概念页](../../apps/web/src/features/learning/concept-page.tsx)与[Lab 知识回链](../../apps/web/src/features/learning/lab-concept-links.tsx)共同连接内容。阅读自测可展开参考解释，不保存为已掌握或实验通过。
-- 六个故障恢复 Lab 和并发更新、过载两题已从候选转为可运行实验；未实现专题没有空的可运行链接，案例仍作为背景关联。九组讲解是基础入口，不能据此把矩阵里的所有相关能力标为已验证。
+- 六个故障恢复 Lab 和并发更新、过载两题已从候选转为可运行实验；未实现专题没有空的可运行链接。已交付的综合题提供实际入口，其余案例保留背景关联。九组讲解是基础入口，不能据此把矩阵里的所有相关能力标为已验证。
 - [内容关系测试](../../apps/web/src/features/learning/catalog.test.ts)验证正文完整、引用可解析、前置无环、Lab 双向关系与候选状态；[浏览器测试](../../apps/web/tests/learning.spec.ts)逐页检查 24 篇、搜索/路径/窄屏/键盘、未知概念 404、规划项无空链接，以及往返知识页后的实验记录恢复。
 
 ## 先建立框架
@@ -220,4 +220,4 @@ Raft 的超时由用户显式触发，心跳使用空 AppendEntries；不模拟�
 
 本计划中按故障组织的基础 Lab 已全部有可操作入口。模型深度仍按各题边界限定：多行事务/MVCC、共识成员变更、日志压缩、真实时钟或磁盘故障等更深子项没有因此变成已实现；完整能力矩阵仍是长期覆盖规划。
 
-综合案例仍是背景关联：之后把故障模型迁移到 CASE-06 Chat、CASE-07 订单、CASE-08 视频、CASE-11 通知等[经典案例](./learning-capability-matrix.md#综合应用矩阵)。当前没有完整案例的需求作答、设计评审和组合验收；需求与容量规划的 20 份 spec 也仍是独立待做范围。
+短链接、News Feed、S3 类对象、地图、Uber 类派单和云盘已经提供需求笔记、可操作设计及声明范围内的组合验收，见[综合设计交付记录](./practice-design-exercises.md)。CASE-06 Chat、CASE-07 订单、CASE-08 视频、CASE-11 通知等仍属于后续[经典案例](./learning-capability-matrix.md#综合应用矩阵)。开放式答案与主观设计能力的自动评分、需求与容量规划的 20 份 spec 仍是独立待做范围。
